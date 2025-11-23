@@ -1,0 +1,306 @@
+name: PowerShell Version Consistency Check
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+jobs:
+  version-check:
+    name: Validate PowerShell 7.5.4 Consistency
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup PowerShell
+        shell: pwsh
+        run: |
+          Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+          Write-Host "OS: $($PSVersionTable.OS)"
+          
+      - name: Validate Module Manifests
+        shell: pwsh
+        run: |
+          $expectedVersion = '7.5.4'
+          $errors = @()
+          
+          Write-Host "=== Checking Module Manifests (.psd1) ==="
+          $manifestFiles = @(
+            'src/Modules/PSmm/PSmm.psd1',
+            'src/Modules/PSmm.Logging/PSmm.Logging.psd1',
+            'src/Modules/PSmm.Projects/PSmm.Projects.psd1',
+            'src/Modules/PSmm.UI/PSmm.UI.psd1'
+          )
+          
+          foreach ($file in $manifestFiles) {
+            if (Test-Path $file) {
+              $content = Get-Content $file -Raw
+              if ($content -match "PowerShellVersion\s*=\s*'([^']+)'") {
+                $version = $matches[1]
+                if ($version -ne $expectedVersion) {
+                  $errors += "❌ $file has PowerShellVersion = '$version' (expected '$expectedVersion')"
+                  Write-Host "❌ $file has PowerShellVersion = '$version' (expected '$expectedVersion')" -ForegroundColor Red
+                } else {
+                  Write-Host "✅ $file has correct version '$version'" -ForegroundColor Green
+                }
+              } else {
+                $errors += "❌ $file is missing PowerShellVersion field"
+                Write-Host "❌ $file is missing PowerShellVersion field" -ForegroundColor Red
+              }
+            } else {
+              $errors += "❌ $file not found"
+              Write-Host "❌ $file not found" -ForegroundColor Red
+            }
+          }
+          
+      - name: Validate Requirements Configuration
+        shell: pwsh
+        run: |
+          $expectedVersion = '7.5.4'
+          $errors = @()
+          
+          Write-Host "`n=== Checking Requirements Configuration ==="
+          $reqFile = 'src/Config/PSmm/PSmm.Requirements.psd1'
+          
+          if (Test-Path $reqFile) {
+            $content = Get-Content $reqFile -Raw
+            if ($content -match "VersionMinimum\s*=\s*'([^']+)'") {
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $errors += "❌ $reqFile has VersionMinimum = '$version' (expected '$expectedVersion')"
+                Write-Host "❌ $reqFile has VersionMinimum = '$version' (expected '$expectedVersion')" -ForegroundColor Red
+              } else {
+                Write-Host "✅ $reqFile has correct version '$version'" -ForegroundColor Green
+              }
+            } else {
+              $errors += "❌ $reqFile is missing VersionMinimum field"
+              Write-Host "❌ $reqFile is missing VersionMinimum field" -ForegroundColor Red
+            }
+          } else {
+            $errors += "❌ $reqFile not found"
+            Write-Host "❌ $reqFile not found" -ForegroundColor Red
+          }
+          
+      - name: Validate #Requires Statements
+        shell: pwsh
+        run: |
+          $expectedVersion = '7.5.4'
+          $errors = @()
+          
+          Write-Host "`n=== Checking #Requires Statements ==="
+          $psFiles = Get-ChildItem -Path 'src' -Include '*.ps1','*.psm1' -Recurse
+          $requiresPattern = '#Requires\s+-Version\s+([0-9]+\.[0-9]+\.[0-9]+)'
+          $checkedCount = 0
+          $incorrectFiles = @()
+          
+          foreach ($file in $psFiles) {
+            $content = Get-Content $file.FullName -Raw
+            if ($content -match $requiresPattern) {
+              $checkedCount++
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $incorrectFiles += $file.FullName
+                $errors += "❌ $($file.FullName) has #Requires -Version $version (expected $expectedVersion)"
+              }
+            }
+          }
+          
+          Write-Host "Checked $checkedCount files with #Requires statements"
+          
+          if ($incorrectFiles.Count -gt 0) {
+            Write-Host "❌ Found $($incorrectFiles.Count) files with incorrect #Requires version:" -ForegroundColor Red
+            $incorrectFiles | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+          } else {
+            Write-Host "✅ All #Requires statements have correct version '$expectedVersion'" -ForegroundColor Green
+          }
+          
+      - name: Validate Runtime Version Checks
+        shell: pwsh
+        run: |
+          $expectedVersion = '7.5.4'
+          $errors = @()
+          
+          Write-Host "`n=== Checking Runtime Version Checks ==="
+          $mainScript = 'src/PSmediaManager.ps1'
+          
+          if (Test-Path $mainScript) {
+            $content = Get-Content $mainScript -Raw
+            # Check for hard-coded version check: [version]'7.5.4'
+            if ($content -match "\[version\]'([^']+)'") {
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $errors += "❌ $mainScript has hard-coded version check for '$version' (expected '$expectedVersion')"
+                Write-Host "❌ $mainScript has hard-coded version check for '$version' (expected '$expectedVersion')" -ForegroundColor Red
+              } else {
+                Write-Host "✅ $mainScript has correct hard-coded version '$version'" -ForegroundColor Green
+              }
+            }
+            
+            # Check error message
+            if ($content -match "requires PowerShell >= ([0-9]+\.[0-9]+\.[0-9]+)") {
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $errors += "❌ $mainScript error message references version '$version' (expected '$expectedVersion')"
+                Write-Host "❌ $mainScript error message references version '$version' (expected '$expectedVersion')" -ForegroundColor Red
+              } else {
+                Write-Host "✅ $mainScript error message has correct version '$version'" -ForegroundColor Green
+              }
+            }
+          } else {
+            $errors += "❌ $mainScript not found"
+            Write-Host "❌ $mainScript not found" -ForegroundColor Red
+          }
+          
+      - name: Validate Documentation
+        shell: pwsh
+        run: |
+          $expectedVersion = '7.5.4'
+          $errors = @()
+          
+          Write-Host "`n=== Checking Documentation Files ==="
+          
+          # Check README.md
+          $readmeFile = 'README.md'
+          if (Test-Path $readmeFile) {
+            $content = Get-Content $readmeFile -Raw
+            if ($content -match "PowerShell ([0-9]+\.[0-9]+\.[0-9]+)") {
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $errors += "❌ $readmeFile references PowerShell version '$version' (expected '$expectedVersion')"
+                Write-Host "❌ $readmeFile references PowerShell version '$version' (expected '$expectedVersion')" -ForegroundColor Red
+              } else {
+                Write-Host "✅ $readmeFile has correct version '$version'" -ForegroundColor Green
+              }
+            } else {
+              Write-Host "⚠️  $readmeFile does not specify PowerShell version" -ForegroundColor Yellow
+            }
+          }
+          
+          # Check copilot instructions
+          $instructionsFile = '.github/instructions/copilot-instructions.md'
+          if (Test-Path $instructionsFile) {
+            $content = Get-Content $instructionsFile -Raw
+            if ($content -match "#Requires -Version ([0-9]+\.[0-9]+\.[0-9]+)") {
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $errors += "❌ $instructionsFile references version '$version' (expected '$expectedVersion')"
+                Write-Host "❌ $instructionsFile references version '$version' (expected '$expectedVersion')" -ForegroundColor Red
+              } else {
+                Write-Host "✅ $instructionsFile has correct version '$version'" -ForegroundColor Green
+              }
+            }
+            
+            if ($content -match "PowerShell ([0-9]+\.[0-9]+\.[0-9]+)\+") {
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $errors += "❌ $instructionsFile references PowerShell '$version+' (expected '$expectedVersion+')"
+                Write-Host "❌ $instructionsFile references PowerShell '$version+' (expected '$expectedVersion+')" -ForegroundColor Red
+              } else {
+                Write-Host "✅ $instructionsFile has correct PowerShell version reference '$version+'" -ForegroundColor Green
+              }
+            }
+          }
+          
+          # Check module documentation headers
+          $moduleFiles = @(
+            'src/Modules/PSmm/PSmm.psm1',
+            'src/Modules/PSmm.Logging/PSmm.Logging.psm1'
+          )
+          
+          foreach ($file in $moduleFiles) {
+            if (Test-Path $file) {
+              $content = Get-Content $file -Raw
+              if ($content -match "Requires: PowerShell ([0-9]+\.[0-9]+\.[0-9]+)") {
+                $version = $matches[1]
+                if ($version -ne $expectedVersion) {
+                  $errors += "❌ $file documentation header has version '$version' (expected '$expectedVersion')"
+                  Write-Host "❌ $file documentation header has version '$version' (expected '$expectedVersion')" -ForegroundColor Red
+                } else {
+                  Write-Host "✅ $file documentation header has correct version '$version'" -ForegroundColor Green
+                }
+              }
+            }
+          }
+          
+      - name: Final Report
+        shell: pwsh
+        run: |
+          Write-Host "`n=== VALIDATION COMPLETE ==="
+          
+          # Re-run all checks and collect errors
+          $allErrors = @()
+          $expectedVersion = '7.5.4'
+          
+          # Module manifests
+          $manifestFiles = @(
+            'src/Modules/PSmm/PSmm.psd1',
+            'src/Modules/PSmm.Logging/PSmm.Logging.psd1',
+            'src/Modules/PSmm.Projects/PSmm.Projects.psd1',
+            'src/Modules/PSmm.UI/PSmm.UI.psd1'
+          )
+          
+          foreach ($file in $manifestFiles) {
+            if (Test-Path $file) {
+              $content = Get-Content $file -Raw
+              if ($content -match "PowerShellVersion\s*=\s*'([^']+)'") {
+                $version = $matches[1]
+                if ($version -ne $expectedVersion) {
+                  $allErrors += "Module manifest $file has incorrect version '$version'"
+                }
+              } else {
+                $allErrors += "Module manifest $file is missing PowerShellVersion field"
+              }
+            }
+          }
+          
+          # Requirements file
+          $reqFile = 'src/Config/PSmm/PSmm.Requirements.psd1'
+          if (Test-Path $reqFile) {
+            $content = Get-Content $reqFile -Raw
+            if ($content -match "VersionMinimum\s*=\s*'([^']+)'") {
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $allErrors += "Requirements file has incorrect version '$version'"
+              }
+            }
+          }
+          
+          # #Requires statements
+          $psFiles = Get-ChildItem -Path 'src' -Include '*.ps1','*.psm1' -Recurse
+          $requiresPattern = '#Requires\s+-Version\s+([0-9]+\.[0-9]+\.[0-9]+)'
+          
+          foreach ($file in $psFiles) {
+            $content = Get-Content $file.FullName -Raw
+            if ($content -match $requiresPattern) {
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $allErrors += "#Requires in $($file.Name) has incorrect version '$version'"
+              }
+            }
+          }
+          
+          # Runtime check
+          $mainScript = 'src/PSmediaManager.ps1'
+          if (Test-Path $mainScript) {
+            $content = Get-Content $mainScript -Raw
+            if ($content -match "\[version\]'([^']+)'") {
+              $version = $matches[1]
+              if ($version -ne $expectedVersion) {
+                $allErrors += "Runtime version check has incorrect version '$version'"
+              }
+            }
+          }
+          
+          if ($allErrors.Count -gt 0) {
+            Write-Host "`n❌ VALIDATION FAILED - Found $($allErrors.Count) inconsistencies:" -ForegroundColor Red
+            $allErrors | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+            Write-Host "`nExpected version: $expectedVersion" -ForegroundColor Yellow
+            exit 1
+          } else {
+            Write-Host "`n✅ ALL CHECKS PASSED - PowerShell version requirement is consistently $expectedVersion across the entire codebase" -ForegroundColor Green
+            exit 0
+          }

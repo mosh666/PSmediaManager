@@ -1,0 +1,51 @@
+# PowerShell/Application specific
+Log/
+Projects/
+Vault/
+Plugins/
+*.Run.psd1
+*.log
+
+# PSmediaManager module-level Plugins folders (keep these)
+!src/**/Plugins/
+
+# Build artifacts
+build/
+output/
+publish/
+
+# Test results
+.coverage-debug.txt
+TestResults.xml
+coverage.xml
+*.coverage
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets
+*.key
+*.secret
+secrets/
+.env
+
+# PowerShell
+*.ps1.bak
+*.psm1.bak
+*.psd1.bak
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
+.github\instructions\codacy.instructions.md
+.refactoring/
+
+UNUSED_CODE_ANALYSIS.md
+UNUSED_CODE_ANALYSIS_REPORT.md
+CODE_QUALITY_ANALYSIS.md
+REFACTORING_ANALYSIS_DETAILED.md
+REFACTORING_SUMMARY.md

@@ -1,0 +1,492 @@
+[AdvancedRename Widget]
+Options are expanded=true
+
+[AdvancedSearch Widget]
+Widget Size=1438,1608
+
+[Album Settings]
+Album Collections=,Assets,Customers,Documents,Shops,Sites
+Album Monitoring=true
+Album Sort Role=0
+All Groups Open=true
+Default Icon Size=188
+Default Tree Face Size=16
+Default Tree Icon Size=16
+Icon Show Aspect Ratio=true
+Icon Show Color Label=true
+Icon Show Comments=true
+Icon Show Coordinates=true
+Icon Show Date=true
+Icon Show Fullscreen=true
+Icon Show Image Format=true
+Icon Show Modification Date=true
+Icon Show Name=true
+Icon Show Overlays=true
+Icon Show Pick Label=true
+Icon Show Rating=true
+Icon Show Resolution=true
+Icon Show Size=true
+Icon Show Tags=true
+Icon Show Title=true
+IconView Font=Segoe UI,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Standard
+Image Group Mode=2
+Image Group Sort Order=0
+Image Sort Order=0
+Image Sorting=0
+Item Left Click Action=0
+Preview Convert To Eight Bit=false
+Preview Load Full Image Size=false
+Preview Raw Use Loading Data=3
+Preview Scale Fit To Window=true
+Preview Show Icons=true
+Rating Filter Condition=0
+Recursive Albums=true
+Recursive Tags=true
+Show Album ToolTips=true
+Show Folder Tree View Items Count=true
+Show Thumbbar=true
+Show ToolTips=true
+Sidebar Title Style=2
+Theme=FusionGray
+ToolTips Font=Segoe UI,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Standard
+ToolTips Show Album Caption=true
+ToolTips Show Album Category=false
+ToolTips Show Album Collection=true
+ToolTips Show Album Date=true
+ToolTips Show Album Name=true
+ToolTips Show Album Preview=true
+ToolTips Show Album Title=true
+ToolTips Show Audio Bit Rate=true
+ToolTips Show Audio Channel Type=true
+ToolTips Show Audio Codec=true
+ToolTips Show Comments=true
+ToolTips Show File Date=true
+ToolTips Show File Name=true
+ToolTips Show File Size=true
+ToolTips Show Image AR=true
+ToolTips Show Image Dim=true
+ToolTips Show Image Type=true
+ToolTips Show Label Rating=true
+ToolTips Show Photo Date=true
+ToolTips Show Photo Expo=true
+ToolTips Show Photo Flash=true
+ToolTips Show Photo Focal=true
+ToolTips Show Photo Lens=true
+ToolTips Show Photo Make=true
+ToolTips Show Photo Mode=true
+ToolTips Show Photo WB=true
+ToolTips Show Tags=true
+ToolTips Show Titles=true
+ToolTips Show Video Aspect Ratio=true
+ToolTips Show Video Codec=true
+ToolTips Show Video Duration=true
+ToolTips Show Video Frame Rate=true
+TreeView Font=Segoe UI,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Standard
+Update Type=0
+
+[Collection Settings]
+LastAddedCollectionPath=%%ProjectPath%%/Libraries
+
+[Color Management]
+BPCAlgorithm=false
+DefaultMismatchBehavior=2049
+DefaultMissingProfileBehavior=2056
+DefaultPath=
+DefaultUncalibratedBehavior=2056
+DoGamutCheck=false
+EnableCM=true
+GamutCheckMaskColor=126,255,255
+LastMismatchBehavior=2049
+LastMissingProfileBehavior=2050
+LastSpecifiedAssignProfile[$e]=%%DigiKamPluginsPath%%/data/digikam/profiles/
+LastSpecifiedInputProfile=
+LastUncalibratedBehavior=2080
+ManagedPreviews=true
+ManagedView=true
+MonitorProfileFile[$e]=%%DigiKamPluginsPath%%/data/digikam/profiles/srgb-d65.icm
+ProofProfileFile[$e]=C:/Windows/System32/spool/drivers/color/RSWOP.icm
+ProofingRenderingIntent=3
+RenderingIntent=0
+WorkProfileFile[$e]=%%DigiKamPluginsPath%%/data/digikam/profiles/srgb-d65.icm
+
+[Database Settings]
+Database Connectoptions=
+Database Encrypted Password=AwLMzMw=
+Database Hostname=localhost
+Database Name=digikam_%%ProjectName%%
+Database Name Face=digikam_%%ProjectName%%
+Database Name Similarity=digikam_%%ProjectName%%
+Database Name Thumbnails=digikam_%%ProjectName%%
+Database Port=%%DatabasePort%%
+Database Type=QMYSQL
+Database Username=root
+Database WAL Mode=false
+Internal Database Server=true
+Internal Database Server Mysql Admin Command=%%MariaDBPath%%/bin/mariadb-admin.exe
+Internal Database Server Mysql Init Command=%%MariaDBPath%%/bin/mariadb-install-db.exe
+Internal Database Server Mysql Server Command=%%MariaDBPath%%/bin/mariadbd.exe
+Internal Database Server Mysql Upgrade Command=%%MariaDBPath%%/bin/mariadb-upgrade.exe
+Internal Database Server Path=%%DatabasePath%%/digiKam_mysql.db
+
+[General Settings]
+Application Font=Segoe UI,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,Standard
+Application Style=Breeze
+Apply Sidebar Changes Directly=true
+Clean core DB At Start=true
+Detect faces in newly added images=true
+Draw Frames To Grouped Items=true
+Expand New Current Item On Click=false
+Face Scanner First Run=true
+Finger Prints Generator First Run=true
+FullScreen Hide SideBars=false
+FullScreen Hide StatusBar=false
+FullScreen Hide ThumbBar=true
+FullScreen Hide ToolBars=false
+Icon Theme=breeze-dark
+Scan At Start=true
+Scroll Current Item To Center=true
+Select First Album Item=true
+Show Only Face Tags For Assigning Name=true
+Show Permanent Delete Dialog=true
+Show Splash=true
+Show Trash Delete Dialog=false
+String Comparison Type=0
+ToolBarsMovable=Disabled
+Use Large Thumbs=true
+Use Native File Dialog=false
+Use Trash=false
+Version=8.8.0
+
+[DMetadata Settings]
+readingAllTags=false
+unifyReadWrite=true
+
+[DMetadata Settings][readCaptionNamespaces][#0000]
+index=0
+isDefault=true
+isDisabled=false
+namespaceName=Exif.Image.ImageDescription
+nsType=3
+secondNameOpts=0
+specialOpts=0
+subspace=0
+tagPaths=1
+
+[DMetadata Settings][readCaptionNamespaces][#0001]
+index=1
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.dc.description
+nsType=3
+secondNameOpts=0
+specialOpts=2
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][readRatingNamespaces][#0000]
+convertRatio=0,1,2,3,4,5
+index=0
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.xmp.Rating
+nsType=2
+secondNameOpts=0
+specialOpts=0
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][readRatingNamespaces][#0001]
+convertRatio=0,1,25,50,75,99
+index=1
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.MicrosoftPhoto.Rating
+nsType=2
+secondNameOpts=0
+specialOpts=0
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][readTagsNamespaces][#0000]
+index=0
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.MicrosoftPhoto.LastKeywordXMP
+nsType=0
+secondNameOpts=0
+separator=/
+specialOpts=5
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][readTagsNamespaces][#0001]
+index=1
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.dc.subject
+nsType=0
+secondNameOpts=0
+separator=/
+specialOpts=5
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][readTagsNamespaces][#0002]
+index=2
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.lr.hierarchicalSubject
+nsType=0
+secondNameOpts=0
+separator=/
+specialOpts=5
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][readTitleNamespaces][#0000]
+index=0
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.dc.title
+nsType=1
+secondNameOpts=0
+specialOpts=2
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][writeCaptionNamespaces][#0000]
+index=0
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.dc.description
+nsType=3
+secondNameOpts=0
+specialOpts=2
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][writeCaptionNamespaces][#0001]
+index=1
+isDefault=true
+isDisabled=false
+namespaceName=Exif.Image.ImageDescription
+nsType=3
+secondNameOpts=0
+specialOpts=0
+subspace=0
+tagPaths=1
+
+[DMetadata Settings][writeRatingNamespaces][#0000]
+convertRatio=0,1,2,3,4,5
+index=0
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.xmp.Rating
+nsType=2
+secondNameOpts=0
+specialOpts=0
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][writeRatingNamespaces][#0001]
+convertRatio=0,1,25,50,75,99
+index=1
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.MicrosoftPhoto.Rating
+nsType=2
+secondNameOpts=0
+specialOpts=0
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][writeTagsNamespaces][#0000]
+index=0
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.MicrosoftPhoto.LastKeywordXMP
+nsType=0
+secondNameOpts=0
+separator=/
+specialOpts=5
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][writeTagsNamespaces][#0001]
+index=1
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.dc.subject
+nsType=0
+secondNameOpts=0
+separator=/
+specialOpts=5
+subspace=2
+tagPaths=0
+
+[DMetadata Settings][writeTagsNamespaces][#0002]
+index=2
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.lr.hierarchicalSubject
+nsType=0
+secondNameOpts=0
+separator=/
+specialOpts=5
+subspace=2
+tagPaths=1
+
+[DMetadata Settings][writeTitleNamespaces][#0000]
+index=0
+isDefault=true
+isDisabled=false
+namespaceName=Xmp.dc.title
+nsType=1
+secondNameOpts=0
+specialOpts=2
+subspace=2
+tagPaths=1
+
+[ImageViewer Settings]
+AutoBrightness=false
+AutoZoom=false
+BackgroundColor=0,0,0
+Black Point=0
+Brightness Multiplier=1
+Custom White Balance=6500
+Custom White Balance Green=1
+Dcb Enhance Filter=false
+Dcb Iterations=-1
+Decoding Quality=0
+Dont Stretch Pixels=true
+Expo Correction=false
+Expo Correction Highlight=0
+Expo Correction Shift=0.9939999999999998
+ExpoIndicatorMode=true
+FixColorsHighlights=false
+Four Color RGB=false
+FullScreen Hide SideBars=false
+FullScreen Hide StatusBar=false
+FullScreen Hide ThumbBar=true
+FullScreen Hide ToolBars=false
+HEIFCompression=75
+HEIFLossLess=true
+JPEG2000Compression=75
+JPEG2000LossLess=true
+JPEGCompression=90
+JPEGSubSampling=0
+JXLCompression=100
+JXLLossLess=true
+LastSavedImageExtension=jpg
+Median Filter Passes=10
+Noise Reduction Threshold=0
+Noise Reduction Type=0
+Output Color Space=1
+OverExposureColor=0,0,0
+OverExposureIndicator=false
+OverExposurePercentsEntry=1
+PGFCompression=3
+PGFLossLess=true
+PNGCompression=9
+PreviewMode=128
+RawImportToolIid=org.kde.digikam.plugin.rawimport.Native
+RestoreToolSettings=true
+Show Thumbbar=false
+ShowImageSettingsDialog=true
+SixteenBitsImage=true
+TIFFCompression=true
+ToolBarsMovable=Disabled
+Unclip Color=0
+UnderExposureColor=255,255,255
+UnderExposureIndicator=false
+UnderExposurePercentsEntry=1
+Use Black Point=false
+Use White Point=false
+UseRawImportTool=true
+UseThemeBackgroundColor=true
+WEBPCompression=100
+WEBPLossLess=true
+White Balance=1
+White Point=0
+
+[EnabledDPlugins]
+org.kde.digikam.plugin.editor.AdjustCurvesTool=true
+org.kde.digikam.plugin.editor.AdjustLevelsTool=true
+org.kde.digikam.plugin.editor.AntiVignettingTool=true
+org.kde.digikam.plugin.editor.AutoCorrectionTool=true
+org.kde.digikam.plugin.editor.AutoCropTool=true
+org.kde.digikam.plugin.editor.BCGTool=true
+org.kde.digikam.plugin.editor.BWSepiaTool=true
+org.kde.digikam.plugin.editor.BlurFXTool=true
+org.kde.digikam.plugin.editor.BlurTool=true
+org.kde.digikam.plugin.editor.BorderTool=true
+org.kde.digikam.plugin.editor.CBTool=true
+org.kde.digikam.plugin.editor.ChannelMixerTool=true
+org.kde.digikam.plugin.editor.CharcoalTool=true
+org.kde.digikam.plugin.editor.ColorFXTool=true
+org.kde.digikam.plugin.editor.ContentAwareResizeTool=true
+org.kde.digikam.plugin.editor.Convert16To8Tool=true
+org.kde.digikam.plugin.editor.Convert8To16Tool=true
+org.kde.digikam.plugin.editor.DistortionFXTool=true
+org.kde.digikam.plugin.editor.EmbossTool=true
+org.kde.digikam.plugin.editor.FilmGrainTool=true
+org.kde.digikam.plugin.editor.FilmTool=true
+org.kde.digikam.plugin.editor.FreeRotationTool=true
+org.kde.digikam.plugin.editor.GmicQt=true
+org.kde.digikam.plugin.editor.HSLTool=true
+org.kde.digikam.plugin.editor.HealingCloneTool=true
+org.kde.digikam.plugin.editor.HotPixelsTool=true
+org.kde.digikam.plugin.editor.InsertTextTool=true
+org.kde.digikam.plugin.editor.InvertTool=true
+org.kde.digikam.plugin.editor.LensAutoFixTool=true
+org.kde.digikam.plugin.editor.LensDistortionTool=true
+org.kde.digikam.plugin.editor.LocalContrastTool=true
+org.kde.digikam.plugin.editor.NoiseReductionToolPlugin=true
+org.kde.digikam.plugin.editor.OilPaintTool=true
+org.kde.digikam.plugin.editor.PerspectiveTool=true
+org.kde.digikam.plugin.editor.PrintTool=true
+org.kde.digikam.plugin.editor.ProfileConversionTool=true
+org.kde.digikam.plugin.editor.RainDropTool=true
+org.kde.digikam.plugin.editor.RatioCropTool=true
+org.kde.digikam.plugin.editor.RedEyeTool=true
+org.kde.digikam.plugin.editor.ResizeTool=true
+org.kde.digikam.plugin.editor.RestoreTool=true
+org.kde.digikam.plugin.editor.SharpenTool=true
+org.kde.digikam.plugin.editor.ShearTool=true
+org.kde.digikam.plugin.editor.TextureTool=true
+org.kde.digikam.plugin.editor.WhiteBalanceTool=true
+org.kde.digikam.plugin.generic.Box=true
+org.kde.digikam.plugin.generic.Calendar=true
+org.kde.digikam.plugin.generic.DropBox=true
+org.kde.digikam.plugin.generic.ExpoBlending=true
+org.kde.digikam.plugin.generic.FileCopy=true
+org.kde.digikam.plugin.generic.FileTransfer=true
+org.kde.digikam.plugin.generic.Flickr=true
+org.kde.digikam.plugin.generic.FlowView=true
+org.kde.digikam.plugin.generic.GLViewer=true
+org.kde.digikam.plugin.generic.GeolocationEdit=true
+org.kde.digikam.plugin.generic.GoogleServices=true
+org.kde.digikam.plugin.generic.HtmlGallery=true
+org.kde.digikam.plugin.generic.ImageMosaicWall=true
+org.kde.digikam.plugin.generic.ImageShack=true
+org.kde.digikam.plugin.generic.ImgUr=true
+org.kde.digikam.plugin.generic.JAlbum=true
+org.kde.digikam.plugin.generic.MediaServer=true
+org.kde.digikam.plugin.generic.MediaWiki=true
+org.kde.digikam.plugin.generic.MetadataEdit=true
+org.kde.digikam.plugin.generic.MjpegStream=true
+org.kde.digikam.plugin.generic.OneDrive=true
+org.kde.digikam.plugin.generic.Panorama=true
+org.kde.digikam.plugin.generic.Pinterest=true
+org.kde.digikam.plugin.generic.Piwigo=true
+org.kde.digikam.plugin.generic.Presentation=true
+org.kde.digikam.plugin.generic.PrintCreator=true
+org.kde.digikam.plugin.generic.SendByMail=true
+org.kde.digikam.plugin.generic.SlideShow=true
+org.kde.digikam.plugin.generic.SmugMug=true
+org.kde.digikam.plugin.generic.TextConverter=true
+org.kde.digikam.plugin.generic.TimeAdjust=true
+org.kde.digikam.plugin.generic.Twitter=true
+org.kde.digikam.plugin.generic.VideoSlideShow=true
+org.kde.digikam.plugin.generic.Wallpaper=true
+org.kde.digikam.plugin.generic.iNaturalist=true

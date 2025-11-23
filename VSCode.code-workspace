@@ -1,0 +1,43 @@
+{
+	"folders": [
+		{
+			"path": "../",
+		}
+	],
+	"settings": {
+		"cSpell.words": [
+			"digikam",
+			"entpacken",
+			"Exif",
+			"exiftool",
+			"ffprobe",
+			"Keepass",
+			"loglevel",
+			"mkvtoolnix",
+			"pointsize",
+			"PSPORTABLE",
+			"winx"
+		],
+		"files.exclude": {
+			"**/.git": true,
+			"**/.svn": true,
+			"**/.hg": true,
+			"**/.DS_Store": true,
+			"**/Thumbs.db": true,
+			"$RECYCLE.BIN": true,
+			"msdownld.tmp": true,
+			"System Volume Information": true,
+			"z_*": true,
+		},
+		"explorerExclude.backup": {},
+		"genieai.enableConversationHistory": true,
+		"genieai.openai.temperature": 0.5,
+		"powershell.cwd": "PSmediaManager",
+		"githubIssues.alwaysPromptForNewIssueRepo": true,
+		"gitProjectManager.displayProjectPath": true,
+		"vscode-edge-devtools.showWorkers": true,
+		"vscode-edge-devtools.useHttps": true,
+		"workbench.colorTheme": "Default Dark+",
+		"codacy.guardrails.instructionsFile": "manual"
+	}
+}

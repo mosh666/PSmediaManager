@@ -1,0 +1,224 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to create release for (format: v*.*.*)' 
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  validate-and-test:
+    name: Validate and Test
+    runs-on: windows-latest
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: '1'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install PowerShell 7.5.4 portable build
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pwshVersion = '7.5.4'
+          $archiveName = "PowerShell-$pwshVersion-win-x64.zip"
+          $downloadUri = "https://github.com/PowerShell/PowerShell/releases/download/v$pwshVersion/$archiveName"
+          $installRoot = Join-Path -Path $env:RUNNER_TEMP -ChildPath "pwsh-$pwshVersion"
+          if (-not (Test-Path -Path $installRoot)) {
+              New-Item -ItemType Directory -Path $installRoot | Out-Null
+          }
+
+          $archivePath = Join-Path -Path $env:RUNNER_TEMP -ChildPath $archiveName
+          Invoke-WebRequest -Uri $downloadUri -OutFile $archivePath
+          Expand-Archive -Path $archivePath -DestinationPath $installRoot -Force
+
+          $pwshExecutable = Get-ChildItem -Path $installRoot -Filter 'pwsh.exe' -Recurse -File | Select-Object -First 1
+          if (-not $pwshExecutable) {
+              throw "Failed to locate pwsh.exe under $installRoot"
+          }
+
+          $pwshPath = $pwshExecutable.FullName
+          Write-Host "Installed portable PowerShell to $(Split-Path -Parent $pwshPath)"
+          & $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion'
+          "PWSH_754_PATH=$pwshPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Pester 5.5+ and PSLogs
+        shell: powershell
+        run: |
+          $pwsh = "$env:PWSH_754_PATH"
+          & $pwsh -NoLogo -NoProfile -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module -Name Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber; Install-Module -Name PSLogs -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber"
+
+      - name: Run Pester tests
+        run: |
+          $testScript = Join-Path -Path ${{ github.workspace }} -ChildPath 'tests/Invoke-Pester.ps1'
+          if (Test-Path $testScript) {
+              $pwsh = "$env:PWSH_754_PATH"
+              & $pwsh -NoLogo -NoProfile -Command "& '$testScript'"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Pester tests failed with exit code $LASTEXITCODE"
+              }
+          } else {
+              Write-Host "Test script not found at $testScript, skipping tests"
+          }
+
+      - name: Validate module manifests
+        run: |
+          $expectedVersion = '7.5.4'
+          $manifestFiles = @(
+            'src/Modules/PSmm/PSmm.psd1',
+            'src/Modules/PSmm.Logging/PSmm.Logging.psd1',
+            'src/Modules/PSmm.Projects/PSmm.Projects.psd1',
+            'src/Modules/PSmm.UI/PSmm.UI.psd1'
+          )
+          
+          $errors = @()
+          foreach ($file in $manifestFiles) {
+            if (Test-Path $file) {
+              $content = Get-Content $file -Raw
+              if ($content -match "PowerShellVersion\s*=\s*'([^']+)'") {
+                $version = $matches[1]
+                if ($version -ne $expectedVersion) {
+                  $errors += "Module manifest $file has version $version (expected $expectedVersion)"
+                }
+              }
+            }
+          }
+          
+          if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Host "❌ $_" -ForegroundColor Red }
+              throw "Module manifest validation failed"
+          }
+          Write-Host "✅ All module manifests validated"
+
+  create-release:
+    name: Create GitHub Release
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine release version
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            TAG="$REF_NAME"
+          else
+            TAG="$DISPATCH_TAG"
+          fi
+          
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        shell: bash
+        run: |
+          CHANGELOG_FILE="${{ github.workspace }}/CHANGELOG.md"
+          
+          if [ ! -f "$CHANGELOG_FILE" ]; then
+            echo "release_notes=Release ${{ steps.version.outputs.version }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Extract content between version header and next version or Unreleased section
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Find the section for this version
+          awk -v version="$VERSION" '
+            /^## \[Unreleased\]/ { in_unreleased=1; next }
+            /^## \[/ && $0 ~ version { in_version=1; next }
+            /^## \[/ && in_version && NR > 1 { exit }
+            in_version && NF { print }
+          ' "$CHANGELOG_FILE" > /tmp/release_notes.txt
+          
+          # If no specific version found, use Unreleased section
+          if [ ! -s /tmp/release_notes.txt ]; then
+            awk '
+              /^## \[Unreleased\]/ { in_unreleased=1; next }
+              /^## \[/ && in_unreleased { exit }
+              in_unreleased && NF { print }
+            ' "$CHANGELOG_FILE" > /tmp/release_notes.txt
+          fi
+          
+          # If still empty, provide a generic message
+          if [ ! -s /tmp/release_notes.txt ]; then
+            echo "Release $VERSION" > /tmp/release_notes.txt
+          fi
+          
+          # Read the notes and escape for output
+          NOTES=$(cat /tmp/release_notes.txt)
+          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b
+        with:
+          tag: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## Changes in ${{ steps.version.outputs.version }}
+            
+            ${{ steps.changelog.outputs.release_notes }}
+            
+            ### Installation
+            
+            ```powershell
+            git clone https://github.com/${{ github.repository }}.git
+            cd PSmediaManager
+            git checkout ${{ steps.version.outputs.tag }}
+            pwsh -File src/PSmediaManager.ps1 -Dev
+            ```
+            
+            ### Requirements
+            
+            - PowerShell 7.5.4 or later
+            - Windows operating system
+            - See README.md for additional plugin requirements
+          draft: false
+          prerelease: false
+          allowUpdates: true
+          generateReleaseNotes: false
+
+  post-release:
+    name: Post-Release Notifications
+    needs: create-release
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - name: Release created successfully
+        run: |
+          echo "✅ Release ${{ needs.create-release.outputs.version }} created successfully!"
+          echo "📦 Available at: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.create-release.outputs.tag }}"

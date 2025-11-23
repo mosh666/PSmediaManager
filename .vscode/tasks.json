@@ -1,0 +1,39 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Codacy: Analyze (WSL Wrapper)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-File",
+				".\\.codacy\\Invoke-CodacyWSL.ps1",
+				"-RepositoryPath",
+				".",
+				"-Verbose"
+			],
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Codacy: Trivy Only (WSL Wrapper)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-File",
+				".\\.codacy\\Invoke-CodacyWSL.ps1",
+				"-RepositoryPath",
+				".",
+				"-CliArguments",
+				"analyze",
+				"--tool",
+				"trivy",
+				"-Verbose"
+			],
+			"problemMatcher": [],
+			"group": "none"
+		}
+	]
+}

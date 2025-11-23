@@ -1,0 +1,75 @@
+name: PowerShell Tests
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  tests:
+    name: Run Pester Suite
+    runs-on: windows-latest
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: '1'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PowerShell 7.5.4 portable build
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pwshVersion = '7.5.4'
+          $archiveName = "PowerShell-$pwshVersion-win-x64.zip"
+          $downloadUri = "https://github.com/PowerShell/PowerShell/releases/download/v$pwshVersion/$archiveName"
+          $installRoot = Join-Path -Path $env:RUNNER_TEMP -ChildPath "pwsh-$pwshVersion"
+          if (-not (Test-Path -Path $installRoot)) {
+              New-Item -ItemType Directory -Path $installRoot | Out-Null
+          }
+
+          $archivePath = Join-Path -Path $env:RUNNER_TEMP -ChildPath $archiveName
+          Invoke-WebRequest -Uri $downloadUri -OutFile $archivePath
+          Expand-Archive -Path $archivePath -DestinationPath $installRoot -Force
+
+          $pwshExecutable = Get-ChildItem -Path $installRoot -Filter 'pwsh.exe' -Recurse -File | Select-Object -First 1
+          if (-not $pwshExecutable) {
+              throw "Failed to locate pwsh.exe under $installRoot"
+          }
+
+          $pwshPath = $pwshExecutable.FullName
+          Write-Host "Installed portable PowerShell to $(Split-Path -Parent $pwshPath)"
+          & $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion'
+          "PWSH_754_PATH=$pwshPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Pester 5.5+ and PSLogs
+        shell: powershell
+        run: |
+          $pwsh = "$env:PWSH_754_PATH"
+          & $pwsh -NoLogo -NoProfile -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module -Name Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber; Install-Module -Name PSLogs -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber"
+
+      - name: Run Pester tests with coverage
+        shell: powershell
+        run: |
+          $pwsh = "$env:PWSH_754_PATH"
+          & $pwsh -NoProfile -ExecutionPolicy Bypass -File tests/Invoke-Pester.ps1 -CodeCoverage
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-artifacts
+          if-no-files-found: warn
+          path: |
+            tests/TestResults.xml
+            tests/.coverage-jacoco.xml
+            tests/.coverage-latest.json
