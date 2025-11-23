@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  POWERSHELL_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  lint-test:
+    name: Lint & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest ]
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PowerShell 7.5.4
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pwshVersion = '7.5.4'
+          $installRoot = Join-Path -Path $env:RUNNER_TEMP -ChildPath "pwsh-$pwshVersion"
+          if (-not (Test-Path -Path $installRoot)) {
+              New-Item -ItemType Directory -Path $installRoot | Out-Null
+          }
+
+          if ($env:RUNNER_OS -eq 'Windows') {
+              $archiveName = "PowerShell-$pwshVersion-win-x64.zip"
+              $downloadUri = "https://github.com/PowerShell/PowerShell/releases/download/v$pwshVersion/$archiveName"
+              $archivePath = Join-Path -Path $env:RUNNER_TEMP -ChildPath $archiveName
+              Invoke-WebRequest -Uri $downloadUri -OutFile $archivePath
+              Expand-Archive -Path $archivePath -DestinationPath $installRoot -Force
+              $pwshExecutable = Get-ChildItem -Path $installRoot -Filter 'pwsh.exe' -Recurse -File | Select-Object -First 1
+          }
+          else {
+              $archiveName = "powershell-$pwshVersion-linux-x64.tar.gz"
+              $downloadUri = "https://github.com/PowerShell/PowerShell/releases/download/v$pwshVersion/$archiveName"
+              $archivePath = Join-Path -Path $env:RUNNER_TEMP -ChildPath $archiveName
+              Invoke-WebRequest -Uri $downloadUri -OutFile $archivePath
+              tar -xzf $archivePath -C $installRoot
+              $pwshExecutable = Get-ChildItem -Path $installRoot -Filter 'pwsh' -Recurse -File | Where-Object { $_.Name -eq 'pwsh' } | Select-Object -First 1
+              if ($pwshExecutable) {
+                  chmod +x $pwshExecutable.FullName
+              }
+          }
+
+          if (-not $pwshExecutable) {
+              throw 'Failed to install PowerShell 7.5.4'
+          }
+
+          $pwshPath = $pwshExecutable.FullName
+          Write-Host "Using PowerShell at $pwshPath"
+          & $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion'
+          "PWSH_754_PATH=$pwshPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install PowerShell modules
+        run: |
+          $pwsh = "$env:PWSH_754_PATH"
+          & $pwsh -NoLogo -NoProfile -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber"
+
+      - name: Run Script Analyzer
+        run: |
+          $pwsh = "$env:PWSH_754_PATH"
+          & $pwsh -NoLogo -NoProfile -Command "Import-Module PSScriptAnalyzer; Invoke-ScriptAnalyzer -Path ./src -Recurse -EnableExit"
+
+      - name: Run Pester tests with coverage
+        run: |
+          $pwsh = "$env:PWSH_754_PATH"
+          & $pwsh -NoProfile -ExecutionPolicy Bypass -File tests/Invoke-Pester.ps1 -CodeCoverage -Quiet
+
+      - name: Upload coverage and test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-artifacts-${{ matrix.os }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            tests/TestResults.xml
+            tests/.coverage-jacoco.xml
+            tests/.coverage-latest.json
+            tests/.coverage-debug.txt
