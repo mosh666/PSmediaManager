@@ -1,18 +1,5 @@
-## Summary
+This repository now uses the enhanced Pull Request form located at:
 
-Describe the change and why it is needed.
+`.github/ISSUE_TEMPLATE/pull_request.yml`
 
-## Related Issue
-
-If this PR fixes or addresses an existing issue, link it here (e.g. `Closes #123`).
-
-## Changes
-
-- List key changes made by this PR.
-
-## Checklist
-
-- [ ] I have read the contribution guidelines in `CONTRIBUTING.md`.
-- [ ] Tests added or updated where applicable.
-- [ ] Documentation updated where applicable.
-- [ ] All tests pass locally.
+When opening a PR on GitHub, select the "Pull request" form to complete structured fields (summary, changes, test plan, checklist, etc.).

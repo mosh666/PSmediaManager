@@ -1,0 +1,62 @@
+name: Pull request
+description: Use this form to describe your changes and provide the information reviewers need.
+title: ""
+labels: ''
+assignees: ''
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for your contribution! Fill out the fields below to help reviewers understand and verify your change.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: A short, one-line summary of the change.
+      placeholder: "Add a concise summary"
+      required: true
+
+  - type: textarea
+    id: changes
+    attributes:
+      label: What changed
+      description: Describe the code changes and the reasoning behind them.
+      placeholder: "What did you change and why?"
+      required: true
+
+  - type: textarea
+    id: tests
+    attributes:
+      label: Test plan
+      description: How can reviewers verify this change? Include commands, test names, or steps.
+      placeholder: "eg. `Invoke-Pester tests\nManual steps...`"
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: Choose the category that best fits this PR.
+      options:
+        - Bugfix
+        - Enhancement
+        - Documentation
+        - Chore
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have read `CONTRIBUTING.md`
+        - label: Tests added or updated where applicable
+        - label: Documentation updated where applicable
+        - label: All tests pass locally
+
+  - type: input
+    id: related
+    attributes:
+      label: Related issues
+      description: Link related issues (e.g. `Closes #123`).
+      placeholder: "Closes #..."
