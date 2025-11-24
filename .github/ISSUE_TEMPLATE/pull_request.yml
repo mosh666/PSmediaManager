@@ -1,8 +1,13 @@
 name: Pull request
 description: Use this form to describe your changes and provide the information reviewers need.
 title: ""
-labels: ''
-assignees: ''
+# Default labels applied to new PRs created with this form
+labels:
+  - needs-review
+  - pr
+# Default assignees (GitHub usernames without the @)
+assignees:
+  - mosh666
 
 body:
   - type: markdown
