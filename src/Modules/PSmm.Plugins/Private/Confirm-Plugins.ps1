@@ -911,9 +911,24 @@ function Install-Plugin {
         $pluginName = $Plugin.Config.Name
         Write-Verbose "Starting installation process for: $pluginName"
 
-        # Get GitHub token if available
-        $tokenString = if ($Config -and $Config.Secrets) { $Config.Secrets.GetGitHubToken() } else { $null }
-        $token = if ($tokenString) { ConvertTo-SecureString -String $tokenString -AsPlainText -Force } else { $null }
+        # Prefer an already-secure token if available; otherwise build SecureString safely
+        $token = $null
+        if ($Config -and $Config.Secrets) {
+            # If the secrets object exposes a SecureString property, use it directly
+            if ($Config.Secrets.PSObject.Properties.Match('GitHubToken') -and
+                $Config.Secrets.GitHubToken -is [System.Security.SecureString]) {
+                $token = $Config.Secrets.GitHubToken
+            }
+            else {
+                $tokenString = $Config.Secrets.GetGitHubToken()
+                if ($tokenString) {
+                    $secure = New-Object System.Security.SecureString
+                    foreach ($ch in $tokenString.ToCharArray()) { $secure.AppendChar($ch) }
+                    $secure.MakeReadOnly()
+                    $token = $secure
+                }
+            }
+        }
 
         # Get latest download URL
         $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
@@ -1010,9 +1025,24 @@ function Request-PluginUpdate {
     try {
         $pluginName = $Plugin.Config.Name
 
-        # Get GitHub token if available
-        $tokenString = if ($Config -and $Config.Secrets) { $Config.Secrets.GetGitHubToken() } else { $null }
-        $token = if ($tokenString) { ConvertTo-SecureString -String $tokenString -AsPlainText -Force } else { $null }
+        # Prefer an already-secure token if available; otherwise build SecureString safely
+        $token = $null
+        if ($Config -and $Config.Secrets) {
+            # If the secrets object exposes a SecureString property, use it directly
+            if ($Config.Secrets.PSObject.Properties.Match('GitHubToken') -and
+                $Config.Secrets.GitHubToken -is [System.Security.SecureString]) {
+                $token = $Config.Secrets.GitHubToken
+            }
+            else {
+                $tokenString = $Config.Secrets.GetGitHubToken()
+                if ($tokenString) {
+                    $secure = New-Object System.Security.SecureString
+                    foreach ($ch in $tokenString.ToCharArray()) { $secure.AppendChar($ch) }
+                    $secure.MakeReadOnly()
+                    $token = $secure
+                }
+            }
+        }
 
         # Get latest version information
         Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process | Out-Null

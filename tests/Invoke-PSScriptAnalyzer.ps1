@@ -104,6 +104,9 @@ catch {
 
 $outPath = Join-Path -Path $scriptDirectory -ChildPath 'PSScriptAnalyzerResults.json'
 
+# Normalize results to an array so `.Count` checks are safe (handles single object or $null)
+$results = @($results)
+
 if ($results -and $results.Count -gt 0) {
     Write-Host "PSScriptAnalyzer found $($results.Count) issue(s):" -ForegroundColor Yellow
     $results | Select-Object @{Name='FilePath';Expression={$_.ScriptName}}, RuleName, Severity, Line, Message | Format-Table -AutoSize
@@ -112,6 +115,8 @@ if ($results -and $results.Count -gt 0) {
     Write-Host "Results saved to $outPath"
 
     $errors = $results | Where-Object { $_.Severity -eq 'Error' }
+    # Normalize errors to an array so `.Count` checks are safe when a single object is returned
+    $errors = @($errors)
     if ($errors.Count -gt 0) {
         throw "PSScriptAnalyzer found $($errors.Count) error(s). Treating as failure."
     }
