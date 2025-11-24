@@ -344,4 +344,4 @@ else {
 Write-Host 'All Pester tests passed.' -ForegroundColor Green
 }
 
-return $result.FailedCount
+exit
