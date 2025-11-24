@@ -16,6 +16,22 @@ $ErrorActionPreference = 'Stop'
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDirectory
 
+# Ensure custom PSmm classes/interfaces are loaded so PSScriptAnalyzer can resolve
+# types like AppConfiguration or IPathProvider during parse-time validation.
+$preloadScript = Join-Path -Path $scriptDirectory -ChildPath 'Preload-PSmmTypes.ps1'
+if (Test-Path -Path $preloadScript) {
+    try {
+        Write-Verbose "Preloading PSmm types via $preloadScript"
+        . $preloadScript
+    }
+    catch {
+        Write-Warning "Failed to preload PSmm types: $($_.Exception.Message)."
+    }
+}
+else {
+    Write-Verbose "Preload script not found at $preloadScript"
+}
+
 if ([string]::IsNullOrWhiteSpace($TargetPath)) {
     $TargetPath = Join-Path -Path $repoRoot -ChildPath ''
 }

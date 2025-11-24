@@ -53,6 +53,7 @@ These are small documentation/metadata updates; move to a versioned release entr
 - Fix: Allow empty messages in `Write-PSmmHost` to prevent parameter binding errors when emitting blank lines during interactive setup. (2025-11-24)
 - Fix: Harden `Write-PSmmHost` with comment-based help, `[OutputType]` and an analyzer suppression attribute for intentional `Write-Host` usage in interactive path. (2025-11-24)
 - Perf/Quality: Reduced PSScriptAnalyzer issues from 216 → 72 by replacing `Write-Host` usages and improving wrapper behavior; results saved to `tests/PSScriptAnalyzerResults.json`. (2025-11-24)
+- Tooling: Dot-source `tests/Preload-PSmmTypes.ps1` within `tests/Invoke-PSScriptAnalyzer.ps1` so CI runs preload PSmm classes/interfaces and no longer spam `TypeNotFound` parse noise.
 
 - Fix (2025-11-24): Export `Write-PSmmHost` from the `PSmm` module and ensure exit messaging is written before modules are unloaded.
   - Symptom: `The term 'Write-PSmmHost' is not recognized` during application shutdown in some sessions.
