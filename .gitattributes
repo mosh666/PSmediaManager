@@ -1,14 +1,26 @@
 # Auto-detect text files
 * text=auto
 
+# Ensure this attributes file is normalized to LF
+/.gitattributes text eol=lf
+
 # PowerShell files
-*.ps1 text eol=crlf
-*.psm1 text eol=crlf
-*.psd1 text eol=crlf
+*.ps1 text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+*.ps1xml text eol=lf
+*.cdxml text eol=lf
+*.pssc text eol=lf
+*.psc1 text eol=lf
 
 # Documentation
 *.md text eol=lf
 *.txt text eol=lf
+
+# JSON and YAML: normalize to LF for cross-editor consistency
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
 
 # Binary files
 *.dll binary

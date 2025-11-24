@@ -1,0 +1,45 @@
+# EditorConfig helps maintain consistent coding styles across editors and IDEs.
+# This file contains recommended defaults for PowerShell projects and common files
+# used in GitHub repositories. Adjust values if your team prefers different choices.
+root = true
+
+[*]
+# Default for all files
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{ps1,psm1,psd1}]
+# PowerShell files: prefer Windows line endings on Windows systems,
+# keep trailing whitespace off for alignment-sensitive constructs,
+# and ensure UTF-8 encoding.
+end_of_line = crlf
+trim_trailing_whitespace = false
+charset = utf-8
+indent_style = space
+indent_size = 4
+
+[*.md]
+# Markdown: keep trailing whitespace (used for hard line breaks), use LF
+trim_trailing_whitespace = false
+end_of_line = lf
+
+[*.json]
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = false
+end_of_line = lf
+
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = false
+end_of_line = lf
+
+[Makefile]
+# Makefiles require tabs
+indent_style = tab
+trim_trailing_whitespace = false
