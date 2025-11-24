@@ -7,7 +7,10 @@ $ErrorActionPreference = 'Stop'
 # by analysis or CI runners before invoking PSScriptAnalyzer.
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$classesBase = Join-Path -Path $repoRoot -ChildPath 'src\Modules\PSmm\Classes'
+$classesBase = Join-Path -Path $repoRoot -ChildPath 'src'
+$classesBase = Join-Path -Path $classesBase -ChildPath 'Modules'
+$classesBase = Join-Path -Path $classesBase -ChildPath 'PSmm'
+$classesBase = Join-Path -Path $classesBase -ChildPath 'Classes'
 
 if (-not (Test-Path -Path $classesBase)) {
     Write-Verbose "Preload: classes path not found: $classesBase"
