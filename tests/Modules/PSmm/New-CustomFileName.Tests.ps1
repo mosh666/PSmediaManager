@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command -Name whoami -CommandType Function -ErrorAction SilentlyContinue)) {
@@ -51,7 +51,7 @@ Describe 'New-CustomFileName' {
             $template = '%year%%month%%day%-%hour%%minute%%second%_%username%@%computername%'
             $result = New-CustomFileName -Template $template
 
-            $expected = '{0}{1}{2}-{3}{4}{5}_psuser@PSNODE' -f 
+            $expected = '{0}{1}{2}-{3}{4}{5}_psuser@PSNODE' -f
                 $mockedNow.ToString('yyyy'),
                 $mockedNow.ToString('MM'),
                 $mockedNow.ToString('dd'),

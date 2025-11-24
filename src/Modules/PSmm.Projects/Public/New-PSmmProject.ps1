@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 function New-PSmmProject {
@@ -44,10 +44,10 @@ function New-PSmmProject {
         Clear-Host
         Show-Header -Config $Config
         Format-Text -Text1 'Create a new project' -Width '80' -Alignment 'c' -ForegroundColor 'DarkGreen' -Border 'Box'
-        
+
         # Get project name from user
         $pName = Read-Host "`nPlease enter a project name"
-        
+
         if ([string]::IsNullOrWhiteSpace($pName)) {
             Write-Warning "Project name cannot be empty. Operation cancelled."
             return
@@ -95,7 +95,7 @@ function New-PSmmProject {
         Write-Verbose "Creating project directory structure..."
         foreach ($directory in $directoriesToCreate) {
             $fullPath = Join-Path -Path $projectBasePath -ChildPath $directory
-            
+
             if (-not $FileSystem.TestPath($fullPath)) {
                 if ($PSCmdlet.ShouldProcess($fullPath, 'Create directory')) {
                     try {
@@ -114,7 +114,7 @@ function New-PSmmProject {
         Write-Verbose "Copying digiKam configuration..."
         try {
             $digiKamConfigSource = $Config.Paths.App.ConfigDigiKam
-            
+
             if ($FileSystem.TestPath($digiKamConfigSource)) {
                 $FileSystem.CopyItem($digiKamConfigSource, $projectConfigPath, $true)
                 Write-Verbose "digiKam configuration copied successfully"
@@ -135,32 +135,32 @@ function New-PSmmProject {
             $dbName = "$pName.kdbx"
 
             New-KeePassDatabase -vaultPath $vaultPath -dbName $dbName
-            
+
             # Prompt for MariaDB credentials entry
             Write-Host "`nPlease enter a secure password for MariaDB root user:" -ForegroundColor Yellow
             Write-Host "Press ENTER without typing to auto-generate a secure password" -ForegroundColor Gray
             $mariaDBPassword = Read-Host "MariaDB Password" -AsSecureString
-            
+
             # Validate that user entered a password
             if ($mariaDBPassword.Length -eq 0) {
                 Write-Host "Generating a secure random password..." -ForegroundColor Yellow
-                
+
                 # Generate a cryptographically secure random password
                 $passwordBytes = New-Object byte[] 24
                 $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::Create()
                 $rng.GetBytes($passwordBytes)
                 $rng.Dispose()
-                
+
                 # Convert to base64 and take first 20 characters for readability
                 $randomPassword = [Convert]::ToBase64String($passwordBytes).Substring(0, 20)
-                
+
                 # Display the generated password to user
                 Write-Host "`nGenerated password: " -NoNewline -ForegroundColor Cyan
                 Write-Host $randomPassword -ForegroundColor Green
                 Write-Host "IMPORTANT: Save this password in a secure location NOW!" -ForegroundColor Red
                 Write-Host "Press any key to continue after saving the password..." -ForegroundColor Yellow
                 $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-                
+
                 # Convert to SecureString securely (from character array to avoid string in memory)
                 $securePassword = New-Object System.Security.SecureString
                 foreach ($char in $randomPassword.ToCharArray()) {
@@ -168,18 +168,18 @@ function New-PSmmProject {
                 }
                 $securePassword.MakeReadOnly()
                 $mariaDBPassword = $securePassword
-                
+
                 # Clear the plain text password from memory
                 $randomPassword = $null
                 [System.GC]::Collect()
             }
-            
+
             New-KeePassEntry -vaultPath $vaultPath `
                 -dbName $dbName `
                 -Title 'MariaDB' `
                 -pUserName 'root' `
                 -pPassword $mariaDBPassword
-            
+
             Write-Verbose "KeePass database created with MariaDB credentials"
         }
         catch {
@@ -188,7 +188,7 @@ function New-PSmmProject {
 
         Write-Output ''
         Write-Information "Project '$pName' created successfully at: $projectBasePath" -InformationAction Continue
-        
+
         # Clear project registry cache to force rescan
         Write-Verbose "Clearing project registry cache to include new project"
         try {
@@ -199,11 +199,11 @@ function New-PSmmProject {
         catch {
             Write-Warning "Failed to clear project registry cache: $_"
         }
-        
+
         # Note: MariaDB database is initialized when digiKam starts for the first time
         # The database credentials are already stored in the project KeePass vault
         # MariaDB itself is managed by Start-PSmmdigiKam / Stop-PSmmdigiKam functions
-        
+
         Write-Verbose "Project creation complete"
     }
     catch {

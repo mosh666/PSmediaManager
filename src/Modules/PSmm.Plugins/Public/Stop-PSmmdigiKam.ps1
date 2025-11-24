@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 <#
@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
     Terminates project-specific digiKam and associated MariaDB database processes.
     The function identifies processes by their configuration paths and database ports
     to ensure only the correct project's processes are stopped.
-    
+
     The function performs the following operations:
     - Finds and stops digiKam processes using the project-specific APPDIR
     - Finds and stops MariaDB processes on the project's allocated port
@@ -27,9 +27,9 @@ Set-StrictMode -Version Latest
     Author           : Der Mosh
     Version          : 1.0.0
     Created          : 2025-11-05
-    
+
     Requires         : - AppConfiguration class
-                       
+
     Related          : Start-PSmmdigiKam
 
 .LINK
@@ -43,11 +43,11 @@ function Stop-PSmmdigiKam {
         [ValidateNotNull()]
         $Config
     )
-    
+
     begin {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
-        
+
         # Get current project name from Config
         $projectName = if ($null -ne $Config.Projects -and $Config.Projects.ContainsKey('Current') -and
             $Config.Projects.Current.ContainsKey('Name')) {
@@ -55,10 +55,10 @@ function Stop-PSmmdigiKam {
         } else {
             'Unknown'
         }
-        
+
         Write-Verbose "Stopping digiKam for project: $projectName"
     }
-    
+
     process {
         try {
             # Confirm the action with ShouldProcess
@@ -66,14 +66,14 @@ function Stop-PSmmdigiKam {
                 Write-Verbose 'Stop digiKam operation cancelled by user'
                 return
             }
-            
+
             Write-Host ''
             Write-PSmmLog -Level INFO -Context 'digiKam' -Message 'Stopping digiKam...' -Console -File
-            
+
             # Get project-specific paths - check if this is the current project
             $projectPath = $null
-            if ($Config.Projects.ContainsKey('Current') -and 
-                $Config.Projects.Current.ContainsKey('Name') -and 
+            if ($Config.Projects.ContainsKey('Current') -and
+                $Config.Projects.Current.ContainsKey('Name') -and
                 $Config.Projects.Current.Name -eq $projectName -and
                 $Config.Projects.Current.ContainsKey('Path')) {
                 $projectPath = $Config.Projects.Current.Path
@@ -82,27 +82,27 @@ function Stop-PSmmdigiKam {
                 Write-Warning "Project '$projectName' is not currently selected. Cannot determine project paths for stopping digiKam."
                 return
             }
-            
+
             $configPath = Join-Path -Path $projectPath -ChildPath 'Config'
             $appDir = Join-Path -Path $configPath -ChildPath 'digiKam'
-            
+
             # Get project's allocated database port
             $databasePort = $null
-            if ($Config.Projects.ContainsKey('PortRegistry') -and 
+            if ($Config.Projects.ContainsKey('PortRegistry') -and
                 $Config.Projects.PortRegistry.ContainsKey($projectName)) {
                 $databasePort = $Config.Projects.PortRegistry[$projectName]
                 Write-Verbose "Found allocated port $databasePort for project $projectName"
             }
-            
+
             $processesKilled = 0
-            
+
             # Stop digiKam processes using the project-specific APPDIR
             Write-Verbose "Looking for digiKam processes with APPDIR: $appDir"
-            
+
             # Get all digiKam processes and check their environment variables
             $digiKamProcesses = Get-Process -Name 'digikam' -ErrorAction SilentlyContinue
             $projectDigiKamProcesses = @()
-            
+
             foreach ($proc in $digiKamProcesses) {
                 try {
                     # Check if process command line contains our config file
@@ -116,7 +116,7 @@ function Stop-PSmmdigiKam {
                     Write-Verbose "Cannot access CommandLine for process PID: $($proc.Id)"
                 }
             }
-            
+
             if ($projectDigiKamProcesses) {
                 foreach ($proc in $projectDigiKamProcesses) {
                     try {
@@ -132,15 +132,15 @@ function Stop-PSmmdigiKam {
             else {
                 Write-Verbose "No digiKam processes found for project $projectName"
             }
-            
+
             # Stop MariaDB processes associated with project database port
             if ($databasePort) {
                 Write-Verbose "Looking for MariaDB processes on port: $databasePort"
-                
+
                 # Find MariaDB processes listening on the project's port
                 $portConnections = Get-NetTCPConnection -LocalPort $databasePort -ErrorAction SilentlyContinue
                 $mariaDbProcesses = @()
-                
+
                 foreach ($connection in $portConnections) {
                     try {
                         $proc = Get-Process -Id $connection.OwningProcess -ErrorAction SilentlyContinue
@@ -152,7 +152,7 @@ function Stop-PSmmdigiKam {
                         Write-Verbose "Cannot access process for PID: $($connection.OwningProcess)"
                     }
                 }
-                
+
                 if ($mariaDbProcesses) {
                     foreach ($proc in $mariaDbProcesses) {
                         try {
@@ -172,14 +172,14 @@ function Stop-PSmmdigiKam {
             else {
                 Write-Verbose "No database port allocated for project $projectName"
             }
-            
+
             if ($processesKilled -gt 0) {
                 Write-PSmmLog -Level SUCCESS -Context 'digiKam' -Message "Stopped $processesKilled process(es)" -Console -File
             }
             else {
                 Write-PSmmLog -Level INFO -Context 'digiKam' -Message 'No running digiKam or MariaDB processes found for this project' -Console -File
             }
-            
+
             Write-Host ''
         }
         catch {
@@ -189,12 +189,12 @@ function Stop-PSmmdigiKam {
             else {
                 "Failed to stop digiKam: $_"
             }
-            
+
             Write-PSmmLog -Level ERROR -Context 'digiKam' -Message $errorMessage -ErrorRecord $_ -Console -File
             throw
         }
     }
-    
+
     end {
         Write-Verbose 'Stop-PSmmdigiKam completed'
     }

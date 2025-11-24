@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Starter script for PSmediaManager.
 
@@ -38,9 +38,9 @@
     Author           : Der Mosh
     Version          : 1.0.0
     Created          : 2025-11-19
-    
+
     Requires         : PowerShell 7.5.4 or higher
-    
+
     Repository       : https://github.com/mosh666/PSmediaManager
     License          : MIT
 #>

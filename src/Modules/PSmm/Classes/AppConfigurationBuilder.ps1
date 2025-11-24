@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builder pattern for constructing AppConfiguration instances.
 
@@ -10,11 +10,11 @@
     Author: Der Mosh
     Requires: PowerShell 7.5.4 or higher
     Version: 1.0.0
-    
+
     IMPORTANT: This file depends on types defined in AppConfiguration.ps1
     The module loader (PSmm.psm1) ensures AppConfiguration.ps1
     is loaded BEFORE this file, so all type references are valid at runtime.
-    
+
     The PowerShell language server may show "Unable to find type" errors
     because it analyzes files individually. These are FALSE POSITIVES and
     can be safely ignored. The code works correctly at runtime.
@@ -32,7 +32,7 @@ param()
 <#
 .SYNOPSIS
     Builder for creating AppConfiguration instances.
-    
+
 .DESCRIPTION
     Requires types from AppConfiguration.ps1 to be loaded first.
 #>
@@ -105,12 +105,12 @@ class AppConfigurationBuilder {
     [AppConfigurationBuilder] WithParameters([RuntimeParameters]$parameters) {
         $this.EnsureNotBuilt()
         $this._config.Parameters = $parameters
-        
+
         # Ensure logging is initialized
         if ($null -eq $this._config.Logging) {
             $this._config.Logging = [LoggingConfiguration]::new()
         }
-        
+
         # Adjust logging level based on parameters
         if ($parameters.Debug) {
             $this._config.Logging.Level = 'DEBUG'
@@ -120,7 +120,7 @@ class AppConfigurationBuilder {
             $this._config.Logging.Level = 'VERBOSE'
             $this._config.Logging.DefaultLevel = 'VERBOSE'
         }
-        
+
         return $this
     }
 
@@ -144,21 +144,21 @@ class AppConfigurationBuilder {
 
     [AppConfigurationBuilder] LoadConfigurationFile([string]$configPath) {
         $this.EnsureNotBuilt()
-        
+
         if (-not (Test-Path -Path $configPath)) {
             throw "Configuration file not found: $configPath"
         }
 
         try {
             $configData = Import-PowerShellDataFile -Path $configPath
-            
+
             # Merge configuration data
             if ($configData.ContainsKey('App')) {
                 if ($configData.App.ContainsKey('Storage')) {
                     foreach ($key in $configData.App.Storage.Keys) {
                         $storageData = $configData.App.Storage[$key]
                         $group = [StorageGroupConfig]::new($key)
-                        
+
                         if ($storageData.ContainsKey('Master') -and $storageData.Master) {
                             $masterLabel = if ($storageData.Master.ContainsKey('Label')) { $storageData.Master.Label } else { '' }
                             $masterDrive = if ($storageData.Master.ContainsKey('DriveLetter')) { $storageData.Master.DriveLetter } else { '' }
@@ -168,12 +168,12 @@ class AppConfigurationBuilder {
                             $group.Master.SerialNumber = $masterSerial
                             Write-Verbose "Set Master.SerialNumber to: $($group.Master.SerialNumber)"
                         }
-                        
+
                         # Handle Backup storage - config file has numbered backups (1, 2, etc.)
                         if ($storageData.ContainsKey('Backup') -and $storageData.Backup -and $storageData.Backup -is [hashtable]) {
                             # Load all numbered backup entries
                             $backupKeys = $storageData.Backup.Keys | Where-Object { $_ -match '^\d+$' } | Sort-Object { [int]$_ }
-                            
+
                             if ($backupKeys) {
                                 foreach ($backupKey in $backupKeys) {
                                     $backup = $storageData.Backup[$backupKey]
@@ -181,7 +181,7 @@ class AppConfigurationBuilder {
                                     $backupDriveLetter = if ($backup.ContainsKey('DriveLetter')) { $backup.DriveLetter } else { '' }
                                     $backupSerial = if ($backup.ContainsKey('SerialNumber')) { $backup.SerialNumber } else { '' }
                                     Write-Verbose "Loading Backup.$backupKey for Storage.$key : Label=$backupLabel, Drive=$backupDriveLetter, Serial=$backupSerial"
-                                    
+
                                     $backupDriveConfig = [StorageDriveConfig]::new($backupLabel, $backupDriveLetter)
                                     $backupDriveConfig.SerialNumber = $backupSerial
                                     $group.Backups[$backupKey] = $backupDriveConfig
@@ -192,21 +192,21 @@ class AppConfigurationBuilder {
                                 Write-Verbose "Storage.$key has Backup hashtable but no numbered entries found"
                             }
                         }
-                        
+
                         if ($storageData.ContainsKey('Paths') -and $storageData.Paths) {
                             foreach ($pathKey in $storageData.Paths.Keys) {
                                 $group.Paths[$pathKey] = $storageData.Paths[$pathKey]
                             }
                         }
-                        
+
                         $this._config.Storage[$key] = $group
                     }
                 }
-                
+
                 if ($configData.App.ContainsKey('UI')) {
                     $this._config.UI = $configData.App.UI
                 }
-                
+
                 if ($configData.App.ContainsKey('Logging')) {
                     $loggingTable = $configData.App.Logging
                     $loggingType = $this._config.Logging.GetType()
@@ -226,7 +226,7 @@ class AppConfigurationBuilder {
                     }
                 }
             }
-            
+
             if ($configData.ContainsKey('Projects')) {
                 $this._config.Projects = $configData.Projects
             }
@@ -240,7 +240,7 @@ class AppConfigurationBuilder {
 
     [AppConfigurationBuilder] LoadRequirementsFile([string]$requirementsPath) {
         $this.EnsureNotBuilt()
-        
+
         if (-not (Test-Path -Path $requirementsPath)) {
             throw "Requirements file not found: $requirementsPath"
         }
@@ -263,18 +263,18 @@ class AppConfigurationBuilder {
 
     [AppConfigurationBuilder] LoadSecrets() {
         $this.EnsureNotBuilt()
-        
+
         if ($null -eq $this._config.Secrets) {
             $this._config.Secrets = [AppSecrets]::new($this._config.Paths.App.Vault)
         }
-        
+
         $this._config.Secrets.LoadSecrets()
         return $this
     }
 
     [AppConfigurationBuilder] UpdateStorageStatus() {
         $this.EnsureNotBuilt()
-        
+
         # Get all available drives using Get-StorageDrive
         $availableDrives = @()
         try {
@@ -285,24 +285,24 @@ class AppConfigurationBuilder {
         catch {
             Write-Warning "Failed to get storage drives: $_"
         }
-        
+
         # Match each storage device by serial number and update drive letters
         foreach ($groupKey in $this._config.Storage.Keys) {
             $group = $this._config.Storage[$groupKey]
-            
+
             # Match Master drive
             if ($null -ne $group.Master -and -not [string]::IsNullOrWhiteSpace($group.Master.SerialNumber)) {
                 $matchedDrive = $availableDrives | Where-Object {
                     -not [string]::IsNullOrWhiteSpace($_.SerialNumber) -and
                     $_.SerialNumber.Trim() -eq $group.Master.SerialNumber.Trim()
                 } | Select-Object -First 1
-                
+
                 if ($matchedDrive) {
                     $group.Master.DriveLetter = $matchedDrive.DriveLetter
                     Write-Verbose "Matched Master for Group $groupKey : $($group.Master.Label) -> $($matchedDrive.DriveLetter)"
                 }
             }
-            
+
             # Match Backup drives
             if ($null -ne $group.Backups -and $group.Backups.Count -gt 0) {
                 foreach ($backupKey in $group.Backups.Keys) {
@@ -312,7 +312,7 @@ class AppConfigurationBuilder {
                             -not [string]::IsNullOrWhiteSpace($_.SerialNumber) -and
                             $_.SerialNumber.Trim() -eq $backup.SerialNumber.Trim()
                         } | Select-Object -First 1
-                        
+
                         if ($matchedDrive) {
                             $backup.DriveLetter = $matchedDrive.DriveLetter
                             Write-Verbose "Matched Backup.$backupKey for Group $groupKey : $($backup.Label) -> $($matchedDrive.DriveLetter)"
@@ -320,32 +320,32 @@ class AppConfigurationBuilder {
                     }
                 }
             }
-            
+
             # Now update status for this group (which will populate size/availability info)
             $group.UpdateStatus()
         }
-        
+
         return $this
     }
 
     [AppConfiguration] Build() {
         $this.EnsureNotBuilt()
-        
+
         # Validate required properties
         if ($null -eq $this._config.Paths) {
             throw "Root path must be set before building"
         }
-        
+
         if ($null -eq $this._config.Parameters) {
             throw "Runtime parameters must be set before building"
         }
-        
+
         # Ensure initialization is complete
         $this._config.Initialize()
-        
+
         # Mark as built to prevent further modifications
         $this._built = $true
-        
+
         return $this._config
     }
 

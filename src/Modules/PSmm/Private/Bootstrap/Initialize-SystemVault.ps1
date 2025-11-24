@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Initializes the central PSmediaManager system KeePassXC vault.
 

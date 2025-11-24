@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Performs automated first-run setup for PSmediaManager.
 
@@ -7,7 +7,7 @@
     - Creating the KeePassXC vault if it doesn't exist
     - Prompting for required secrets (GitHub token)
     - Saving secrets to the vault
-    
+
     This function is called automatically when the vault is missing,
     providing a seamless first-run experience.
 
@@ -20,7 +20,7 @@
 
 .EXAMPLE
     Invoke-FirstRunSetup -VaultPath 'D:\PSmediaManager\Vault'
-    
+
     Performs first-run setup with prompts for required information.
 
 .NOTES
@@ -48,7 +48,7 @@ function Invoke-FirstRunSetup {
                 # Validate parameters
         $dbPath = Join-Path $VaultPath 'PSmm_System.kdbx'
         $tokenCachePath = Join-Path $VaultPath '.pending_setup.cache'
-        
+
         # Check if vault already exists
         if (Test-Path $dbPath) {
             Write-Verbose "Vault already exists at: $dbPath"
@@ -62,7 +62,7 @@ function Invoke-FirstRunSetup {
         # Check for cached token from previous setup attempt FIRST
         $token = $null
         $hasToken = $false
-        
+
         if (Test-Path $tokenCachePath) {
             Write-Host ""
             Write-Host "Found cached setup data from previous attempt..." -ForegroundColor Cyan
@@ -70,14 +70,14 @@ function Invoke-FirstRunSetup {
                 $cacheData = Get-Content -Path $tokenCachePath -Raw | ConvertFrom-Json
                 $encryptedToken = $cacheData.Token
                 $token = $encryptedToken | ConvertTo-SecureString
-                
+
                 # Verify the token
                 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
                 $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
                 [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-                
+
                 $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
-                
+
                 if ($hasToken) {
                     Write-Host "✓ Cached token loaded successfully" -ForegroundColor Green
                     Write-Host "  Continuing setup with cached credentials..." -ForegroundColor Gray
@@ -103,7 +103,7 @@ function Invoke-FirstRunSetup {
         }
         Write-Host "╚════════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
         Write-Host ""
-        
+
         if (-not $hasToken) {
             Write-Host "Welcome! It looks like this is your first time running PSmediaManager." -ForegroundColor Yellow
             Write-Host "I'll help you set up the secure vault for storing secrets." -ForegroundColor Yellow
@@ -128,7 +128,7 @@ function Invoke-FirstRunSetup {
             Write-Host "  3. Create a secure KeePassXC vault at: $VaultPath" -ForegroundColor Gray
             Write-Host "  4. Store the token securely in the vault" -ForegroundColor Gray
             Write-Host ""
-            
+
             $response = Read-Host "Ready to proceed? (Y/n)"
             if ($response -and $response -notmatch '^[Yy]') {
                 Write-Host ""
@@ -145,7 +145,7 @@ function Invoke-FirstRunSetup {
             Write-Host "  • Create a vault master password" -ForegroundColor Gray
             Write-Host "  • Save your GitHub token to the vault" -ForegroundColor Gray
             Write-Host ""
-            
+
             $response = Read-Host "Continue with vault creation? (Y/n)"
             if ($response -and $response -notmatch '^[Yy]') {
                 Write-Host ""
@@ -159,7 +159,7 @@ function Invoke-FirstRunSetup {
         Write-Host "Step 1: GitHub Personal Access Token" -ForegroundColor Cyan
         Write-Host "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
         Write-Host ""
-        
+
         # Only prompt for token if we don't already have one cached
         if (-not $hasToken) {
             Write-Host "The GitHub token is used for:" -ForegroundColor Yellow
@@ -179,14 +179,14 @@ function Invoke-FirstRunSetup {
 
             # Prompt for GitHub token
             $token = Read-Host "Enter your GitHub Personal Access Token" -AsSecureString
-            
+
             # Check if token was provided
             $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
             $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
             [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-            
+
             $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
-            
+
             if (-not $hasToken) {
                 Write-Host ""
                 Write-Host "⚠ No token provided." -ForegroundColor Yellow
@@ -202,13 +202,13 @@ function Invoke-FirstRunSetup {
         Write-Host "Step 2: KeePassXC Setup" -ForegroundColor Cyan
         Write-Host "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
         Write-Host ""
-        
+
         $cliResolution = Resolve-KeePassCliCommand -VaultPath $VaultPath
         $cliCheck = if ($cliResolution -and $cliResolution.Command) { $cliResolution.Command } else { $null }
         if (-not $cliCheck) {
             Write-Host "❌ KeePassXC not found!" -ForegroundColor Red
             Write-Host ""
-            
+
             # Cache the token securely if provided
             if ($hasToken) {
                 Write-Host "Caching your token securely..." -ForegroundColor Cyan
@@ -217,7 +217,7 @@ function Invoke-FirstRunSetup {
                     if (-not (Test-Path $VaultPath)) {
                         New-Item -ItemType Directory -Path $VaultPath -Force | Out-Null
                     }
-                    
+
                     # Store encrypted token using DPAPI
                     $encryptedToken = $token | ConvertFrom-SecureString
                     $cacheData = @{
@@ -231,14 +231,14 @@ function Invoke-FirstRunSetup {
                     Write-Warning "Failed to cache token: $_"
                 }
             }
-            
+
             Write-Host ""
             Write-Host "KeePassXC will now be installed automatically..." -ForegroundColor Yellow
             Write-Host ""
             Write-Host "The application will continue with plugin installation." -ForegroundColor Cyan
             Write-Host "Once KeePassXC is installed, the vault setup will complete automatically." -ForegroundColor Cyan
             Write-Host ""
-            
+
             # Return a special status to indicate pending setup
             return 'PendingKeePassXC'
         }
@@ -254,7 +254,7 @@ function Invoke-FirstRunSetup {
 
         # Initialize the vault
         $vaultCreated = Initialize-SystemVault -VaultPath $VaultPath -ErrorAction Stop
-        
+
         if (-not $vaultCreated) {
             Write-Host "❌ Failed to create vault" -ForegroundColor Red
             return $false
@@ -272,7 +272,7 @@ function Invoke-FirstRunSetup {
             Write-Host "NOTE: You'll be prompted for your vault master password." -ForegroundColor Yellow
             Write-Host "      (This is the password you just created)" -ForegroundColor Yellow
             Write-Host ""
-            
+
             $metadata = @{
                 Created = (Get-Date -Format 'yyyy-MM-dd')
                 Purpose = 'PSmediaManager plugin downloads and updates'
@@ -280,10 +280,10 @@ function Invoke-FirstRunSetup {
             }
 
             $saved = Save-SystemSecret -SecretType 'GitHub-Token' -SecretValue $token -Metadata $metadata -VaultPath $VaultPath -ErrorAction Stop
-            
+
             if ($saved) {
                 Write-Host "✓ Token saved successfully" -ForegroundColor Green
-                
+
                 # Clean up cached token
                 if (Test-Path $tokenCachePath) {
                     Remove-Item $tokenCachePath -Force -ErrorAction SilentlyContinue
@@ -298,7 +298,7 @@ function Invoke-FirstRunSetup {
             Write-Host "⚠ No GitHub token configured. You can add it later using:" -ForegroundColor Yellow
             Write-Host "   Save-SystemSecret -SecretType 'GitHub-Token' -SecretValue `$token" -ForegroundColor Gray
         }
-        
+
         Write-Host ""
         Write-Host "╔════════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
         Write-Host "║                  ✓ Setup Complete!                                 ║" -ForegroundColor Green
@@ -316,23 +316,23 @@ function Invoke-FirstRunSetup {
         Write-Host "Press any key to continue..." -ForegroundColor DarkGray
         $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
         Write-Host ""
-        
+
         # Clear any cached vault master password after successful setup completes
         try { $script:_VaultMasterPasswordCache = $null }
         catch {
             Write-Verbose "Failed to clear cached vault master password: $_"
         }
-        
+
         return $true
     }
     catch {
         $errorMessage = "First-run setup failed: $_"
-        
+
         if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
             Write-PSmmLog -Level ERROR -Context 'Invoke-FirstRunSetup' `
                 -Message $errorMessage -ErrorRecord $_ -Console -File
         }
-        
+
         Write-Error $errorMessage
         # Ensure cache is cleared on failure as well
         try { $script:_VaultMasterPasswordCache = $null }

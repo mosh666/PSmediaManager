@@ -1,11 +1,11 @@
-<#
+﻿<#
 .SYNOPSIS
     PSmediaManager PowerShell Application
 
 .DESCRIPTION
     Main entry point for the PSmediaManager application. This script initializes the runtime
     environment, imports required modules, and launches the user interface.
-    
+
     The application provides a comprehensive media management solution with support for:
     - Media file organization and cataloging
     - Project management
@@ -44,12 +44,12 @@
     Version          : 1.0.0
     Created          : 2024-01-01
     Last Modified    : 2025-11-14
-    
+
     Requires         : PowerShell 7.5.4 or higher (aligns with Requirements manifest)
-    
+
     Repository       : https://github.com/mosh666/PSmediaManager
     License          : MIT
-    
+
     Dependencies     : - digiKam 8.8.0 or higher
                        - ExifTool 13.40 or higher
                        - FFmpeg 8.0 or higher
@@ -104,7 +104,7 @@ try {
     # Calculate modules path from ModuleRoot
     $modulesPath = Join-Path -Path $script:ModuleRoot -ChildPath 'Modules'
     Write-Verbose "Importing modules from: $modulesPath"
-    
+
     # Define module load order (dependencies first)
     $moduleLoadOrder = @(
         'PSmm',              # Core module (contains classes and base functions)
@@ -113,12 +113,12 @@ try {
         'PSmm.Projects',     # Project management
         'PSmm.UI'            # User interface (depends on all others)
     )
-    
+
     $loadedModules = 0
     foreach ($moduleName in $moduleLoadOrder) {
         $moduleFolder = Join-Path -Path $modulesPath -ChildPath $moduleName
         $manifestPath = Join-Path -Path $moduleFolder -ChildPath "$moduleName.psd1"
-        
+
         if (Test-Path -Path $manifestPath) {
             try {
                 Write-Verbose "Importing module: $moduleName"
@@ -136,11 +136,11 @@ try {
             Write-Warning "Module manifest not found: $manifestPath"
         }
     }
-    
+
     if ($loadedModules -eq 0) {
         throw [System.Exception]::new("No modules were loaded from: $modulesPath")
     }
-    
+
     Write-Verbose "Successfully imported $loadedModules module(s)"
 }
 catch {
@@ -165,7 +165,7 @@ catch {
 #>
 try {
     Write-Verbose "Initializing runtime configuration..."
-    
+
     # Create runtime parameters from bound parameters
     # Convert BoundParameters to hashtable to avoid type conversion issues
     $boundParamsHashtable = @{}
@@ -173,12 +173,12 @@ try {
         # Shallow copy only (parameters are primitives / switches here)
         $boundParamsHashtable[$key] = $PSCmdlet.MyInvocation.BoundParameters[$key]
     }
-    
+
     $runtimeParams = [RuntimeParameters]::new($boundParamsHashtable)
     $runtimeParams.Dev = $Dev.IsPresent
     $runtimeParams.Update = $Update.IsPresent
     $runtimeParams.NonInteractive = $NonInteractive.IsPresent
-    
+
     # Determine repository root (parent of src) and derive runtime paths from it
     $repositoryRoot = Split-Path -Path $script:ModuleRoot -Parent
 
@@ -191,7 +191,7 @@ try {
     WithParameters($runtimeParams).
     WithVersion([version]'1.0.0').
     InitializeDirectories()
-    
+
     Write-Verbose "Runtime configuration initialized successfully"
 }
 catch {
@@ -210,11 +210,11 @@ catch {
 #>
 try {
     Write-Verbose "Checking for drive root launcher..."
-    
+
     # Get repository root from the config builder
     $tempConfig = $configBuilder.GetConfig()
     $repositoryRoot = $tempConfig.Paths.RepositoryRoot
-    
+
     if ($repositoryRoot) {
         $launcherCmd = Get-Command -Name 'New-DriveRootLauncher' -ErrorAction SilentlyContinue
         if ($launcherCmd) {
@@ -244,12 +244,12 @@ catch {
 #>
 try {
     Write-Verbose "Bootstrapping $($configBuilder.GetConfig().DisplayName) application..."
-    
+
     # Get config paths from the builder's config object
     $tempConfig = $configBuilder.GetConfig()
     $defaultConfigPath = $tempConfig.GetConfigPath('App')
     $requirementsPath = $tempConfig.GetConfigPath('Requirements')
-    
+
     # Load configuration files using the builder (before Build() is called)
     if (Test-Path -Path $defaultConfigPath) {
         $null = $configBuilder.LoadConfigurationFile($defaultConfigPath)
@@ -258,7 +258,7 @@ try {
     else {
         Write-Warning "Default configuration file not found: $defaultConfigPath"
     }
-    
+
     if (Test-Path -Path $requirementsPath) {
         $null = $configBuilder.LoadRequirementsFile($requirementsPath)
         Write-Verbose "Loaded requirements: $requirementsPath"
@@ -266,13 +266,13 @@ try {
     else {
         Write-Warning "Requirements file not found: $requirementsPath"
     }
-    
+
     # Now build the final configuration with all loaded data
     # Note: Secrets will be loaded AFTER logging is initialized in Invoke-PSmm
     $appConfig = $configBuilder.
     UpdateStorageStatus().
     Build()
-    
+
     # Bootstrap using modern AppConfiguration approach
     # All bootstrap functions now support AppConfiguration natively
     Invoke-PSmm -Config $appConfig
@@ -285,14 +285,14 @@ catch {
     else {
         "Failed to bootstrap application: $_"
     }
-    
+
     Write-Error $errorMessage
-    
+
     # Attempt to log the error if logging is initialized
     if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
         Write-PSmmLog -Level ERROR -Context 'Bootstrap' -Message $errorMessage -Console -File
     }
-    
+
     exit 1
 }
 
@@ -330,16 +330,16 @@ try {
 }
 catch {
     $exitCode = 1
-    
+
     $errorMessage = if ($_.Exception -is [MediaManagerException]) {
         "[$($_.Exception.Context)] $($_.Exception.Message)"
     }
     else {
         "UI error: $_"
     }
-    
+
     Write-Error $errorMessage
-    
+
     # Log the error
     if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
         try {
@@ -358,7 +358,7 @@ finally {
         Cleanup is performed in a finally block to ensure it executes even if errors occurred.
     #>
     Write-Verbose 'Performing cleanup operations...'
-    
+
     # Save runtime configuration (sanitized for security)
     if (Get-Command Export-SafeConfiguration -ErrorAction SilentlyContinue) {
         $runConfigPath = Join-Path -Path $appConfig.Paths.Log -ChildPath "$($appConfig.InternalName)Run.psd1"
@@ -383,7 +383,7 @@ finally {
             }
         }
     }
-    
+
     # Log application exit
     if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
         try {
@@ -394,10 +394,10 @@ finally {
             Write-Warning "Failed to log exit: $_"
         }
     }
-    
+
     # Temporary environment path tracking removed; no-op for unregister.
     Write-Verbose 'Temporary environment path tracking removed; skipping unregister.'
-    
+
     # Remove imported modules (clean up PowerShell session)
     Write-Verbose 'Removing imported modules...'
     try {
@@ -406,7 +406,7 @@ finally {
     catch {
         Write-Warning "Failed to remove modules: $_"
     }
-    
+
     # Display exit message
     Write-Output ''
     if ($exitCode -eq 0) {
@@ -415,7 +415,7 @@ finally {
     else {
         Write-Host "$($appConfig.DisplayName) exited with errors. Check the log for details.`n" -ForegroundColor Yellow
     }
-    
+
     # Exit with appropriate code
     Write-Verbose "Exiting with code: $exitCode"
     exit $exitCode

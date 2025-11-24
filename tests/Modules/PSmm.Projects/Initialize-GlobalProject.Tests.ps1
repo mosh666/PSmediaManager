@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 # Compute repo/test paths; Test support will be dot-sourced inside Describe to ensure availability in Pester scopes

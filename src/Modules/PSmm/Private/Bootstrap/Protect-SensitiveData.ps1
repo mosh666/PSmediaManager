@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
@@ -10,11 +10,11 @@ function Protect-ConfigurationData {
         [AllowNull()]
         $Data
     )
-    
+
     if ($null -eq $Data) {
         return $null
     }
-    
+
     if ($Data -is [hashtable]) {
         $result = @{}
         foreach ($key in $Data.Keys) {

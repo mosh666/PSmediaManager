@@ -1,11 +1,11 @@
-<#
+﻿<#
 .SYNOPSIS
     PowerShell module for log management.
 
 .DESCRIPTION
     Provides centralized logging functionality for the PSmediaManager application using the PSLogs module.
     Supports file and console logging targets with configurable levels and formats.
-    
+
     Features:
     - Multiple logging targets (console and file)
     - Configurable logging levels
@@ -54,7 +54,7 @@ try {
     # Import public functions
     if (Test-Path $PublicPath) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
-        
+
         if ($PublicFunctions.Count -gt 0) {
             foreach ($Function in $PublicFunctions) {
                 try {
@@ -74,11 +74,11 @@ try {
     else {
         throw "Public functions path not found: $PublicPath"
     }
-    
+
     # Import private functions
     if (Test-Path $PrivatePath) {
         $PrivateFunctions = @(Get-ChildItem -Path "$PrivatePath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
-        
+
         if ($PrivateFunctions.Count -gt 0) {
             foreach ($Function in $PrivateFunctions) {
                 try {

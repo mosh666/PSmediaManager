@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$BaselinePath = (Join-Path -Path $PSScriptRoot -ChildPath '.coverage-baseline.json'),

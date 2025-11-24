@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Bootstraps the PSmediaManager application.
 
@@ -251,7 +251,7 @@ function Invoke-PSmm {
         }
         catch {
             $ErrorMessage = "Bootstrap failed: $_"
-            
+
             # Only log if Write-PSmmLog is available (logging may not be initialized yet)
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
                 Write-PSmmLog -Level ERROR -Context 'Invoke-PSmm' -Message $ErrorMessage -Console -File
@@ -259,7 +259,7 @@ function Invoke-PSmm {
             else {
                 Write-Warning $ErrorMessage
             }
-            
+
             throw $ErrorMessage
         }
     }

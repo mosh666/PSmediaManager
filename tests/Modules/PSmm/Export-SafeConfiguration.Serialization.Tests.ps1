@@ -1,4 +1,4 @@
-Describe 'Export-SafeConfiguration (serialization branches)' {
+﻿Describe 'Export-SafeConfiguration (serialization branches)' {
     BeforeAll {
         # Dot-source the implementation so the exported function is available
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm/Public/Export-SafeConfiguration.ps1'
@@ -10,7 +10,7 @@ Describe 'Export-SafeConfiguration (serialization branches)' {
         $exportPath = Join-Path $TestDrive 'serialization-mixed-export.psd1'
         Remove-Item -Path $exportPath -ErrorAction SilentlyContinue -Force
 
-        $cfg = @{ 
+        $cfg = @{
             Mixed = @(
                 'alpha',
                 @{ Key = 'Value'; Inner = @('x','y') },

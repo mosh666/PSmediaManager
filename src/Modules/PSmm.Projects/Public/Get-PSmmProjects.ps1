@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 function Get-PSmmProjects {
@@ -10,7 +10,7 @@ function Get-PSmmProjects {
         Scans all configured Master and Backup storage drives for project folders,
         returning a structured hashtable grouped by drive label. Skips drives with
         errors or missing drive letters, and excludes the _GLOBAL_ project folder.
-        
+
         Uses a registry cache to speed up subsequent calls. The cache is invalidated
         and refreshed when project changes are detected.
 
@@ -94,20 +94,20 @@ function Get-PSmmProjects {
         $UseCache = -not $Force.IsPresent
         if ($UseCache -and $registry.LastScanned -ne [datetime]::MinValue) {
             Write-Verbose 'Checking if registry cache is still valid...'
-            
+
             # Check if any Projects directories have been modified since last scan
             # Support both FileSystem abstraction and direct PowerShell cmdlets
             $canTestPath = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'TestPath')
             $canGetItemProp = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'GetItemProperty')
             $CacheInvalid = $false
             $Storage = $Config.Storage
-            
+
             # Only validate cache against storage if storage is configured
             if ($null -ne $Storage -and $Storage.Count -gt 0) {
                 foreach ($storageGroup in ($Storage.Keys | Sort-Object)) {
                     $sg = $Storage[$storageGroup]
                     if ($null -eq $sg) { continue }
-                    
+
                     # Check Master drive
                     if ($null -ne $sg.Master) {
                         $MasterDisk = $sg.Master
@@ -129,7 +129,7 @@ function Get-PSmmProjects {
                             }
                         }
                     }
-                    
+
                     # Check Backup drives
                     if ($null -ne $sg.Backups -and $sg.Backups.Count -gt 0) {
                         foreach ($backupId in ($sg.Backups.Keys | Sort-Object)) {
@@ -152,12 +152,12 @@ function Get-PSmmProjects {
                                 }
                             }
                         }
-                        
+
                         if ($CacheInvalid) { break }
                     }
                 }
             }
-            
+
             # Return cached data if still valid
             if (-not $CacheInvalid) {
                 Write-Verbose 'Using cached project registry (no changes detected)'
@@ -233,14 +233,14 @@ function Get-PSmmProjects {
             Write-PSmmLog -Level DEBUG -Context 'Get-PSmmProjects' `
                 -Message 'Performing initial project scan (no registry cache)' -File
         }
-        
+
         Write-Verbose 'Starting full project discovery...'
-        
+
         # Initialize hashtables for projects grouped by drive label
         $MasterProjects = @{}
         $BackupProjects = @{}
         $ProjectDirs = @{}
-        
+
         # Get all storage groups (1, 2, etc.)
         $Storage = $Config.Storage
 
@@ -249,12 +249,12 @@ function Get-PSmmProjects {
             Write-Verbose "Processing Storage Group $storageGroup..."
             $sg = $Storage[$storageGroup]
             if ($null -eq $sg) { continue }
-            
+
             # Process Master drive for this storage group
             if ($null -ne $sg.Master) {
                 $MasterDisk = $sg.Master
                 Write-Verbose "Processing Master drive: $($MasterDisk.Label)"
-                
+
                 $Result = Get-ProjectsFromDrive -Disk $MasterDisk `
                     -StorageGroup $storageGroup `
                     -DriveType 'Master' `
@@ -262,7 +262,7 @@ function Get-PSmmProjects {
                     -ProjectDirs $ProjectDirs `
                     -Config $Config `
                     -FileSystem $FileSystem
-                
+
                 $MasterProjects = $Result.Projects
                 $ProjectDirs = $Result.ProjectDirs
             }
@@ -270,15 +270,15 @@ function Get-PSmmProjects {
             # Process Backup drives for this storage group
             if ($null -ne $sg.Backups) {
                 $BackupStorage = $sg.Backups
-                
+
                 # Check if there are any backup drives configured
                 if ($BackupStorage.Count -gt 0) {
                     Write-Verbose "Processing $($BackupStorage.Count) Backup drive(s) for Storage Group $storageGroup..."
-                    
+
                     foreach ($backupId in ($BackupStorage.Keys | Sort-Object)) {
                         $BackupDisk = $BackupStorage[$backupId]
                         Write-Verbose "Processing Backup drive ${backupId}: $($BackupDisk.Label)"
-                        
+
                         $Result = Get-ProjectsFromDrive -Disk $BackupDisk `
                             -StorageGroup $storageGroup `
                             -BackupId $backupId `
@@ -287,7 +287,7 @@ function Get-PSmmProjects {
                             -ProjectDirs $ProjectDirs `
                             -Config $Config `
                             -FileSystem $FileSystem
-                        
+
                         $BackupProjects = $Result.Projects
                         $ProjectDirs = $Result.ProjectDirs
                     }
@@ -791,7 +791,7 @@ function Initialize-GlobalProject {
     try {
         # Define _GLOBAL_ project path
         $GlobalProjectPath = Join-Path -Path $ProjectsPath -ChildPath '_GLOBAL_'
-        
+
         # Create _GLOBAL_ project folder if it doesn't exist
         if (-not $FileSystem.TestPath($GlobalProjectPath)) {
             Write-Verbose "Creating _GLOBAL_ project folder: $GlobalProjectPath"
@@ -809,7 +809,7 @@ function Initialize-GlobalProject {
             $AssetsRelativePath = 'Libraries\Assets'
             Write-Verbose "Using default Assets path: $AssetsRelativePath"
         }
-        
+
         $AssetsFullPath = Join-Path -Path $GlobalProjectPath -ChildPath $AssetsRelativePath
 
         # Create Assets folder if it doesn't exist

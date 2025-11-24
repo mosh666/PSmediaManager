@@ -1,4 +1,4 @@
-<#
+﻿<#
  .SYNOPSIS
     Plugin management and validation functions for PSmediaManager.
 <#$
@@ -173,11 +173,11 @@ function New-PSmmServiceInstance {
         $global:__tempConstructor = [scriptblock]::Create("[$TypeName]::new()")
         $instance = & $global:__tempConstructor
         Remove-Variable -Name __tempConstructor -Scope Global -ErrorAction SilentlyContinue
-        
+
         if ($null -eq $instance) {
             throw "Constructor returned null"
         }
-        
+
         return $instance
     }
     catch {
@@ -199,7 +199,7 @@ function New-PSmmServiceInstance {
     Application configuration object (AppConfiguration).
     Preferred modern approach with strongly-typed configuration.
 
- 
+
 .PARAMETER Http
     HTTP service for downloading plugins and GitHub API access.
 
@@ -213,7 +213,7 @@ function New-PSmmServiceInstance {
     Confirm-Plugins -Config $appConfig
     Validates plugins using modern AppConfiguration object.
 
- 
+
 #>
 function Confirm-Plugins {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Function manages multiple plugins')]

@@ -1,4 +1,4 @@
-Describe 'Export-SafeConfiguration (coverage boost)' {
+﻿Describe 'Export-SafeConfiguration (coverage boost)' {
     BeforeAll {
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm/Public/Export-SafeConfiguration.ps1'
         $scriptPath = [System.IO.Path]::GetFullPath($scriptPath)

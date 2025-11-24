@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 <#
@@ -66,33 +66,33 @@ function Show-Header {
         [Parameter()]
         [string]$StorageGroupFilter = $null
     )    $Columns = @(
-        @{ 
+        @{
             Text = $Config.DisplayName
             Width = '50%'
             Alignment = 'l'
             TextColor = $Config.UI.ANSI.FG.Primary
             Bold = $true
-            Italic = $true 
+            Italic = $true
         }
-        @{ 
+        @{
             Text = "v$($Config.AppVersion)"
             Width = 'auto'
             Alignment = 'r'
             TextColor = $Config.UI.ANSI.FG.Accent
-            Italic = $true 
+            Italic = $true
         }
     )
-    
+
     # PS 7.5.4+ baseline guarantees $PSSpecialChar
     $borderChar = $PSSpecialChar.SixPointStar
-    
+
     Format-UI -Columns $Columns -Width $Config.UI.Width -ColumnSeparator '' -Border $borderChar -Config $Config
     Write-Host ''
 
     # Display error messages if enabled
     if ($ShowStorageErrors) {
         # Filter error messages based on storage group if specified
-        $ErrorHashtable = if (-not [string]::IsNullOrWhiteSpace($StorageGroupFilter) -and 
+        $ErrorHashtable = if (-not [string]::IsNullOrWhiteSpace($StorageGroupFilter) -and
             $Config.InternalErrorMessages.ContainsKey('Storage')) {
             # Create filtered hashtable with only errors matching the storage group
             $FilteredErrors = @{}
@@ -108,12 +108,12 @@ function Show-Header {
         else {
             $Config.InternalErrorMessages
         }
-        
+
         $ErrorMessages = Get-ErrorMessages -ErrorHashtable $ErrorHashtable
         if ($ErrorMessages -and @($ErrorMessages).Count -gt 0) {
             foreach ($ErrorMsg in $ErrorMessages) {
                 $ErrorColumns = @(
-                    @{ 
+                    @{
                         Text = $ErrorMsg
                         Width = $Config.UI.Width
                         Alignment = 'c'
@@ -131,50 +131,50 @@ function Show-Header {
     # Display current project information if available and ShowProject is enabled
     if ($ShowProject -and $Config.Projects.ContainsKey('Current') -and $Config.Projects.Current.ContainsKey('Name')) {
         Write-Output ''
-        
+
         # Get project name
         $CurrentProjectName = $Config.Projects.Current.Name
-        
+
         # Build project display with folder icon
         # Use UTF-16 surrogate pairs for emoji > U+FFFF (0x1F4C1 = 📁)
         $ProjectDisplay = "$([char]::ConvertFromUtf32(0x1F4C1)) $CurrentProjectName"  # 📁 folder icon
-        
+
         # Get storage disk information if available
         $DiskDisplay = ''
         $DiskColor = $Config.UI.ANSI.FG.Accent
-        
+
         if ($Config.Projects.Current.ContainsKey('StorageDrive')) {
             $storageDrive = $Config.Projects.Current.StorageDrive
-            
+
             # Determine drive type and icon based on label pattern
             # Use UTF-16 surrogate pairs for emoji > U+FFFF
             $driveIcon = [char]::ConvertFromUtf32(0x1F4BE)  # 💾 default storage icon
-            
+
             if ($storageDrive.Label -match '-Backup-\d+$') {
                 $driveIcon = [char]::ConvertFromUtf32(0x1F4C0)  # 📀 backup disc icon
                 $DiskColor = $Config.UI.ANSI.FG.BackupDrive
             }
             elseif ($storageDrive.Label -notmatch '-Backup-') {
-                $driveIcon = [char]::ConvertFromUtf32(0x1F4BF)  # 💿 master disc icon  
+                $driveIcon = [char]::ConvertFromUtf32(0x1F4BF)  # 💿 master disc icon
                 $DiskColor = $Config.UI.ANSI.FG.MasterDrive
             }
-            
+
             # Build disk display string with icon
             $DiskDisplay = "$driveIcon $($storageDrive.Label) [$($storageDrive.DriveLetter)]"
         }
-        
+
         # Display project info in a structured two-column layout
         if (-not [string]::IsNullOrWhiteSpace($DiskDisplay)) {
             # Two-column layout: Project on left, Disk info on right
             $ProjectMetadataColumns = @(
-                @{ 
+                @{
                     Text = $ProjectDisplay
                     Width = '50%'
                     Alignment = 'l'
                     TextColor = $Config.UI.ANSI.FG.Warning
                     Bold = $true
                 }
-                @{ 
+                @{
                     Text = $DiskDisplay
                     Width = '50%'
                     Alignment = 'r'
@@ -186,22 +186,22 @@ function Show-Header {
         else {
             # Single column layout if no disk info
             $ProjectMetadataColumns = @(
-                @{ 
+                @{
                     Text = $ProjectDisplay
                     Width = $Config.UI.Width
                     Alignment = 'c'
                     TextColor = $Config.UI.ANSI.FG.Warning
                     Bold = $true
-                    Underline = $true 
+                    Underline = $true
                 }
             )
         }
-        
+
         Format-UI -Columns $ProjectMetadataColumns -Width $Config.UI.Width -Config $Config
-        
+
         # Add a subtle separator line for visual clarity
         $SeparatorColumns = @(
-            @{ 
+            @{
                 Text = [string]::new([char]0x2500, $Config.UI.Width)  # ─ horizontal line
                 Width = $Config.UI.Width
                 Alignment = 'c'
@@ -215,11 +215,11 @@ function Show-Header {
         # Fallback to legacy parameter if no current project is set
         Write-Output ''
         $TitleColumns = @(
-            @{ 
+            @{
                 Text = "$($Title): $ProjectName"
                 Width = $Config.UI.Width
                 Alignment = 'c'
-                Underline = $true 
+                Underline = $true
             }
         )
         Format-UI -Columns $TitleColumns -Width $Config.UI.Width -Config $Config
@@ -240,22 +240,22 @@ function Show-Footer {
         [ValidateNotNull()]
         [object]$Config
     )    $FooterColumns = @(
-        @{ 
+        @{
             Text = '[K] Start KeePassXC'
             Width = '50%'
             Alignment = 'l'
             TextColor = $Config.UI.ANSI.FG.Accent
         }
-        @{ 
+        @{
             Text = "Show System Info [I]`nQuit [Q]"
             Width = 'auto'
             Alignment = 'r'
             TextColor = $Config.UI.ANSI.FG.Info
         }
     )
-    
+
     $borderChar = $PSSpecialChar.SixPointStar
-    
+
     Format-UI -Columns $FooterColumns -Width $Config.UI.Width -Border $borderChar -Config $Config
 }
 
@@ -276,7 +276,7 @@ function Show-Footer {
     The runtime configuration hashtable.
 
 .PARAMETER StorageGroup
-    Optional. Specific storage group to display (e.g., '1', '2'). 
+    Optional. Specific storage group to display (e.g., '1', '2').
     If not specified, all storage groups will be displayed.
 #>
 function Show-MenuMain {
@@ -305,7 +305,7 @@ function Show-MenuMain {
 
     # Display filter storage group option
     $FilterOptionColumns = @(
-        @{ 
+        @{
             Text = '[S] Filter Storage Group'
             Width = $Config.UI.Width
             Alignment = 'l'
@@ -314,11 +314,11 @@ function Show-MenuMain {
     )
     Format-UI -Columns $FilterOptionColumns -Width $Config.UI.Width -Config $Config
     Write-Output ''
-    
+
     # Display current filter status
     if (-not [string]::IsNullOrWhiteSpace($StorageGroup)) {
         $FilterColumns = @(
-            @{ 
+            @{
                 Text = "$('=' * 18) Storage Group $StorageGroup $('=' * 18)"
                 Width = $Config.UI.Width
                 Alignment = 'c'
@@ -332,7 +332,7 @@ function Show-MenuMain {
 
     # Action buttons
     $Columns = @(
-        @{ 
+        @{
             Text = '[C] Create Project'
             Width = '50%'
             Alignment = 'l'
@@ -365,7 +365,7 @@ function Show-MenuMain {
         # Show only the specified storage group
         # Find matching storage group key (handles string vs int comparison)
         $MatchingKey = $Config.Storage.Keys | Where-Object { $_.ToString() -eq $StorageGroup.ToString() } | Select-Object -First 1
-        
+
         if ($MatchingKey) {
             @($MatchingKey)
         }
@@ -380,21 +380,21 @@ function Show-MenuMain {
         # Display Storage Group Header (only when not filtered, as it's shown above when filtered)
         if ([string]::IsNullOrWhiteSpace($StorageGroup)) {
             $StorageGroupColumns = @(
-                @{ 
+                @{
                     Text = "$('=' * 16) Storage Group $storageGroupKey $('=' * 16)"
                     Width = $Config.UI.Width
                     Alignment = 'c'
                     TextColor = $Config.UI.ANSI.FG.Warning
-                    Bold = $true 
+                    Bold = $true
                 }
             )
             Format-UI -Columns $StorageGroupColumns -Width $Config.UI.Width -Config $Config
             Write-Output ''
         }
-        
+
         # Collect all drives (Master and Backup) for this storage group
         $AllDrivesInGroup = @{}
-        
+
         # Add Master drives
         if ($Projects.ContainsKey('Master') -and $null -ne $Projects.Master -and $Projects.Master.Count -gt 0) {
             foreach ($driveLabel in $Projects.Master.Keys) {
@@ -413,7 +413,7 @@ function Show-MenuMain {
                 }
             }
         }
-        
+
         # Add Backup drives
         if ($Projects.ContainsKey('Backup') -and $null -ne $Projects.Backup -and $Projects.Backup.Count -gt 0) {
             foreach ($driveLabel in $Projects.Backup.Keys) {
@@ -435,7 +435,7 @@ function Show-MenuMain {
                 }
             }
         }
-        
+
         # Display all drives in this storage group
         if ($AllDrivesInGroup.Count -gt 0) {
             if ($Config.Parameters.Debug -or $Config.Parameters.Dev) {
@@ -447,7 +447,7 @@ function Show-MenuMain {
                 # Master drives get priority 0, Backup drives get priority 1
                 if ($driveInfo.DriveType -eq 'Master Drive') { "0_$_" } else { "1_$_" }
             }
-            
+
             foreach ($driveLabel in $SortedDriveLabels) {
                 $driveInfo = $AllDrivesInGroup[$driveLabel]
                 $isFallback = $driveInfo.ContainsKey('Fallback') -and $driveInfo.Fallback
@@ -477,23 +477,23 @@ function Show-MenuMain {
                 # With StrictMode, ensure the 'Master' property exists before dereferencing.
                 if ($null -ne $storageConfig.PSObject.Properties['Master']) {
                     $master = $storageConfig.Master
-                    
+
                     # Check if Master has a Label property (indicates it's configured)
                     $hasLabel = if ($master -is [hashtable]) {
                         $master.ContainsKey('Label')
                     } else {
                         $null -ne $master.PSObject.Properties['Label']
                     }
-                    
+
                     if ($hasLabel) {
                         $isAvailable = if ($master -is [hashtable]) {
                             if ($master.ContainsKey('IsAvailable')) { $master.IsAvailable } else { $false }
-                        } elseif ($null -ne $master.PSObject.Properties['IsAvailable']) { 
-                            $master.IsAvailable 
-                        } else { 
-                            $false 
+                        } elseif ($null -ne $master.PSObject.Properties['IsAvailable']) {
+                            $master.IsAvailable
+                        } else {
+                            $false
                         }
-                        
+
                         $driveLetter = if ($master -is [hashtable]) { $master.DriveLetter } else { $master.DriveLetter }
                         $statusText = if ($isAvailable -and -not [string]::IsNullOrWhiteSpace($driveLetter)) {
                             "Available ($driveLetter)"
@@ -502,7 +502,7 @@ function Show-MenuMain {
                         } else {
                             'Not mounted or unavailable'
                         }
-                        
+
                         $masterColumns = @(
                             @{
                                 Text = "Master: $($master.Label)"
@@ -521,13 +521,13 @@ function Show-MenuMain {
                         Format-UI -Columns $masterColumns -Width $Config.UI.Width -Config $Config
                     }
                 }
-                
+
                 # Display Backup drive(s) status using typed Backups dictionary (defensive against legacy or partial config without Backups)
                 if (
-                    $storageConfig -and 
-                    $storageConfig.PSObject.Properties['Backups'] -and 
-                    $null -ne $storageConfig.Backups -and 
-                    ($storageConfig.Backups -is [hashtable] -or $storageConfig.Backups -is [System.Collections.IDictionary]) -and 
+                    $storageConfig -and
+                    $storageConfig.PSObject.Properties['Backups'] -and
+                    $null -ne $storageConfig.Backups -and
+                    ($storageConfig.Backups -is [hashtable] -or $storageConfig.Backups -is [System.Collections.IDictionary]) -and
                     $storageConfig.Backups.Count -gt 0
                 ) {
                     foreach ($backupId in ($storageConfig.Backups.Keys | Sort-Object)) {
@@ -572,12 +572,12 @@ function Show-MenuMain {
                     # Backups property exists but empty
                     Write-Host '  No backup drives registered for this storage group' -ForegroundColor DarkGray
                 }
-                
+
                 # Show a message if no projects found
                 Write-Host '  No projects found on this storage group' -ForegroundColor DarkGray
             }
         }
-        
+
         Write-Output ''
     }
 }
@@ -639,32 +639,32 @@ function Show-UnifiedDrive {
     }
 
     $DriveProjects = @($Projects)
-    
+
     # Get drive information from first project
     if ($DriveProjects.Count -eq 0) {
         return
     }
-    
+
     $DriveInfo = $DriveProjects[0]
-    
+
     # Determine colors and styling based on drive type
     $IsMaster = $DriveType -eq 'Master Drive'
     $BorderChar = if ($IsMaster) { [char]0x2550 } else { [char]0x2500 }  # ═ for Master, ─ for Backup
     $HeaderColor = if ($IsMaster) { $Config.UI.ANSI.FG.MasterDrive } else { $Config.UI.ANSI.FG.BackupDrive }
     $RoleColor = if ($IsMaster) { $Config.UI.ANSI.FG.MasterDriveLight } else { $Config.UI.ANSI.FG.BackupDriveLight }
-    
+
     # Display drive header with label and role
     $DriveHeaderColumns = @(
-        @{ 
+        @{
             Text = "$([string]::new($BorderChar, 18)) $DriveLabel $([string]::new($BorderChar, 18))"
             Width = $Config.UI.Width
             Alignment = 'c'
             TextColor = $HeaderColor
-            Bold = $true 
+            Bold = $true
         }
     )
     Format-UI -Columns $DriveHeaderColumns -Width $Config.UI.Width -Config $Config
-    
+
     # Display role with icon
     $RoleIcon = if ($IsMaster) { '💿' } else { '📀' }
     $RoleText = "$RoleIcon Role: $DriveType"
@@ -673,24 +673,24 @@ function Show-UnifiedDrive {
         $RoleColor = $Config.UI.ANSI.FG.Warning
     }
     $RoleColumns = @(
-        @{ 
+        @{
             Text = $RoleText
             Width = $Config.UI.Width
             Alignment = 'c'
             TextColor = $RoleColor
-            Bold = $true 
+            Bold = $true
         }
     )
     Format-UI -Columns $RoleColumns -Width $Config.UI.Width -Config $Config
-    
+
     # Calculate space usage percentage
-    $UsedPercent = if ($DriveInfo.TotalSpace -gt 0) { 
-        [math]::Round(($DriveInfo.UsedSpace / $DriveInfo.TotalSpace) * 100, 1) 
+    $UsedPercent = if ($DriveInfo.TotalSpace -gt 0) {
+        [math]::Round(($DriveInfo.UsedSpace / $DriveInfo.TotalSpace) * 100, 1)
     } else { 0 }
-    $FreePercent = if ($DriveInfo.TotalSpace -gt 0) { 
-        [math]::Round(($DriveInfo.FreeSpace / $DriveInfo.TotalSpace) * 100, 1) 
+    $FreePercent = if ($DriveInfo.TotalSpace -gt 0) {
+        [math]::Round(($DriveInfo.FreeSpace / $DriveInfo.TotalSpace) * 100, 1)
     } else { 0 }
-    
+
     # Define metadata items in optimal sorted order for two-column display
     $MetadataItems = @(
         @{ Key = 'Drive Letter'; Value = $DriveInfo.Drive; Color = $Config.UI.ANSI.FG.Accent }
@@ -703,7 +703,7 @@ function Show-UnifiedDrive {
         @{ Key = 'Total Space'; Value = "$([math]::Round($DriveInfo.TotalSpace, 2)) GB"; Color = $Config.UI.ANSI.FG.Info }
         @{ Key = 'Used Space'; Value = "$([math]::Round($DriveInfo.UsedSpace, 2)) GB ($UsedPercent%)"; Color = $Config.UI.ANSI.FG.Secondary }
         @{ Key = 'Free Space'; Value = "$([math]::Round($DriveInfo.FreeSpace, 2)) GB ($FreePercent%)"; Color = $Config.UI.ANSI.FG.Success }
-        @{ 
+        @{
             Key = 'Health Status'
             Value = $DriveInfo.HealthStatus
             Color = switch ($DriveInfo.HealthStatus) {
@@ -715,23 +715,23 @@ function Show-UnifiedDrive {
         }
         @{ Key = 'Projects'; Value = @($DriveProjects | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) }).Count; Color = $Config.UI.ANSI.FG.Neutral1 }
     )
-    
+
     # Display metadata in side-by-side two-column layout centered
     $contentWidth = 76  # Optimized width for metadata display
-    
+
     for ($i = 0; $i -lt $MetadataItems.Count; $i += 2) {
         $LeftItem = $MetadataItems[$i]
         $RightItem = if ($i + 1 -lt $MetadataItems.Count) { $MetadataItems[$i + 1] } else { $null }
-        
+
         $MetadataColumns = @(
-            @{ 
+            @{
                 Text = "$($LeftItem.Key):"
                 Width = 17
                 Alignment = 'r'
                 TextColor = $Config.UI.ANSI.FG.Accent
                 Bold = $false
             }
-            @{ 
+            @{
                 Text = $LeftItem.Value
                 Width = 21
                 Alignment = 'l'
@@ -739,17 +739,17 @@ function Show-UnifiedDrive {
                 Bold = $false
             }
         )
-        
+
         if ($RightItem) {
             $MetadataColumns += @(
-                @{ 
+                @{
                     Text = "$($RightItem.Key):"
                     Width = 17
                     Alignment = 'r'
                     TextColor = $Config.UI.ANSI.FG.Accent
                     Bold = $false
                 }
-                @{ 
+                @{
                     Text = $RightItem.Value
                     Width = 21
                     Alignment = 'l'
@@ -758,80 +758,80 @@ function Show-UnifiedDrive {
                 }
             )
         }
-        
+
         # Generate the line (Format-UI handles output directly)
         Format-UI -Columns $MetadataColumns -Width $contentWidth -ColumnSeparator ' ' -Config $Config | Out-Null
     }
-    
+
     # Projects header
     $ProjectsColumns = @(
-        @{ 
+        @{
             Text = "$([string]::new([char]0x2500, 7)) PROJECTS $([string]::new([char]0x2500, 7))"
             Width = $Config.UI.Width
             Alignment = 'c'
             TextColor = $Config.UI.ANSI.FG.Success
             Bold = $true
-            Italic = $true 
+            Italic = $true
         }
     )
     Format-UI -Columns $ProjectsColumns -Width $Config.UI.Width -Config $Config
     Write-Output ''
-    
+
     # Display projects
     $Count = 0
     foreach ($Project in $DriveProjects) {
-        if ([string]::IsNullOrWhiteSpace($Project.Name)) { 
-            continue 
+        if ([string]::IsNullOrWhiteSpace($Project.Name)) {
+            continue
         }
         $Count++
-        
+
         # Use project name directly - prefix is already shown in the first column
         $DisplayName = $Project.Name
-        
+
         # Determine project numbering color based on drive type
-        $ProjectNumColor = if ($IsMaster) { 
-            $Config.UI.ANSI.FG.MasterDriveLight 
-        } else { 
-            $Config.UI.ANSI.FG.BackupDriveDark 
+        $ProjectNumColor = if ($IsMaster) {
+            $Config.UI.ANSI.FG.MasterDriveLight
+        } else {
+            $Config.UI.ANSI.FG.BackupDriveDark
         }
-        
+
         $ProjectColumns = @(
-            @{ 
+            @{
                 Text = "[$Prefix$Count]"
                 Width = 10
                 Alignment = 'c'
                 TextColor = $ProjectNumColor
                 Bold = $true
             }
-            @{ 
+            @{
                 Text = $DisplayName
                 Width = 20
                 Alignment = 'l'
-                TextColor = $Config.UI.ANSI.FG.Neutral1 
+                TextColor = $Config.UI.ANSI.FG.Neutral1
             }
-            @{ 
+            @{
                 Text = $Project.Path
                 Width = 'auto'
                 Alignment = 'l'
-                TextColor = $Config.UI.ANSI.FG.Neutral3 
+                TextColor = $Config.UI.ANSI.FG.Neutral3
             }
         )
         Format-UI -Columns $ProjectColumns -Width $Config.UI.Width -Config $Config
     }
-    
+
     if ($Count -eq 0) {
         $NoProjectsColumns = @(
-            @{ 
+            @{
                 Text = 'No projects found on this drive.'
                 Width = $Config.UI.Width
                 Alignment = 'c'
                 TextColor = $Config.UI.ANSI.FG.Neutral4
-                Italic = $true 
+                Italic = $true
             }
         )
         Format-UI -Columns $NoProjectsColumns -Width $Config.UI.Width -Config $Config
     }
-    
+
     Write-PSmmLog -Level NOTICE -Context 'Show-UnifiedDrive' -Message "Displayed $Count projects for $DriveType : $DriveLabel" -File
     Write-Output ''
 }
@@ -862,15 +862,15 @@ function Show-Menu_Project {
     )    # Check for running processes
     $ProcMariaDB = $null
     $ProcDigiKam = $null
-    
+
     if ($Config.Projects.ContainsKey('Current')) {
         if ($Config.Projects.Current.ContainsKey('Databases')) {
-            $ProcMariaDB = Get-Process -Name mariadbd -ErrorAction SilentlyContinue | 
+            $ProcMariaDB = Get-Process -Name mariadbd -ErrorAction SilentlyContinue |
                 Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
         }
-        
+
         if ($Config.Projects.Current.ContainsKey('Config')) {
-            $ProcDigiKam = Get-Process -Name digikam -ErrorAction SilentlyContinue | 
+            $ProcDigiKam = Get-Process -Name digikam -ErrorAction SilentlyContinue |
                 Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
         }
     }
@@ -899,25 +899,25 @@ function Show-Menu_Project {
     }
 
     Write-Host ''
-    
+
     # Common footer with navigation options
     $ReturnColumns = @(
-        @{ 
+        @{
             Text = '[R] Return to previous menu'
             Width = 'auto'
             Alignment = 'l'
             TextColor = $Config.UI.ANSI.FG.Info
         }
-        @{ 
+        @{
             Text = 'Quit [Q]'
             Width = 'auto'
             Alignment = 'r'
             TextColor = $Config.UI.ANSI.FG.Info
         }
     )
-    
+
     $borderChar = $PSSpecialChar.SixPointStar
-    
+
     Format-UI -Columns $ReturnColumns -Width $Config.UI.Width -Border $borderChar -Config $Config
 }
 
@@ -936,15 +936,15 @@ function Show-ProjectMenuOptions_NoProcesses {
         [ValidateNotNull()]
         [object]$Config
     )    # Note: Backup operations removed - not yet implemented
-    
+
     # DigiKam management
     $DigiKamColumns = @(
-        @{ 
+        @{
             Text = '[1] Start digiKam'
             Width = $Config.UI.Width
             Alignment = 'l'
             TextColor = $Config.UI.ANSI.FG.Primary
-            Bold = $true 
+            Bold = $true
         }
     )
     Format-UI -Columns $DigiKamColumns -Width $Config.UI.Width -Config $Config
@@ -964,10 +964,10 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         [ValidateNotNull()]
         [object]$Config
     )    Write-Host ''
-    
+
     # Media overview
     $OverviewColumns = @(
-        @{ 
+        @{
             Text = '[11] Published Media Overview'
             Width = $Config.UI.Width
             Alignment = 'l'
@@ -975,12 +975,12 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         }
     )
     Format-UI -Columns $OverviewColumns -Width $Config.UI.Width -Config $Config
-    
+
     Write-Host ''
-    
+
     # Pricing options
     $PricingColumns = @(
-        @{ 
+        @{
             Text = '[2]  Pricing    : Get prices for media files'
             Width = $Config.UI.Width
             Alignment = 'l'
@@ -988,9 +988,9 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         }
     )
     Format-UI -Columns $PricingColumns -Width $Config.UI.Width -Config $Config
-    
+
     $BundleColumns = @(
-        @{ 
+        @{
             Text = '[22] Bundle  : Get prices for bundles media files'
             Width = $Config.UI.Width
             Alignment = 'l'
@@ -998,9 +998,9 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         }
     )
     Format-UI -Columns $BundleColumns -Width $Config.UI.Width -Config $Config
-    
+
     $NewPricingColumns = @(
-        @{ 
+        @{
             Text = '[2n] Pricing : NEW Get prices for media files'
             Width = $Config.UI.Width
             Alignment = 'l'
@@ -1008,12 +1008,12 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         }
     )
     Format-UI -Columns $NewPricingColumns -Width $Config.UI.Width -Config $Config
-    
+
     Write-Host ''
-    
+
     # Media processing plugins
     $ImageMagickColumns = @(
-        @{ 
+        @{
             Text = '[3] ImageMagick: Convert and process Images'
             Width = $Config.UI.Width
             Alignment = 'l'
@@ -1021,9 +1021,9 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         }
     )
     Format-UI -Columns $ImageMagickColumns -Width $Config.UI.Width -Config $Config
-    
+
     $FfmpegColumns = @(
-        @{ 
+        @{
             Text = '[4] FFmpeg     : Rebuild Chunk Offset Table (mp4, mov)'
             Width = $Config.UI.Width
             Alignment = 'l'
@@ -1031,12 +1031,12 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         }
     )
     Format-UI -Columns $FfmpegColumns -Width $Config.UI.Width -Config $Config
-    
+
     Write-Host ''
-    
+
     # Stop processes option
     $StopColumns = @(
-        @{ 
+        @{
             Text = 'Stop digiKam Processes [S]'
             Width = $Config.UI.Width
             Alignment = 'r'
@@ -1069,35 +1069,35 @@ function Show-Menu_SysInfo {
         [ValidateNotNull()]
         [object]$Config
     )    $StorageColumns = @(
-        @{ 
+        @{
             Text = '[1] TODO: Show Storage'
             Width = $Config.UI.Width
-            Alignment = 'l' 
+            Alignment = 'l'
         }
     )
     Format-UI -Columns $StorageColumns -Width $Config.UI.Width -Config $Config
-    
+
     $ConfigColumns = @(
-        @{ 
+        @{
             Text = '[2] TODO: Show runtime config'
             Width = $Config.UI.Width
-            Alignment = 'l' 
+            Alignment = 'l'
         }
     )
     Format-UI -Columns $ConfigColumns -Width $Config.UI.Width -Config $Config
-    
+
     Write-Host ''
-    
+
     $ReturnColumns = @(
-        @{ 
+        @{
             Text = '[R] Return to previous menu'
             Width = 'auto'
-            Alignment = 'l' 
+            Alignment = 'l'
         }
-        @{ 
+        @{
             Text = 'Quit [Q]'
             Width = 'auto'
-            Alignment = 'r' 
+            Alignment = 'r'
         }
     )
     Format-UI -Columns $ReturnColumns -Width $Config.UI.Width -Border 'Box' -Config $Config

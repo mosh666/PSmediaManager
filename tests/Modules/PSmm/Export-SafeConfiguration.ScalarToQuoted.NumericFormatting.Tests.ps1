@@ -1,4 +1,4 @@
-Describe 'Export-SafeConfiguration - _ScalarToQuoted numeric formatting' {
+﻿Describe 'Export-SafeConfiguration - _ScalarToQuoted numeric formatting' {
     BeforeAll {
         $repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
         & (Join-Path $repoRoot 'tests/Support/Import-PSmmClasses.ps1') -RepositoryRoot $repoRoot

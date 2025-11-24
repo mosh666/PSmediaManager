@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Creates a customized filename with dynamic placeholders.
 
@@ -20,17 +20,17 @@
 
 .EXAMPLE
     New-CustomFileName -Template "%year%%month%%day%-MyApp-%username@%computername.log"
-    
+
     Returns: 20251026-MyApp-mosh@AVIATOR.log
 
 .EXAMPLE
     New-CustomFileName -Template "%year%-%month%-%day%_%hour%%minute%%second%.txt"
-    
+
     Returns: 2025-10-26_143022.txt
 
 .EXAMPLE
     New-CustomFileName -Template "Backup_%year%%month%%day%_%hour%%minute%.zip"
-    
+
     Returns: Backup_20251026_1430.zip
 
 .INPUTS
@@ -43,7 +43,7 @@
     Function Name: New-CustomFileName
     Author: Der Mosh
     Requires: PowerShell 7.5.4 or higher
-    
+
     All time values use leading zeros for consistency (e.g., "01" instead of "1").
     The function uses the current system time at the moment of execution.
 #>
@@ -70,7 +70,7 @@ function New-CustomFileName {
     process {
         try {
             $now = Get-Date
-            
+
             # Resolve username/computername cross-platform
             $userName = $env:USERNAME
             if ([string]::IsNullOrWhiteSpace($userName)) { $userName = $env:USER }
@@ -95,7 +95,7 @@ function New-CustomFileName {
                 '%username%' = $userName
                 '%computername%' = $computerName
             }
-            
+
             # Replace all placeholders in the template
             $result = $Template
             foreach ($placeholder in $replacements.Keys) {
@@ -106,7 +106,7 @@ function New-CustomFileName {
                 }
                 $result = $result.Replace($placeholder, $value)
             }
-            
+
             Write-Verbose "Generated filename: $result"
             return $result
         }

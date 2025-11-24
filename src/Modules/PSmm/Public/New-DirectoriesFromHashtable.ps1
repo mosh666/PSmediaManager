@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Creates directory structures from a hashtable definition.
 
@@ -21,12 +21,12 @@
         }
     }
     New-DirectoriesFromHashtable -Structure $Paths
-    
+
     Creates all directories defined in the hashtable structure.
 
 .EXAMPLE
     New-DirectoriesFromHashtable -Structure $Run.App.Paths -Verbose
-    
+
     Creates directories with verbose output showing each operation.
 
 .INPUTS
@@ -40,7 +40,7 @@
     Author: Der Mosh
     Requires: PowerShell 7.5.4 or higher
     Last Modified: 2025-10-26
-    
+
     Only creates directories for valid path strings. Other value types are skipped with verbose output.
     Existing directories are not recreated.
 #>
@@ -65,12 +65,12 @@ function New-DirectoriesFromHashtable {
     process {
         foreach ($key in $Structure.Keys) {
             $value = $Structure[$key]
-            
+
             # Handle string values that represent valid paths
             if ($value -is [string]) {
                 # Only process absolute paths or paths starting with known PowerShell drives
                 $isAbsolutePath = [System.IO.Path]::IsPathRooted($value) -or $value -match '^[A-Za-z]+:[/\\]'
-                
+
                 if ($isAbsolutePath -and (Test-Path -IsValid $value)) {
                     if (-not (Test-Path -Path $value -PathType Container)) {
                         if ($PSCmdlet.ShouldProcess($value, 'Create directory')) {

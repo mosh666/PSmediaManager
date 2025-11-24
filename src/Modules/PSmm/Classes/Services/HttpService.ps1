@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Implementation of IHttpService interface.
 
@@ -20,7 +20,7 @@ using namespace System.Net
     Production implementation of HTTP service.
 #>
 class HttpService : IHttpService {
-    
+
     <#
     .SYNOPSIS
         Invokes an HTTP request and returns the result.
@@ -29,16 +29,16 @@ class HttpService : IHttpService {
         if ([string]::IsNullOrWhiteSpace($uri)) {
             throw [ArgumentException]::new("URI cannot be empty", "uri")
         }
-        
+
         $params = @{
             Uri = $uri
             ErrorAction = 'Stop'
         }
-        
+
         if ($null -ne $headers -and $headers.Count -gt 0) {
             $params['Headers'] = $headers
         }
-        
+
         try {
             # Route through internal wrapper to simplify testing/mocking
             return Invoke-HttpRestMethod -Uri $uri -Method 'GET' -Headers $headers
@@ -47,7 +47,7 @@ class HttpService : IHttpService {
             throw [WebException]::new("Failed to invoke request to $uri : $_", $_.Exception)
         }
     }
-    
+
     <#
     .SYNOPSIS
         Downloads a file from a URI to a local path.
@@ -56,17 +56,17 @@ class HttpService : IHttpService {
         if ([string]::IsNullOrWhiteSpace($uri)) {
             throw [ArgumentException]::new("URI cannot be empty", "uri")
         }
-        
+
         if ([string]::IsNullOrWhiteSpace($outFile)) {
             throw [ArgumentException]::new("Output file path cannot be empty", "outFile")
         }
-        
+
         # Ensure directory exists
         $directory = Split-Path -Path $outFile -Parent
         if (-not [string]::IsNullOrWhiteSpace($directory) -and -not (Test-Path -Path $directory)) {
             $null = New-Item -Path $directory -ItemType Directory -Force
         }
-        
+
         try {
             # Route through internal wrapper to simplify testing/mocking
             Invoke-HttpWebRequest -Uri $uri -OutFile $outFile
@@ -75,7 +75,7 @@ class HttpService : IHttpService {
             throw [WebException]::new("Failed to download file from $uri : $_", $_.Exception)
         }
     }
-    
+
     <#
     .SYNOPSIS
         Invokes a REST method with full control over HTTP method and body.
@@ -84,9 +84,9 @@ class HttpService : IHttpService {
         if ([string]::IsNullOrWhiteSpace($uri)) {
             throw [ArgumentException]::new("URI cannot be empty", "uri")
         }
-        
+
         $effectiveMethod = if ([string]::IsNullOrWhiteSpace($method)) { 'GET' } else { $method }
-        
+
         try {
             # Route through internal wrapper to simplify testing/mocking
             return Invoke-HttpRestMethod -Uri $uri -Method $effectiveMethod -Headers $headers -Body $body

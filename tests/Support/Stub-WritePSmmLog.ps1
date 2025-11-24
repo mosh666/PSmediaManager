@@ -1,4 +1,4 @@
-# Test helper: stub Write-PSmmLog for tests
+﻿# Test helper: stub Write-PSmmLog for tests
 # Dot-source this file in tests BeforeAll to enable a lightweight global stub.
 
 # Usage:

@@ -1,4 +1,4 @@
-Describe 'Write-PSmmLog' {
+﻿Describe 'Write-PSmmLog' {
     BeforeAll {
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm.Logging/Public/Write-PSmmLog.ps1'
         $scriptPath = [System.IO.Path]::GetFullPath($scriptPath)

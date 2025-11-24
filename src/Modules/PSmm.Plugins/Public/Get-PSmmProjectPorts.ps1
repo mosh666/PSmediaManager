@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 <#
@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
     Displays a comprehensive list of all projects and their allocated database ports,
     including status information about whether the ports are currently in use.
     Useful for troubleshooting port conflicts and managing multiple digiKam instances.
-    
+
     Note: This function uses a plural noun (ProjectPorts) to accurately represent that
     it returns multiple port allocations, which is more semantically correct than
     Get-PSmmProjectPort in this context.
@@ -36,7 +36,7 @@ Set-StrictMode -Version Latest
     Version          : 1.1.0
     Created          : 2025-11-05
     Modified         : 2025-11-06
-    
+
     Related          : Get-PSmmAvailablePort, Start-PSmmdigiKam
 
 .LINK
@@ -44,7 +44,7 @@ Set-StrictMode -Version Latest
 #>
 
 function Get-PSmmProjectPorts {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', 
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '',
         Justification = 'Function returns multiple ports; plural form is semantically correct')]
     [CmdletBinding()]
     [OutputType([PSCustomObject[]])]
@@ -52,40 +52,40 @@ function Get-PSmmProjectPorts {
         [Parameter(Mandatory = $true)]
         [ValidateNotNull()]
         $Config,
-        
+
         [Parameter()]
         [switch]$IncludeUsage
     )
-    
+
     begin {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
-        
+
         Write-Verbose "Retrieving project port allocations"
     }
-    
+
     process {
         try {
             $results = @()
-            
+
             # Check if PortRegistry exists
-            if (-not $Config.Projects.ContainsKey('PortRegistry') -or 
+            if (-not $Config.Projects.ContainsKey('PortRegistry') -or
                 $null -eq $Config.Projects.PortRegistry -or
                 $Config.Projects.PortRegistry.Count -eq 0) {
                 Write-Warning 'No port allocations found. Projects may not have been initialized with digiKam yet.'
                 return $results
             }
-            
+
             # Get all allocated ports
             foreach ($projectName in $Config.Projects.PortRegistry.Keys | Sort-Object) {
                 $port = $Config.Projects.PortRegistry[$projectName]
-                
+
                 $result = [PSCustomObject]@{
                     ProjectName = $projectName
                     Port = $port
                     Type = 'digiKam Database'
                 }
-                
+
                 # Add usage information if requested
                 if ($IncludeUsage.IsPresent) {
                     try {
@@ -109,14 +109,14 @@ function Get-PSmmProjectPorts {
                         Write-Verbose "Could not determine usage for port $port`: $_"
                     }
                 }
-                
+
                 $results += $result
             }
-            
+
             # Display summary
             $totalPorts = @($results).Count
             Write-Verbose "Found $totalPorts allocated port(s)"
-            
+
             if ($IncludeUsage.IsPresent) {
                 $inUse = @($results | Where-Object { $_.InUse -eq $true }).Count
                 Write-PSmmLog -Level INFO -Context 'Get-PSmmProjectPorts' `
@@ -126,7 +126,7 @@ function Get-PSmmProjectPorts {
                 Write-PSmmLog -Level INFO -Context 'Get-PSmmProjectPorts' `
                     -Message "Found $totalPorts allocated port(s)" -Console -File
             }
-            
+
             return $results
         }
         catch {
@@ -136,13 +136,13 @@ function Get-PSmmProjectPorts {
             else {
                 "Failed to retrieve project ports: $_"
             }
-            
+
             Write-PSmmLog -Level ERROR -Context 'Get-PSmmProjectPorts' `
                 -Message $errorMessage -ErrorRecord $_ -Console -File
             throw
         }
     }
-    
+
     end {
         Write-Verbose 'Get-PSmmProjectPorts completed'
     }

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Validates security of KeePassXC vault in PSmediaManager.
 
@@ -113,12 +113,12 @@ function Test-SecretsSecurity {
         Write-Verbose 'Starting security validation for KeePassXC vault...'
 
         $vaultPath = $Config.Paths.App.Vault
-        
+
         # Create service instance if not provided
         if ($null -eq $FileSystem) {
             $FileSystem = [FileSystemService]::new()
         }
-        
+
         $allChecksPassed = $true
 
         # Ensure vault directory exists
@@ -203,7 +203,7 @@ function Test-VaultPermissions {
         if ($null -eq $FileSystem) {
             $FileSystem = [FileSystemService]::new()
         }
-        
+
         if (-not $FileSystem.TestPath($VaultPath)) {
             Write-Verbose "Vault directory does not exist: $VaultPath"
             return
@@ -216,7 +216,7 @@ function Test-VaultPermissions {
         Write-Verbose "Vault owner: $owner"
 
         # Check if directory is readable by Everyone or Users groups (potential security issue)
-        $everyoneAccess = $acl.Access | Where-Object { 
+        $everyoneAccess = $acl.Access | Where-Object {
             $_.IdentityReference -match '(Everyone|Users|Authenticated Users)' -and
             $_.FileSystemRights -match 'Read'
         }

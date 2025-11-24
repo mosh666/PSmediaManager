@@ -45,12 +45,12 @@ function Get-ErrorMessages {
         [AllowNull()]
         [hashtable]$ErrorHashtable
     )
-    
+
     try {
         Write-Verbose 'Collecting error messages from hashtable...'
-        
+
         $messages = [System.Collections.ArrayList]@()
-        
+
         # Return empty array if hashtable is null or empty
         if ($null -eq $ErrorHashtable -or $ErrorHashtable.Count -eq 0) {
             Write-Verbose 'No errors found (hashtable is null or empty)'
@@ -59,10 +59,10 @@ function Get-ErrorMessages {
 
         # Recursively collect error messages
         Get-ErrorMessagesRecursive -Hash $ErrorHashtable -MessageList $messages
-        
+
         $count = $messages.Count
         Write-Verbose "Collected $count error message(s)"
-        
+
         # Return array
         if ($count -eq 0) {
             return @()
@@ -98,10 +98,10 @@ function Get-ErrorMessagesRecursive {
         [AllowEmptyCollection()]
         [System.Collections.ArrayList]$MessageList
     )
-    
+
     foreach ($key in $Hash.Keys) {
         $value = $Hash[$key]
-        
+
         if ($value -is [hashtable]) {
             # Recursively process nested hashtables
             Get-ErrorMessagesRecursive -Hash $value -MessageList $MessageList

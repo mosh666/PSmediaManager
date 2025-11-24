@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Type-safe classes for PSmediaManager application configuration.
 
@@ -30,7 +30,7 @@ using namespace System.Security
 <#
 .SYNOPSIS
     Represents application paths configuration with validation and path management.
-    
+
 .DESCRIPTION
     Provides structured path management with:
     - Automatic validation
@@ -41,13 +41,13 @@ using namespace System.Security
 class AppPaths : IPathProvider {
     [ValidateNotNullOrEmpty()]
     [string]$Root
-    
+
     [ValidateNotNullOrEmpty()]
     [string]$RepositoryRoot
-    
+
     [ValidateNotNullOrEmpty()]
     [string]$Log
-    
+
     [ValidateNotNull()]
     [AppSubPaths]$App
 
@@ -136,7 +136,7 @@ class AppPaths : IPathProvider {
             }
         }
     }
-    
+
     # IPathProvider implementation
     [string] GetPath([string]$pathKey) {
         $result = switch ($pathKey) {
@@ -153,12 +153,12 @@ class AppPaths : IPathProvider {
         }
         return $result
     }
-    
+
     [bool] EnsurePathExists([string]$path) {
         if ([string]::IsNullOrWhiteSpace($path)) {
             return $false
         }
-        
+
         if (-not (Test-Path -Path $path)) {
             try {
                 $null = New-Item -Path $path -ItemType Directory -Force -ErrorAction Stop
@@ -168,25 +168,25 @@ class AppPaths : IPathProvider {
                 return $false
             }
         }
-        
+
         return $true
     }
-    
+
     [string] CombinePath([string[]]$paths) {
         if ($null -eq $paths -or $paths.Count -eq 0) {
             throw [ValidationException]::new("Path array cannot be null or empty", "Paths", $null)
         }
-        
+
         return [Path]::Combine($paths)
     }
-    
+
     [bool] Validate() {
         try {
             # Validate root exists and is writable
             if (-not (Test-Path -Path $this.Root)) {
                 return $false
             }
-            
+
             # Test write access
             $testFile = [Path]::Combine($this.Root, ".write_test_$(Get-Random)")
             try {
@@ -258,7 +258,7 @@ class PluginsPaths {
 <#
 .SYNOPSIS
     Represents application secrets configuration.
-    
+
 .DESCRIPTION
     Manages system secrets using KeePassXC as the exclusive storage mechanism.
     All secrets must be stored in the KeePass database using Initialize-SystemVault
@@ -297,7 +297,7 @@ class AppSecrets {
         if ($null -eq $this.GitHubToken) {
             return $null
         }
-        
+
         $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($this.GitHubToken)
         try {
             return [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
@@ -505,13 +505,13 @@ class AppConfiguration {
         $this.Parameters = $parameters
         $this.Paths = [AppPaths]::new($rootPath)
         $this.Secrets = [AppSecrets]::new($this.Paths.App.Vault)
-        
+
         # Initialize logging with date-based filename
         $timestamp = Get-Date -Format 'yyyyMMdd'
         $logFileName = "$timestamp-$($this.InternalName)-$env:USERNAME@$env:COMPUTERNAME.log"
         $logPath = [Path]::Combine($this.Paths.Log, $logFileName)
         $this.Logging = [LoggingConfiguration]::new($logPath)
-        
+
         $this.Storage = [Dictionary[string, StorageGroupConfig]]::new()
         $this.InternalErrorMessages = @{
             Storage = @{}
@@ -521,7 +521,7 @@ class AppConfiguration {
     [void] Initialize() {
         # Ensure all directories exist
         $this.Paths.EnsureDirectoriesExist()
-        
+
         # Note: Secrets are loaded separately after logging is initialized
         # to avoid trying to write log messages before the logging system is ready
     }

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Displays an interactive multi-option prompt for user selection.
 
@@ -64,7 +64,7 @@ function Invoke-MultiOptionPrompt {
 
     try {
         Write-Verbose "Displaying prompt: $Title"
-        
+
         # Validate Default is within Options range
         if ($Default -ge $Options.Count) {
             Write-Warning "Default index $Default exceeds options count. Using 0 instead."
@@ -73,10 +73,10 @@ function Invoke-MultiOptionPrompt {
 
         # Create ChoiceDescription objects for each option
         $Choices = [System.Collections.ArrayList]@()
-        
+
         foreach ($Option in $Options) {
             $parts = $Option -split ':', 2
-            
+
             if ($parts.Count -ne 2) {
                 Write-Warning "Invalid option format: '$Option'. Expected 'HotKey:Description'"
                 continue
@@ -84,7 +84,7 @@ function Invoke-MultiOptionPrompt {
 
             $hotKey = $parts[0]
             $description = $parts[1]
-            
+
             $choice = New-Object System.Management.Automation.Host.ChoiceDescription $hotKey, $description
             [void]$Choices.Add($choice)
         }
@@ -95,7 +95,7 @@ function Invoke-MultiOptionPrompt {
 
         # Display prompt and get user selection
         $Result = $host.UI.PromptForChoice($Title, $Message, $Choices, $Default)
-        
+
         Write-Verbose "User selected option index: $Result"
         return $Result
     }

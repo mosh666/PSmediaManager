@@ -1,11 +1,11 @@
-<#
+﻿<#
 .SYNOPSIS
     PowerShell module for PSmediaManager UI components.
 
 .DESCRIPTION
     Provides user interface functions for the PSmediaManager application including
     menu display, formatting, and interactive prompts.
-    
+
     Features:
     - Interactive menu system
     - Multi-option prompts
@@ -35,7 +35,7 @@ try {
     # Import public functions
     if (Test-Path $PublicPath) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
-        
+
         if ($PublicFunctions.Count -gt 0) {
             foreach ($Function in $PublicFunctions) {
                 try {
@@ -55,11 +55,11 @@ try {
     else {
         throw "Public functions path not found: $PublicPath"
     }
-    
+
     # Import private functions
     if (Test-Path $PrivatePath) {
         $PrivateFunctions = @(Get-ChildItem -Path "$PrivatePath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
-        
+
         if ($PrivateFunctions.Count -gt 0) {
             foreach ($Function in $PrivateFunctions) {
                 try {

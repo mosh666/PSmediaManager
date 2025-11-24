@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Displays and manages the main interactive menu for PSmediaManager.
 
@@ -13,7 +13,7 @@
 
 .EXAMPLE
     Invoke-PSmmUI -Config $appConfig
-    
+
     Launches the UI using the AppConfiguration object.
 
 
@@ -43,7 +43,7 @@ function Invoke-PSmmUI {
         if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
             Write-PSmmLog -Level NOTICE -Context 'Invoke-PSmmUI' -Message 'UI interactive session starting' -File
         }
-        
+
         # Validate storage configuration and update drive availability using typed configuration
         Write-Verbose 'Validating storage configuration...'
         try {
@@ -53,16 +53,16 @@ function Invoke-PSmmUI {
             Write-PSmmLog -Level WARNING -Context 'Invoke-PSmmUI' `
                 -Message "Storage validation encountered issues: $_" -Console -File
         }
-        
+
         # Track selected storage group (default to Storage Group 1)
         $SelectedStorageGroup = '1'
 
         do {
             # Display main menu
-            try { 
-                Clear-Host 
-            } 
-            catch { 
+            try {
+                Clear-Host
+            }
+            catch {
                 Write-Verbose 'Clear-Host not supported by current host; continuing without clearing screen.'
             }
             if ($Config.Parameters.Debug -or $Config.Parameters.Dev) { '1234567890' * 8 } # Visual separator for debugging
@@ -81,7 +81,7 @@ function Invoke-PSmmUI {
                 }
                 throw
             }
-            
+
             # Retrieve projects once per loop iteration (centralized) and pass downstream
             $loopProjects = $null
             try {
@@ -100,7 +100,7 @@ function Invoke-PSmmUI {
                 Write-PSmmLog -Level ERROR -Context 'Invoke-PSmmUI' -Message "Show-MenuMain failed: $_" -ErrorRecord $_ -File
                 throw
             }
-            
+
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message 'Rendering footer' -File
             }
@@ -117,7 +117,7 @@ function Invoke-PSmmUI {
                 throw
             }
             if ($Config.Parameters.Debug -or $Config.Parameters.Dev) { '1234567890' * 10 } # Visual separator for debugging
-            
+
             Write-Output ''
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message 'Awaiting user selection' -File
@@ -129,13 +129,13 @@ function Invoke-PSmmUI {
                 Show-InvalidSelection
                 continue
             }
-            
+
             # Process menu selection
             switch ($Selection) {
                 'I' {
                     # System Information sub-menu
                     $sysInfoResult = Invoke-SystemInfoMenu -Config $Config
-                    
+
                     # Check if user quit from system info menu
                     if ($sysInfoResult -eq 'QUIT') {
                         $Selection = 'Q'
@@ -146,7 +146,7 @@ function Invoke-PSmmUI {
                     # Storage Group selector
                     Write-Output ''
                     Write-Host 'Available Storage Groups:' -ForegroundColor Cyan
-                    
+
                     # Display each storage group with Master drive info
                     foreach ($groupKey in ($Config.Storage.Keys | Sort-Object)) {
                         $masterDrive = $Config.Storage.$groupKey.Master
@@ -161,11 +161,11 @@ function Invoke-PSmmUI {
                             Write-Host "  [$groupKey] (No Master Drive)" -ForegroundColor DarkGray
                         }
                     }
-                    
+
                     Write-Host '  [A] Show All' -ForegroundColor Cyan
                     Write-Output ''
                     $GroupSelection = Read-Host 'Select Storage Group'
-                    
+
                     if ($GroupSelection -eq 'A' -or [string]::IsNullOrWhiteSpace($GroupSelection)) {
                         $SelectedStorageGroup = $null
                         Write-Host 'Showing all storage groups' -ForegroundColor Green
@@ -173,7 +173,7 @@ function Invoke-PSmmUI {
                     else {
                         # Find matching storage group key (handles string vs int comparison)
                         $MatchingKey = $Config.Storage.Keys | Where-Object { $_.ToString() -eq $GroupSelection.ToString() } | Select-Object -First 1
-                        
+
                         if ($MatchingKey) {
                             $SelectedStorageGroup = $MatchingKey
                             Write-Host "Filtering to Storage Group $MatchingKey" -ForegroundColor Green
@@ -206,10 +206,10 @@ function Invoke-PSmmUI {
                     }
                 }
 
-                'Q' { 
+                'Q' {
                     # Quit application
                     Write-Verbose 'User selected Quit'
-                    return 
+                    return
                 }
                 default {
                     # Check if it's a project selection (numeric or B## format where # are drive and project numbers)
@@ -219,7 +219,7 @@ function Invoke-PSmmUI {
                             # $loopProjects is always set above (or to an empty structure on failure)
                             $Projects = $loopProjects
                             $SelectedProject = $null
-                            
+
                             # Determine which storage groups to include based on filter
                             $StorageGroupsToFilter = if ([string]::IsNullOrWhiteSpace($SelectedStorageGroup)) {
                                 # Show all storage groups
@@ -235,11 +235,11 @@ function Invoke-PSmmUI {
                                     $Config.Storage.Keys | Sort-Object
                                 }
                             }
-                            
+
                             # Determine if it's a backup project (B prefix, case-insensitive)
                             # Format: B + BackupId + ProjectNumber (e.g., B21 = BackupId 2, Project 1)
                             $IsBackup = $Selection -match '(?i)^B'
-                            
+
                             if ($IsBackup) {
                                 # Parse the backup selection format: B[BackupId][ProjectNum]
                                 # Example: B21 = BackupId 2, Project 1
@@ -249,14 +249,14 @@ function Invoke-PSmmUI {
                                     Pause
                                     continue
                                 }
-                                
+
                                 # Extract backup ID (first digit) and project number (remaining digits)
                                 $BackupId = [int]$NumberPart.Substring(0, 1)
                                 $ProjectNumber = [int]$NumberPart.Substring(1)
-                                
+
                                 # Find the backup drive with matching BackupId
                                 $TargetDriveLabel = $null
-                                
+
                                 # Check if Backup projects exist before accessing
                                 if ($Projects.ContainsKey('Backup') -and $null -ne $Projects.Backup -and $Projects.Backup.Count -gt 0) {
                                     foreach ($storageGroupKey in $StorageGroupsToFilter) {
@@ -275,12 +275,12 @@ function Invoke-PSmmUI {
                                         if ($TargetDriveLabel) { break }
                                     }
                                 }
-                                
+
                                 # Select the project from the target drive
                                 if ($TargetDriveLabel) {
                                     $driveProjectArray = $Projects.Backup[$TargetDriveLabel]
                                     $ValidProjects = @($driveProjectArray | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) })
-                                    
+
                                     if ($ProjectNumber -gt 0 -and $ProjectNumber -le $ValidProjects.Count) {
                                         $SelectedProject = $ValidProjects[$ProjectNumber - 1]
                                     }
@@ -290,7 +290,7 @@ function Invoke-PSmmUI {
                                 # Map to master projects (respecting storage group filter)
                                 $ProjectIndex = [int]$Selection
                                 $MasterProjects = @()
-                                
+
                                 # Check if Master projects exist before accessing
                                 if ($Projects.ContainsKey('Master') -and $null -ne $Projects.Master -and $Projects.Master.Count -gt 0) {
                                     foreach ($storageGroupKey in $StorageGroupsToFilter) {
@@ -298,7 +298,7 @@ function Invoke-PSmmUI {
                                             $driveProjectArray = $Projects.Master[$driveLabel]
                                             if ($driveProjectArray) {
                                                 foreach ($proj in $driveProjectArray) {
-                                                    if (-not [string]::IsNullOrWhiteSpace($proj.Name) -and 
+                                                    if (-not [string]::IsNullOrWhiteSpace($proj.Name) -and
                                                         $proj.StorageGroup.ToString() -eq $storageGroupKey.ToString()) {
                                                         $MasterProjects += $proj
                                                     }
@@ -307,19 +307,19 @@ function Invoke-PSmmUI {
                                         }
                                     }
                                 }
-                                
+
                                 if ($ProjectIndex -gt 0 -and $ProjectIndex -le $MasterProjects.Count) {
                                     $SelectedProject = $MasterProjects[$ProjectIndex - 1]
                                 }
                             }
-                            
+
                             if ($SelectedProject) {
                                 # Select the project, passing the SerialNumber to ensure correct disk selection
                                 Select-PSmmProject -Config $Config -pName $SelectedProject.Name -SerialNumber $SelectedProject.SerialNumber
-                                
+
                                 # Display the project menu
                                 $projectMenuResult = Invoke-ProjectMenu -Config $Config
-                                
+
                                 # Check if user quit from project menu
                                 if ($projectMenuResult -eq 'QUIT') {
                                     $Selection = 'Q'
@@ -376,18 +376,18 @@ function Invoke-SystemInfoMenu {
         Clear-Host
         Show-Header -Config $Config -ShowStorageErrors $false
         Show-Menu_SysInfo -Config $Config
-        
+
         Write-Output ''
         $SubSelection = Read-Host 'Please make a selection'
-        
+
         switch ($SubSelection) {
-            '1' { 
+            '1' {
                 # Show Storage
                 Write-Output ''
                 Show-StorageInfo -Config $Config -ShowDetails
-                Pause 
+                Pause
             }
-            '2' { 
+            '2' {
                 # Show Runtime Config
                 Write-Output ''
                 try {
@@ -400,13 +400,13 @@ function Invoke-SystemInfoMenu {
                 catch {
                     Write-Warning "Failed to export configuration: $_"
                 }
-                Pause 
+                Pause
             }
-            'R' { 
+            'R' {
                 # Return to main menu
-                break 
+                break
             }
-            'Q' { 
+            'Q' {
                 # Quit application - return signal to main loop
                 return 'QUIT'
             }
@@ -416,7 +416,7 @@ function Invoke-SystemInfoMenu {
             }
         }
     } while ($SubSelection -ne 'R')
-    
+
     # Return to main menu (user pressed R)
     return 'RETURN'
 }
@@ -448,7 +448,7 @@ function Invoke-ProjectMenu {
         catch {
             Write-Warning "Header display failed: $_"
         }
-        
+
         try {
             Show-Menu_Project -Config $Config
         }
@@ -458,28 +458,28 @@ function Invoke-ProjectMenu {
             Write-Host "Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
             Pause
         }
-        
+
         Write-Output ''
         $SubSelection = Read-Host 'Please make a selection'
-        
+
         # Check for running processes to control menu actions
         $ProcMariaDB = $null
         $ProcDigiKam = $null
-        
+
         if ($null -ne $Config.Projects -and $Config.Projects.ContainsKey('Current')) {
             if ($Config.Projects.Current.ContainsKey('Databases')) {
-                $ProcMariaDB = Get-Process -Name mariadbd -ErrorAction SilentlyContinue | 
+                $ProcMariaDB = Get-Process -Name mariadbd -ErrorAction SilentlyContinue |
                     Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
             }
-            
+
             if ($Config.Projects.Current.ContainsKey('Config')) {
-                $ProcDigiKam = Get-Process -Name digikam -ErrorAction SilentlyContinue | 
+                $ProcDigiKam = Get-Process -Name digikam -ErrorAction SilentlyContinue |
                     Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
             }
         }
-        
+
         $ProcessesRunning = ($null -ne $ProcMariaDB) -or ($null -ne $ProcDigiKam)
-        
+
         switch ($SubSelection) {
             '1' {
                 # Start digiKam
@@ -522,11 +522,11 @@ function Invoke-ProjectMenu {
                     Pause
                 }
             }
-            'R' { 
+            'R' {
                 # Return to main menu
-                break 
+                break
             }
-            'Q' { 
+            'Q' {
                 # Quit application - return signal to main loop
                 return 'QUIT'
             }
@@ -536,7 +536,7 @@ function Invoke-ProjectMenu {
             }
         }
     } while ($SubSelection -ne 'R')
-    
+
     # Return to main menu (user pressed R)
     return 'RETURN'
 }
@@ -558,10 +558,10 @@ function Show-InvalidSelection {
 
     Write-Host ''
     $InvalidColumns = @(
-        @{ 
+        @{
             Text = 'Invalid selection, please try again.'
             Width = 80
-            Alignment = 'c' 
+            Alignment = 'c'
         }
     )
     # Use no decorative border; 'None' previously produced a literal 'N' border due to non-empty string.

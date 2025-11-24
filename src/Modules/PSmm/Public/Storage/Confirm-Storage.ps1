@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 #region ########## PUBLIC ##########
@@ -23,7 +23,7 @@ function Confirm-Storage {
 
         Validates storage using modern AppConfiguration object.
 
-    
+
 
     .NOTES
         This function validates storage using the hierarchical structure:

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Exports a sanitized (safe) snapshot of the current AppConfiguration to a PSD1 file.
 

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     ExifTool
 #>
@@ -52,6 +52,6 @@ function Invoke-Installer-ExifTool {
     catch {
         Write-PSmmLog -Level ERROR -Context "Install $($Plugin.Config.Name)" -Message "Installation failed for $($InstallerPath)" -ErrorRecord $_ -Console -File
     }
-}   
+}
 
 #endregion ########## PRIVATE ##########

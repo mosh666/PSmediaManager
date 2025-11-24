@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Validates and manages PowerShell environment requirements for PSmediaManager.
 
@@ -34,7 +34,7 @@ Set-StrictMode -Version Latest
     Confirm-PowerShell -Config $appConfig -Scope 'PSVersion'
     Validates that the current PowerShell version meets minimum requirements.
 
- 
+
 
 .NOTES
     - PSVersion failures will terminate the application
@@ -93,7 +93,7 @@ function Confirm-PowerShellVersion {
     try {
         $minimumVersion = $Config.Requirements.PowerShell.VersionMinimum
         $currentVersion = $PSVersionTable.PSVersion
-        
+
         # Optionally record current version in configuration if supported
         try { $Config.Requirements.PowerShell.VersionCurrent = $currentVersion } catch { }
 
@@ -101,7 +101,7 @@ function Confirm-PowerShellVersion {
             $message = "PowerShell version too low. Required: >=$minimumVersion, Current: $currentVersion"
             Write-PSmmLog -Level ERROR -Context 'Confirm PS Version' `
                 -Message $message -Console -File
-            
+
             Wait-Logging
             throw $message
         }
@@ -175,7 +175,7 @@ function Install-RequiredModule {
     try {
         Write-Verbose "Installing module: $moduleName"
         Install-Module -Name $moduleName -Force -Scope CurrentUser -ErrorAction Stop
-        
+
         Write-PSmmLog -Level SUCCESS -Context 'Install PS Modules' `
             -Message "Installed missing module: $moduleName" -Console -File
     }
@@ -205,7 +205,7 @@ function Import-RequiredModule {
     try {
         Write-Verbose "Importing module: $moduleName"
         Import-Module -Name $moduleName -Force -ErrorAction Stop
-        
+
         Write-PSmmLog -Level SUCCESS -Context 'Import PS Modules' `
             -Message "Imported module: $moduleName" -Console -File
     }
@@ -233,7 +233,7 @@ function Update-PowerShellModules {
     if ($PSCmdlet.ShouldProcess('PowerShell modules', 'Update all installed modules')) {
         try {
             $installedModules = Get-InstalledModule -ErrorAction Stop
-            
+
             foreach ($module in $installedModules) {
                 Update-SingleModule -Module $module
             }
@@ -269,7 +269,7 @@ function Update-SingleModule {
     try {
         # Check for available updates
         $latestModule = Find-Module -Name $moduleName -ErrorAction SilentlyContinue
-        
+
         if (-not $latestModule) {
             Write-Verbose "Could not find module in repository: $moduleName"
             return
@@ -329,10 +329,10 @@ function Invoke-ModuleUpdate {
 
     try {
         Write-Verbose "Updating $ModuleName from $CurrentVersion to $TargetVersion..."
-        
+
         # Perform update
         Update-Module -Name $ModuleName -Force -ErrorAction Stop
-        
+
         Write-PSmmLog -Level SUCCESS -Context 'Update PS Modules' `
             -Message "Updated $ModuleName from $CurrentVersion to $TargetVersion" -Console -File
 
@@ -369,9 +369,9 @@ function Test-ModuleHealth {
 
     try {
         Write-Verbose "Performing health check on $ModuleName..."
-        
+
         Import-Module -Name $ModuleName -Force -ErrorAction Stop
-        
+
         Write-PSmmLog -Level SUCCESS -Context 'Import PS Modules' `
             -Message "Health check passed for $ModuleName" -Console -File
     }
@@ -409,9 +409,9 @@ function Invoke-ModuleRollback {
 
     try {
         Write-Verbose "Rolling back $ModuleName to version $Version..."
-        
+
         Install-Module -Name $ModuleName -RequiredVersion $Version -Force -ErrorAction Stop
-        
+
         Write-PSmmLog -Level EMERGENCY -Context 'Install PS Modules' `
             -Message "Rolled back $ModuleName to version $Version" -Console -File
     }

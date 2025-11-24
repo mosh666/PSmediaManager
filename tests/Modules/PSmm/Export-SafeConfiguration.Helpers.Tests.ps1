@@ -1,4 +1,4 @@
-Describe 'Export-SafeConfiguration (helpers)' {
+﻿Describe 'Export-SafeConfiguration (helpers)' {
     BeforeAll {
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm/Public/Export-SafeConfiguration.ps1'
         $scriptPath = [System.IO.Path]::GetFullPath($scriptPath)
@@ -9,7 +9,7 @@ Describe 'Export-SafeConfiguration (helpers)' {
         $exportPath = Join-Path $TestDrive 'helpers-serialize.psd1'
         Remove-Item -Path $exportPath -ErrorAction SilentlyContinue -Force
 
-        $cfg = @{ 
+        $cfg = @{
             Mixed = @('one','two', @{ K='V' })
             Map = @{ A = 1; B = $false; C = @('x','y') }
         }
@@ -17,7 +17,7 @@ Describe 'Export-SafeConfiguration (helpers)' {
         { Export-SafeConfiguration -Configuration $cfg -Path $exportPath } | Should -Not -Throw
         Test-Path $exportPath | Should -BeTrue
         $content = Get-Content -Path $exportPath -Raw
-        $content | Should -Match 'Mixed' 
+        $content | Should -Match 'Mixed'
         # Allow either the nested key to appear or the map serialization (order/format may vary)
         $content | Should -Match "K\s*=\s*'V'|Map"
         $content | Should -Match "A\s*=\s*'1'|B\s*=\s*'False'"

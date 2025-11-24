@@ -1,4 +1,4 @@
-Describe 'Export-SafeConfiguration' {
+﻿Describe 'Export-SafeConfiguration' {
     BeforeAll {
         # Dot-source the implementation so the exported function is available
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm/Public/Export-SafeConfiguration.ps1'
@@ -10,7 +10,7 @@ Describe 'Export-SafeConfiguration' {
         $tmp = Join-Path $env:TEMP ("psmm-export-{0}.psd1" -f ([System.Guid]::NewGuid().ToString()))
         if (Test-Path $tmp) { Remove-Item $tmp -Force }
 
-        $cfg = @{ 
+        $cfg = @{
             Paths = @{ Root = 'C:\App' }
             Sensitive = @{ Password = 'p@ssw0rd'; ApiKey = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789ABCD' }
             TestDate = [datetime]'2020-01-02T03:04:05Z'
@@ -57,11 +57,11 @@ Describe 'Export-SafeConfiguration' {
             InternalName = 'PSmediaManager'
             Version = '1.2.3'
             AppVersion = 'dev'
-            Paths = @{ 
+            Paths = @{
                 Root = 'C:\App\src'
                 RepositoryRoot = 'C:\App'
                 Log  = 'C:\App\Log'
-                App  = @{ 
+                App  = @{
                     Root = 'C:\App\src'
                     Config = 'C:\App\src\Config'
                     ConfigDigiKam = 'C:\App\src\Config\digiKam'
@@ -72,33 +72,33 @@ Describe 'Export-SafeConfiguration' {
             }
             Logging = @{ Path = 'C:\App\Log'; Level = 'Debug'; DefaultLevel = 'Info'; Format = 'Text'; EnableConsole = $true; EnableFile = $false; MaxFileSizeMB = 5; MaxLogFiles = 3 }
             Parameters = @{ Debug = $true; Verbose = $false; Dev = $true; Update = $false }
-            Storage = @{ 
-                1 = @{ 
+            Storage = @{
+                1 = @{
                     GroupId = 1
                     Master = @{ Label = 'M1'; SerialNumber = 'SN-M1'; DriveLetter = 'E'; Path = 'E:\'; IsAvailable = $true; FreeSpaceGB = 100; TotalSpaceGB = 500 }
-                    Backups = @{ 
+                    Backups = @{
                         'SN-B1' = @{ Label = 'B1'; SerialNumber = 'SN-B1'; DriveLetter = 'F'; Path = 'F:\'; IsAvailable = $true; FreeSpaceGB = 200; TotalSpaceGB = 500 }
                     }
                     Paths = @{ Media = 'E:\Media'; Backup = 'F:\Backup' }
                 }
             }
-            StorageRegistry = @{ 
+            StorageRegistry = @{
                 LastScanned = $script:now
-                Drives = @{ 
+                Drives = @{
                     'SN-M1' = @{ SerialNumber = 'SN-M1'; DriveLetter = 'E'; Label = 'M1'; HealthStatus = 'Healthy'; PartitionKind = 'GPT'; FreeSpace = 100; TotalSpace = 500; UsedSpace = 400; FileSystem = 'NTFS'; Manufacturer = 'X'; Model = 'Y'; Number = 1 }
                     'SN-B1' = @{ SerialNumber = 'SN-B1'; DriveLetter = 'F'; Label = 'B1'; HealthStatus = 'Healthy'; PartitionKind = 'GPT'; FreeSpace = 200; TotalSpace = 500; UsedSpace = 300; FileSystem = 'NTFS'; Manufacturer = 'X'; Model = 'Y'; Number = 2 }
                 }
             }
-            Projects = @{ 
-                Registry = @{ 
+            Projects = @{
+                Registry = @{
                     Master = @{ M1 = @{ Label = 'M1'; Projects = @('P1','P2') } }
                     Backup = @{ B1 = @{ Label = 'B1'; Projects = @('P3') } }
                 }
                 All = @('P1','P2','P3')
             }
-            Requirements = @{ 
+            Requirements = @{
                 PSModules = @('Pester','PSReadLine')
-                PowerShell = @{ 
+                PowerShell = @{
                     Modules = @(
                         @{ Name = 'ThreadJob'; RequiredVersion = '2.0.3' },
                         'Az.Accounts'
@@ -119,7 +119,7 @@ Describe 'Export-SafeConfiguration' {
 
         $result | Should -Be $exportPath
         Test-Path -Path $exportPath | Should -BeTrue
-        
+
         $content = Get-Content -Path $exportPath -Raw
         $content | Should -Match "^@\{"
         # Verify single-quoted string serialization
@@ -148,7 +148,7 @@ Describe 'Export-SafeConfiguration' {
         $content = Get-Content -Path $exportPath -Raw
         # Verify array syntax in exported PSD1
         $content | Should -Match "PSModules = @\('Pester', 'PSReadLine'\)"
-        
+
         # Verify import preserves array structure
         $imported = Import-PowerShellDataFile -Path $exportPath
         $imported.Requirements.PSModules -is [array] | Should -BeTrue
@@ -165,7 +165,7 @@ Describe 'Export-SafeConfiguration' {
         $content | Should -Match 'SN-M1'
         $content | Should -Match 'SN-B1'
         $content | Should -Match 'LastScanned'
-        
+
         $imported = Import-PowerShellDataFile -Path $exportPath
         $imported.StorageRegistry.Drives.Keys -contains 'SN-M1' | Should -BeTrue
         $imported.StorageRegistry.Drives.Keys -contains 'SN-B1' | Should -BeTrue

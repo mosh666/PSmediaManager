@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     GitHub plugin management functions for PSmediaManager.
 

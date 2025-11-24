@@ -1,4 +1,4 @@
-<#!
+﻿<#!
 .SYNOPSIS
     PSmediaManager external plugin orchestration module.
 

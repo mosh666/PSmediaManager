@@ -1,68 +1,68 @@
-function New-DriveRootLauncher {
+﻿function New-DriveRootLauncher {
     <#
     .SYNOPSIS
         Creates a CMD launcher in the drive root to start PSmediaManager.
-    
+
     .DESCRIPTION
         This function creates a Start-PSmediaManager.lnk file in the drive root
         (parent directory of the repository root) if it doesn't already exist.
-        
+
         The Windows shortcut provides a convenient launcher for portable drives,
         allowing users to start PSmediaManager directly from the drive root without
         navigating into the repository folder.
-    
+
     .PARAMETER RepositoryRoot
         The absolute path to the PSmediaManager repository root directory.
         This should be the directory containing the .git folder and src/ directory.
-    
+
     .EXAMPLE
         New-DriveRootLauncher -RepositoryRoot 'E:\PSmediaManager'
         Creates E:\Start-PSmediaManager.lnk if it doesn't exist.
-    
+
     .NOTES
         Author           : Der Mosh
         Created          : 2025-11-20
-        
+
         The function will:
         - Check if the CMD file already exists (skip creation if it does)
         - Calculate the drive root from the repository root
         - Create the CMD file with proper PowerShell invocation
         - Log warnings if creation fails (e.g., read-only drive)
     #>
-    
+
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [string]$RepositoryRoot
     )
-    
+
     try {
         # Calculate drive root (parent of repository root)
         $driveRoot = Split-Path -Path $RepositoryRoot -Parent
-        
+
         if ([string]::IsNullOrWhiteSpace($driveRoot)) {
             Write-Warning "Cannot determine drive root from repository root: $RepositoryRoot"
             return
         }
-        
+
         # Define launcher file path
         $launcherPath = Join-Path -Path $driveRoot -ChildPath 'Start-PSmediaManager.lnk'
         $repoLauncher = Join-Path -Path $RepositoryRoot -ChildPath 'Start-PSmediaManager.ps1'
-        
+
         # Check if launcher already exists
         if (Test-Path -Path $launcherPath -PathType Leaf) {
             Write-Verbose "Launcher already exists: $launcherPath"
             return
         }
-        
+
         if (-not (Test-Path -LiteralPath $repoLauncher -PathType Leaf)) {
             Write-Warning "Repository launcher not found at: $repoLauncher"
             return
         }
 
         Write-Verbose "Creating drive root launcher: $launcherPath"
-        
+
         # Remove legacy launchers created by previous versions
         $legacyCmd = Join-Path -Path $driveRoot -ChildPath 'Start-PSmediaManager.cmd'
         $legacyPs1 = Join-Path -Path $driveRoot -ChildPath 'Start-PSmediaManager.ps1'
@@ -77,7 +77,7 @@ function New-DriveRootLauncher {
                 }
             }
         }
-        
+
         try {
             $shell = New-Object -ComObject WScript.Shell
         }

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Implementation of ICryptoService interface.
 
@@ -20,11 +20,11 @@ using namespace System.Security
     Production implementation of cryptographic service.
 #>
 class CryptoService : ICryptoService {
-    
+
     <#
     .SYNOPSIS
         Converts a plain text or encrypted string to a SecureString.
-        
+
     .DESCRIPTION
         If the input string appears to be a DPAPI encrypted string (starts with
         01000000d08c9ddf), it will be decrypted using ConvertTo-SecureString.
@@ -35,7 +35,7 @@ class CryptoService : ICryptoService {
         if ($null -eq $plainText) {
             throw [ArgumentNullException]::new("plainText")
         }
-        
+
         # Check if this is a DPAPI encrypted string (Windows Data Protection API format)
         if ($plainText -match '^01000000d08c9ddf') {
             # Encrypted string - decrypt it
@@ -46,7 +46,7 @@ class CryptoService : ICryptoService {
             return ConvertTo-SecureString -String $plainText -AsPlainText -Force
         }
     }
-    
+
     <#
     .SYNOPSIS
         Converts a SecureString to an encrypted string.
@@ -55,10 +55,10 @@ class CryptoService : ICryptoService {
         if ($null -eq $secureString) {
             throw [ArgumentNullException]::new("secureString")
         }
-        
+
         return ConvertFrom-SecureString -SecureString $secureString
     }
-    
+
     <#
     .SYNOPSIS
         Converts a SecureString to plain text.
@@ -68,7 +68,7 @@ class CryptoService : ICryptoService {
         if ($null -eq $secureString) {
             throw [ArgumentNullException]::new("secureString")
         }
-        
+
         $ptr = [IntPtr]::Zero
         try {
             $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureString)

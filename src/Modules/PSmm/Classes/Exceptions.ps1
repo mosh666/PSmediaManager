@@ -1,11 +1,11 @@
-<#
+﻿<#
 .SYNOPSIS
     Custom exception classes for PSmediaManager application.
 
 .DESCRIPTION
     Provides strongly-typed exception classes for better error handling and debugging.
     Each exception type represents a specific error category with rich context information.
-    
+
     All exceptions inherit from MediaManagerException base class and provide:
     - Detailed error context
     - Stack trace preservation
@@ -27,7 +27,7 @@ using namespace System.Collections.Generic
 <#
 .SYNOPSIS
     Base exception for all PSmediaManager exceptions.
-    
+
 .DESCRIPTION
     Provides common functionality for all application exceptions including:
     - Context tracking
@@ -72,7 +72,7 @@ class MediaManagerException : Exception {
             $this.OriginalError = $innerException
         }
     }
-    
+
     [string] GetFullMessage() {
         $msg = "[$($this.Context)] $($this.Message)"
         if ($this.RecoverySuggestion) {
@@ -80,11 +80,11 @@ class MediaManagerException : Exception {
         }
         return $msg
     }
-    
+
     [void] AddData([string]$key, [object]$value) {
         $this.AdditionalData[$key] = $value
     }
-    
+
     [object] GetData([string]$key) {
         if ($this.AdditionalData.ContainsKey($key)) {
             return $this.AdditionalData[$key]
@@ -96,7 +96,7 @@ class MediaManagerException : Exception {
 <#
 .SYNOPSIS
     Exception thrown when configuration is invalid or cannot be loaded.
-    
+
 .DESCRIPTION
     Provides detailed information about configuration errors including:
     - Configuration file path
@@ -121,7 +121,7 @@ class ConfigurationException : MediaManagerException {
         $this.ConfigPath = $configPath
         $this.RecoverySuggestion = "Check configuration file format and permissions at: $configPath"
     }
-    
+
     ConfigurationException([string]$message, [string]$configPath, [string]$invalidKey, [object]$invalidValue) : base($message, 'Configuration') {
         $this.ConfigPath = $configPath
         $this.InvalidKey = $invalidKey
@@ -133,7 +133,7 @@ class ConfigurationException : MediaManagerException {
 <#
 .SYNOPSIS
     Exception thrown when a required module cannot be loaded.
-    
+
 .DESCRIPTION
     Provides detailed information about module loading failures including:
     - Module name
@@ -161,7 +161,7 @@ class ModuleLoadException : MediaManagerException {
         $this.ModuleName = $moduleName
         $this.RecoverySuggestion = "Check module is installed and accessible. Use: Get-Module -ListAvailable $moduleName"
     }
-    
+
     ModuleLoadException([string]$message, [string]$moduleName, [version]$requiredVersion, [version]$foundVersion) : base($message, 'Module Loading') {
         $this.ModuleName = $moduleName
         $this.RequiredVersion = $requiredVersion
@@ -173,7 +173,7 @@ class ModuleLoadException : MediaManagerException {
 <#
 .SYNOPSIS
     Exception thrown when a required plugin is not available or invalid.
-    
+
 .DESCRIPTION
     Provides detailed information about plugin requirement failures including:
     - Plugin name
@@ -204,7 +204,7 @@ class PluginRequirementException : MediaManagerException {
         $this.FoundVersion = $foundVersion
         $this.RecoverySuggestion = "Upgrade $pluginName from version $foundVersion to $requiredVersion or higher."
     }
-    
+
     [void] SetDownloadUrl([string]$url) {
         $this.DownloadUrl = $url
         $this.RecoverySuggestion = "Download $($this.PluginName) from: $url"
@@ -214,7 +214,7 @@ class PluginRequirementException : MediaManagerException {
 <#
 .SYNOPSIS
     Exception thrown when storage operations fail.
-    
+
 .DESCRIPTION
     Provides detailed information about storage errors including:
     - Storage path
@@ -246,7 +246,7 @@ class StorageException : MediaManagerException {
     StorageException([string]$message, [Exception]$innerException) : base($message, 'Storage', $innerException) {
         $this.RecoverySuggestion = 'Check storage permissions and network connectivity.'
     }
-    
+
     [void] SetSpaceInfo([long]$requiredGB, [long]$availableGB) {
         $this.RequiredSpaceGB = $requiredGB
         $this.AvailableSpaceGB = $availableGB
@@ -257,7 +257,7 @@ class StorageException : MediaManagerException {
 <#
 .SYNOPSIS
     Exception thrown when logging operations fail.
-    
+
 .DESCRIPTION
     Provides detailed information about logging errors including:
     - Log file path
@@ -285,7 +285,7 @@ class LoggingException : MediaManagerException {
 <#
 .SYNOPSIS
     Exception thrown when project operations fail.
-    
+
 .DESCRIPTION
     Provides detailed information about project errors including:
     - Project name
@@ -312,7 +312,7 @@ class ProjectException : MediaManagerException {
         $this.ProjectPath = $projectPath
         $this.RecoverySuggestion = "Verify project path: $projectPath"
     }
-    
+
     [void] SetOperation([string]$operation) {
         $this.Operation = $operation
         $this.AddData('Operation', $operation)
@@ -322,7 +322,7 @@ class ProjectException : MediaManagerException {
 <#
 .SYNOPSIS
     Exception thrown when validation fails.
-    
+
 .DESCRIPTION
     Provides detailed information about validation errors including:
     - Property name
@@ -350,12 +350,12 @@ class ValidationException : MediaManagerException {
         $this.InvalidValue = $invalidValue
         $this.RecoverySuggestion = "Property '$propertyName' has invalid value: $invalidValue"
     }
-    
+
     [void] SetExpectedFormat([string]$format) {
         $this.ExpectedFormat = $format
         $this.RecoverySuggestion = "Property '$($this.PropertyName)' must match format: $format"
     }
-    
+
     [void] AddValidationRule([string]$rule) {
         if ($null -eq $this.ValidationRules) {
             $this.ValidationRules = @()
@@ -393,7 +393,7 @@ class ValidationException : MediaManagerException {
 .EXAMPLE
     $errorRecord = New-MediaManagerErrorRecord -Exception $ex -ErrorId 'ConfigNotFound' -Category ObjectNotFound
     $PSCmdlet.ThrowTerminatingError($errorRecord)
-    
+
 .EXAMPLE
     $ex = [ConfigurationException]::new("Invalid configuration", $configPath)
     $errorRecord = New-MediaManagerErrorRecord -Exception $ex -ErrorId 'InvalidConfig' -Category InvalidData
@@ -469,15 +469,15 @@ function Format-MediaManagerException {
 
     process {
         $lines = [List[string]]::new()
-        
+
         # Main error message
         $lines.Add("[$($Exception.Context)] $($Exception.Message)")
-        
+
         # Recovery suggestion
         if ($Exception.RecoverySuggestion) {
             $lines.Add("  Recovery: $($Exception.RecoverySuggestion)")
         }
-        
+
         # Additional data
         if ($IncludeAdditionalData -and $Exception.AdditionalData.Count -gt 0) {
             $lines.Add("  Additional Data:")
@@ -485,13 +485,13 @@ function Format-MediaManagerException {
                 $lines.Add("    $key = $($Exception.AdditionalData[$key])")
             }
         }
-        
+
         # Stack trace
         if ($IncludeStackTrace -and $Exception.StackTrace) {
             $lines.Add("  Stack Trace:")
             $lines.Add("    $($Exception.StackTrace)")
         }
-        
+
         return $lines -join "`n"
     }
 }

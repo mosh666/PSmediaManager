@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 function Select-PSmmProject {
@@ -72,7 +72,7 @@ function Select-PSmmProject {
         $AllProjects = Get-PSmmProjects -Config $Config -FileSystem $FileSystem
         $FoundProject = $null
         $StorageDriveLabel = $null
-        
+
         # If SerialNumber is specified, search only on that specific disk
         if (-not [string]::IsNullOrWhiteSpace($SerialNumber)) {
             # Search in Master drives
@@ -87,7 +87,7 @@ function Select-PSmmProject {
                 }
                 if ($FoundProject) { break }
             }
-            
+
             # If not found in Master, search in Backup drives
             if (-not $FoundProject) {
                 foreach ($driveLabel in $AllProjects.Backup.Keys) {
@@ -117,7 +117,7 @@ function Select-PSmmProject {
                 }
                 if ($FoundProject) { break }
             }
-            
+
             # If not found in Master, search in Backup drives
             if (-not $FoundProject) {
                 foreach ($driveLabel in $AllProjects.Backup.Keys) {
@@ -133,12 +133,12 @@ function Select-PSmmProject {
                 }
             }
         }
-        
+
         if (-not $FoundProject) {
             $serialMsg = if (-not [string]::IsNullOrWhiteSpace($SerialNumber)) { " on disk with SerialNumber '$SerialNumber'" } else { "" }
             throw "Project '$pName' not found in any storage location$serialMsg."
         }
-        
+
         # Get the actual storage drive information
         $storageDrive = Get-StorageDrive | Where-Object { $_.SerialNumber -eq $FoundProject.SerialNumber } | Select-Object -First 1
         if (-not $storageDrive) {
@@ -146,7 +146,7 @@ function Select-PSmmProject {
         }
 
         $projectBasePath = $FoundProject.Path
-        
+
         # Verify project exists
         if (-not $FileSystem.TestPath($projectBasePath)) {
             throw "Project '$pName' does not exist at: $projectBasePath"
@@ -159,7 +159,7 @@ function Select-PSmmProject {
 
         # Set project name
         $Run.Projects.Current.Name = $pName
-        
+
         # Update all project-specific paths
         $Run.Projects.Current.Path = $projectBasePath
         $Run.Projects.Current.Config = Join-Path -Path $projectBasePath -ChildPath 'Config'
@@ -169,7 +169,7 @@ function Select-PSmmProject {
         $Run.Projects.Current.Libraries = Join-Path -Path $projectBasePath -ChildPath 'Libraries'
         $Run.Projects.Current.Vault = Join-Path -Path $projectBasePath -ChildPath 'Vault'
         $Run.Projects.Current.Log = Join-Path -Path $projectBasePath -ChildPath 'Log'
-        
+
         # Store storage drive information
         $Run.Projects.Current.StorageDrive = @{
             Label = $storageDrive.Label

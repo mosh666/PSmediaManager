@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Initializes the logging system for the PSmediaManager application.
 
@@ -14,7 +14,7 @@
 
     Initializes logging using the AppConfiguration object.
 
- 
+
 
 .NOTES
     Function Name: Initialize-Logging

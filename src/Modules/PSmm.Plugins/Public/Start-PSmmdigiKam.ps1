@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 <#
@@ -12,7 +12,7 @@ Set-StrictMode -Version Latest
     - Project-specific APPDIR for configuration isolation
     - Dedicated digiKam-rc configuration file
     - Separate MariaDB database instance
-    
+
     The function performs the following operations:
     - Validates the project is not a template
     - Initializes or updates project-specific digiKam configuration
@@ -38,14 +38,14 @@ Set-StrictMode -Version Latest
     Author           : Der Mosh
     Version          : 1.0.0
     Created          : 2025-11-05
-    
+
     Requires         : - digiKam 8.8.0 or higher
                        - MariaDB installation
                        - ExifTool installation
-                       
+
     Dependencies     : - Initialize-digiKam function (from legacy code)
                        - AppConfiguration class
-                       
+
     Related          : Stop-PSmmdigiKam
 
 .LINK
@@ -58,15 +58,15 @@ function Start-PSmmdigiKam {
         [Parameter(Mandatory = $true)]
         [ValidateNotNull()]
         $Config,
-        
+
         [Parameter()]
         [switch]$Force
     )
-    
+
     begin {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
-        
+
         # Get current project name from Config
         $projectName = if ($null -ne $Config.Projects -and $Config.Projects.ContainsKey('Current') -and
             $Config.Projects.Current.ContainsKey('Name')) {
@@ -74,10 +74,10 @@ function Start-PSmmdigiKam {
         } else {
             throw [ConfigurationException]::new('No current project selected', 'ProjectName')
         }
-        
+
         Write-Verbose "Starting digiKam for project: $projectName"
     }
-    
+
     process {
         try {
             # Check if this is a template project
@@ -87,62 +87,62 @@ function Start-PSmmdigiKam {
                 Read-Host -Prompt 'Press Enter to continue'
                 return
             }
-            
+
             # Confirm the action with ShouldProcess
             if (-not $PSCmdlet.ShouldProcess($projectName, 'Start digiKam')) {
                 Write-Verbose 'Start digiKam operation cancelled by user'
                 return
             }
-            
+
             Write-Host ''
             Write-PSmmLog -Level INFO -Context 'digiKam' -Message 'Starting digiKam...' -Console -File
-            
+
             # Initialize project-specific digiKam configuration
             Write-Verbose "Initializing project-specific digiKam configuration..."
             $projectConfig = Initialize-PSmmProjectDigiKamConfig -Config $Config -ProjectName $projectName -Force:$Force
-            
+
             # Get project-specific paths from configuration
             $digiKamRcPath = $projectConfig.DigiKamRcPath
             $appDir = $projectConfig.AppDir
             $databasePort = $projectConfig.DatabasePort
-            
+
             # Get digiKam executable path
             $digiKamExe = Join-Path -Path $projectConfig.DigiKamPluginsPath -ChildPath 'digikam.exe'
-            
+
             if (-not (Test-Path -Path $digiKamExe)) {
                 throw [PluginRequirementException]::new("digiKam executable not found: $digiKamExe", 'digiKam')
             }
-            
+
             # Verify digiKam RC file exists
             if (-not (Test-Path -Path $digiKamRcPath)) {
                 throw [ConfigurationException]::new("digiKam configuration file not found: $digiKamRcPath", 'digiKamRC')
             }
-            
+
             Write-Verbose "digiKam executable: $digiKamExe"
             Write-Verbose "digiKam config file: $digiKamRcPath"
             Write-Verbose "digiKam APPDIR: $appDir"
             Write-Verbose "Database port: $databasePort"
-            
+
             # Start digiKam process with project-specific configuration and APPDIR
             Write-PSmmLog -Level INFO -Context 'digiKam' -Message "Launching digiKam for project '$projectName' on port $databasePort" -Console -File
-            
+
             # Set environment variable for digiKam APPDIR (isolates configuration and data)
             $env:DIGIKAM_APPDIR = $appDir
-            
+
             $processParams = @{
                 FilePath = $digiKamExe
                 ArgumentList = "--config `"$digiKamRcPath`""
                 PassThru = $true
             }
-            
+
             $digiKamProcess = Start-Process @processParams
-            
+
             if ($null -eq $digiKamProcess) {
                 throw [ProcessException]::new('Failed to start digiKam process', 'digiKam')
             }
-            
+
             Write-PSmmLog -Level SUCCESS -Context 'digiKam' -Message "digiKam started successfully (PID: $($digiKamProcess.Id)) for project '$projectName'" -Console -File
-            
+
             # Display project-specific information
             Write-Host ''
             Write-Host "digiKam Configuration:" -ForegroundColor Green
@@ -154,7 +154,7 @@ function Start-PSmmdigiKam {
             Write-Host 'Metadata profile location:' -ForegroundColor Green
             Write-Host "  $($projectConfig.MetadataProfile)" -ForegroundColor White
             Write-Host ''
-            
+
             Write-Verbose "digiKam started with PID: $($digiKamProcess.Id)"
         }
         catch {
@@ -164,12 +164,12 @@ function Start-PSmmdigiKam {
             else {
                 "Failed to start digiKam: $_"
             }
-            
+
             Write-PSmmLog -Level ERROR -Context 'digiKam' -Message $errorMessage -ErrorRecord $_ -Console -File
             throw
         }
     }
-    
+
     end {
         Write-Verbose 'Start-PSmmdigiKam completed'
     }

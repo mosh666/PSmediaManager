@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 <#
@@ -6,12 +6,12 @@ Set-StrictMode -Version Latest
     Formats text with dynamic multicolumn layout, alignment, padding, and optional borders for UI display.
 
 .DESCRIPTION
-    This function provides dynamic multicolumn layouts with various alignment options, applies padding, 
-    and optionally adds borders with customizable colors. Supports ANSI color codes for terminal output 
-    styling. Text is automatically wrapped to multiple lines if it exceeds the available width, with 
+    This function provides dynamic multicolumn layouts with various alignment options, applies padding,
+    and optionally adds borders with customizable colors. Supports ANSI color codes for terminal output
+    styling. Text is automatically wrapped to multiple lines if it exceeds the available width, with
     alignment and padding preserved for each line.
 
-    Use the -Columns parameter to define column specifications. Each column can have its own width, 
+    Use the -Columns parameter to define column specifications. Each column can have its own width,
     alignment, padding, colors, and content.
 
 .PARAMETER Width
@@ -122,7 +122,7 @@ function Format-UI {
         $BORDER_WIDTH = 2  # Border adds 1 char on left + 1 on right
         $ESCAPE_CHAR = [char]0x1b
         $NEWLINE = "`n"
-        
+
         # Set default width from $Config.UI.Width if not explicitly provided
         if ($PSBoundParameters.ContainsKey('Width') -eq $false) {
             if ($Config -and $null -ne $Config.UI -and $null -ne $Config.UI.Width) {
@@ -217,20 +217,20 @@ function ConvertTo-MultiColumnLines {
     # Process each column's content into lines
     $columnContentLines = @()
     $maxLines = 0
-    
+
     for ($i = 0; $i -lt $normalizedColumns.Count; $i++) {
         $column = $normalizedColumns[$i]
         $columnWidth = $columnWidths[$i]
-        
+
         # Split text by explicit newlines first
         $textLines = if ([string]::IsNullOrEmpty($column.Text)) { @('') } else { $column.Text -split "`r?`n" }
-        
+
         # Process each line for this column
         $processedLines = [System.Collections.Generic.List[string]]::new()
-        
+
         foreach ($textLine in $textLines) {
             $wrappedLines = Split-TextIntoLines -Text $textLine -MaxWidth ($columnWidth - ($column.Padding * 2))
-            
+
             foreach ($wrappedLine in $wrappedLines) {
                 $alignedLine = Format-ColumnText -Text $wrappedLine -Width $columnWidth `
                     -Alignment $column.Alignment -Padding $column.Padding `
@@ -241,7 +241,7 @@ function ConvertTo-MultiColumnLines {
                 $processedLines.Add($alignedLine)
             }
         }
-        
+
         $columnContentLines += , $processedLines.ToArray()
         $maxLines = [Math]::Max($maxLines, $processedLines.Count)
     }
@@ -263,7 +263,7 @@ function Initialize-ColumnDefinitions {
     )
 
     $normalized = [System.Collections.Generic.List[hashtable]]::new()
-    
+
     foreach ($column in $Columns) {
         $normalizedColumn = @{
             Text = if ($column.ContainsKey('Text')) { [string]$column.Text } else { '' }
@@ -281,15 +281,15 @@ function Initialize-ColumnDefinitions {
             MinWidth = if ($column.ContainsKey('MinWidth')) { [int]$column.MinWidth } else { 10 }
             MaxWidth = if ($column.ContainsKey('MaxWidth')) { [int]$column.MaxWidth } else { 0 } # 0 = no limit
         }
-        
+
         # Validate alignment
         if ($normalizedColumn.Alignment -notin @('l', 'c', 'r')) {
             $normalizedColumn.Alignment = 'l'
         }
-        
+
         $normalized.Add($normalizedColumn)
     }
-    
+
     return , $normalized.ToArray()
 }
 
@@ -306,14 +306,14 @@ function Get-ColumnWidths {
     )
 
     # Calculate separator space
-    $separatorWidth = if ($Columns.Count -gt 1) { 
+    $separatorWidth = if ($Columns.Count -gt 1) {
         Get-VisibleLength -Text $ColumnSeparator
     }
-    else { 
-        0 
+    else {
+        0
     }
     $totalSeparatorSpace = $separatorWidth * ($Columns.Count - 1)
-    
+
     # Available width for columns (excluding separators)
     # Note: TotalWidth is already the content width (borders already subtracted if present)
     $availableWidth = $TotalWidth - $totalSeparatorSpace
@@ -327,7 +327,7 @@ function Get-ColumnWidths {
 
     for ($i = 0; $i -lt $Columns.Count; $i++) {
         $width = $Columns[$i].Width
-        
+
         if ($width -is [int] -or ($width -is [string] -and $width -match '^\d+$')) {
             # Fixed width
             $fixedWidth = [int]$width
@@ -365,15 +365,15 @@ function Get-ColumnWidths {
 
     # Build final width array
     $finalWidths = @(0) * $Columns.Count
-    
+
     foreach ($fixedCol in $fixedColumns) {
         $finalWidths[$fixedCol.Index] = $fixedCol.Width
     }
-    
+
     foreach ($percCol in $percentageColumns) {
         $finalWidths[$percCol.Index] = $percCol.Width
     }
-    
+
     foreach ($autoCol in $autoColumns) {
         $width = [Math]::Max($autoCol.Column.MinWidth, $autoColumnWidth)
         if ($autoCol.Column.MaxWidth -gt 0) {
@@ -409,7 +409,7 @@ function Format-ColumnText {
 
     # Build ANSI color and formatting codes
     $ansiCodes = @()
-    
+
     # Add basic formatting codes
     if ($Bold -and $Config -and $null -ne $Config.UI -and $null -ne $Config.UI.ANSI -and $null -ne $Config.UI.ANSI.Basic) {
         $ansiCodes += $Config.UI.ANSI.Basic.Bold.TrimStart('[').TrimEnd('m')
@@ -429,7 +429,7 @@ function Format-ColumnText {
     if ($Strikethrough -and $Config -and $null -ne $Config.UI -and $null -ne $Config.UI.ANSI -and $null -ne $Config.UI.ANSI.Basic) {
         $ansiCodes += $Config.UI.ANSI.Basic.Strikethrough.TrimStart('[').TrimEnd('m')
     }
-    
+
     # Add color codes
     if (-not [string]::IsNullOrEmpty($TextColor)) {
         $ansiCodes += $TextColor.TrimStart('[').TrimEnd('m')
@@ -437,24 +437,24 @@ function Format-ColumnText {
     if (-not [string]::IsNullOrEmpty($BackgroundColor)) {
         $ansiCodes += $BackgroundColor.TrimStart('[').TrimEnd('m')
     }
-    
+
     $ansiPrefix = if ($ansiCodes.Count -gt 0) {
         "$EscapeChar[" + ($ansiCodes -join ';') + 'm'
     } else {
         ''
     }
     $ansiReset = "$EscapeChar[0m"
-    
+
     # Apply colors to text and create formatted output
     $coloredText = if (-not [string]::IsNullOrEmpty($ansiPrefix)) { "$ansiPrefix$Text$ansiReset" } else { $Text }
-    
+
     $availableWidth = $Width - ($Padding * 2)
     $textLength = $Text.Length
-    
+
     if (-not [string]::IsNullOrEmpty($BackgroundColor)) {
         # When background color is specified, apply it to the entire column width including padding and fill spaces
         $backgroundOnlyPrefix = "$EscapeChar$BackgroundColor"
-        
+
         switch ($Alignment) {
             'l' {
                 # Left align: background + padding + text + fill + padding + background_reset
@@ -509,7 +509,7 @@ function Format-ColumnText {
             }
         }
     }
-    
+
     return $formatted
 }
 
@@ -531,19 +531,19 @@ function Join-ColumnLines {
     $result = [System.Collections.Generic.List[string]]::new($MaxLines)
     $ansiSeparatorPrefix = "$EscapeChar$ColumnSeparatorColor"
     $ansiReset = "$EscapeChar[0m"
-    $coloredSeparator = if ([string]::IsNullOrEmpty($ColumnSeparatorColor)) { 
-        $ColumnSeparator 
+    $coloredSeparator = if ([string]::IsNullOrEmpty($ColumnSeparatorColor)) {
+        $ColumnSeparator
     }
-    else { 
-        "$ansiSeparatorPrefix$ColumnSeparator$ansiReset" 
+    else {
+        "$ansiSeparatorPrefix$ColumnSeparator$ansiReset"
     }
-    
+
     for ($lineIndex = 0; $lineIndex -lt $MaxLines; $lineIndex++) {
         $lineParts = [System.Collections.Generic.List[string]]::new($ColumnContentLines.Count)
-        
+
         for ($colIndex = 0; $colIndex -lt $ColumnContentLines.Count; $colIndex++) {
             $columnLines = $ColumnContentLines[$colIndex]
-            
+
             if ($lineIndex -lt $columnLines.Count) {
                 $lineParts.Add($columnLines[$lineIndex])
             }
@@ -553,12 +553,12 @@ function Join-ColumnLines {
                 $lineParts.Add($emptyLine)
             }
         }
-        
+
         # Join columns with separator
         $completeLine = $lineParts -join $coloredSeparator
         $result.Add($completeLine)
     }
-    
+
     return $result.ToArray()
 }
 
@@ -576,25 +576,25 @@ function Format-WithBorder {
         [char]$EscapeChar,
         [string]$Newline
     )
-    
+
     # Build border manually to ensure correct width
     $borderChar = [string]$Border[0]
     $horizontalBorder = $borderChar * $Width
     $ansiPrefix = "$EscapeChar$BorderColor"
     $ansiReset = "$EscapeChar[0m"
-    
+
     $result = [System.Collections.Generic.List[string]]::new($Lines.Count + 2)
     $result.Add("$ansiPrefix$horizontalBorder$ansiReset")
-    
+
     foreach ($line in $Lines) {
         # Normalize line to exact contentWidth (accounting for ANSI codes)
         $normalizedLine = Get-NormalizedWidth -Text $line -Width $ContentWidth
         # Add borders on both sides
         $result.Add("$ansiPrefix$borderChar$ansiReset$normalizedLine$ansiPrefix$borderChar$ansiReset")
     }
-    
+
     $result.Add("$ansiPrefix$horizontalBorder$ansiReset")
-    
+
     return ($result -join $Newline)
 }
 
@@ -606,7 +606,7 @@ function Get-VisibleLength {
     param (
         [string]$Text
     )
-    
+
     # Remove ANSI escape sequences to get visible length
     $textWithoutAnsi = $Text -replace '\x1b\[[0-9;]*m', ''
     return $textWithoutAnsi.Length
@@ -621,9 +621,9 @@ function Get-NormalizedWidth {
         [string]$Text,
         [int]$Width
     )
-    
+
     $visibleLength = Get-VisibleLength -Text $Text
-    
+
     if ($visibleLength -eq $Width) {
         return $Text
     }

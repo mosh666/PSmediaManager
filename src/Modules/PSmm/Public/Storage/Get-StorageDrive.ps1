@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Gets information about physical storage drives.
 
@@ -58,45 +58,45 @@ function Get-StorageDrive {
 
     try {
         $drives = @()
-        
+
         foreach ($disk in Get-CimInstance Win32_Diskdrive) {
             try {
                 $diskMetadata = Get-Disk | Where-Object { $_.Number -eq $disk.Index } | Select-Object -First 1
-                
+
                 if ($null -eq $diskMetadata) {
                     Write-Verbose "No metadata found for disk $($disk.Index), skipping..."
                     continue
                 }
-                
+
                 $partitions = Get-CimAssociatedInstance -ResultClassName Win32_DiskPartition -InputObject $disk
-                
+
                 if ($null -eq $partitions) {
                     Write-Verbose "No partitions found for disk $($disk.Index), skipping..."
                     continue
                 }
-                
+
                 foreach ($partition in $partitions) {
                     $logicalDisks = Get-CimAssociatedInstance -ResultClassName Win32_LogicalDisk -InputObject $partition
-                    
+
                     if ($null -eq $logicalDisks) {
                         continue
                     }
-                    
+
                     foreach ($logicalDisk in $logicalDisks) {
                         try {
                             $totalSpace = [math]::Round($logicalDisk.Size / 1GB, 3)
                             $freeSpace = [math]::Round($logicalDisk.FreeSpace / 1GB, 3)
                             $usedSpace = [math]::Round($totalSpace - $freeSpace, 3)
-                            
+
                             $volume = Get-Volume |
                                 Where-Object { $_.DriveLetter -eq $logicalDisk.DeviceID.Trim(":") } |
                                 Select-Object -First 1
-                            
+
                             if ($null -eq $volume) {
                                 Write-Verbose "No volume found for drive $($logicalDisk.DeviceID), skipping..."
                                 continue
                             }
-                            
+
                             $driveInfo = [PSCustomObject]@{
                                 Label = $volume.FileSystemLabel
                                 DriveLetter = $logicalDisk.DeviceID
@@ -112,7 +112,7 @@ function Get-StorageDrive {
                                 UsedSpace = $usedSpace
                                 HealthStatus = $volume.HealthStatus
                             }
-                            
+
                             $drives += $driveInfo
                         }
                         catch {
@@ -127,7 +127,7 @@ function Get-StorageDrive {
                 continue
             }
         }
-        
+
         return $drives
     }
     catch {

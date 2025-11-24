@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -14,7 +14,7 @@ Describe 'Cached registry conversion' {
     BeforeAll {
         # Compute repo root relative to this test file
         $repoRootLocal = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
-        
+
         # Load all test helpers including stubs
         $importAllHelpersScript = Join-Path -Path $repoRootLocal -ChildPath 'tests/Support/Import-AllTestHelpers.ps1'
         $null = Test-Path -Path $importAllHelpersScript
@@ -25,11 +25,11 @@ Describe 'Cached registry conversion' {
 
         $projectsManifestLocal = Join-Path -Path $repoRootLocal -ChildPath 'src/Modules/PSmm.Projects/PSmm.Projects.psd1'
         $psmmManifestLocal = Join-Path -Path $repoRootLocal -ChildPath 'src/Modules/PSmm/PSmm.psd1'
-        
+
         # Remove modules to ensure clean state for this test
         if (Get-Module -Name 'PSmm.Projects' -ErrorAction SilentlyContinue) { Remove-Module -Name 'PSmm.Projects' -Force }
         if (Get-Module -Name 'PSmm' -ErrorAction SilentlyContinue) { Remove-Module -Name 'PSmm' -Force }
-        
+
         Import-Module -Name $psmmManifestLocal -Force -ErrorAction Stop
         Import-Module -Name $projectsManifestLocal -Force -ErrorAction Stop
     }

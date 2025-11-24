@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Implementation of IGitService interface.
 
@@ -20,7 +20,7 @@ using namespace System.IO
     Production implementation of Git service.
 #>
 class GitService : IGitService {
-    
+
     <#
     .SYNOPSIS
         Gets the current branch name.
@@ -29,20 +29,20 @@ class GitService : IGitService {
         if ([string]::IsNullOrWhiteSpace($repositoryPath)) {
             $repositoryPath = Get-Location
         }
-        
+
         if (-not $this.IsRepository($repositoryPath)) {
             throw [InvalidOperationException]::new("Not a git repository: $repositoryPath")
         }
-        
+
         try {
             Push-Location $repositoryPath
             $branch = git rev-parse --abbrev-ref HEAD 2>&1
             Pop-Location
-            
+
             if ($LASTEXITCODE -ne 0) {
                 throw [InvalidOperationException]::new("Failed to get current branch: $branch")
             }
-            
+
             return [PSCustomObject]@{
                 Name = $branch.Trim()
             }
@@ -52,7 +52,7 @@ class GitService : IGitService {
             throw [InvalidOperationException]::new("Failed to get current branch: $_", $_.Exception)
         }
     }
-    
+
     <#
     .SYNOPSIS
         Gets the latest tag.
@@ -61,20 +61,20 @@ class GitService : IGitService {
         if ([string]::IsNullOrWhiteSpace($repositoryPath)) {
             $repositoryPath = Get-Location
         }
-        
+
         if (-not $this.IsRepository($repositoryPath)) {
             throw [InvalidOperationException]::new("Not a git repository: $repositoryPath")
         }
-        
+
         try {
             Push-Location $repositoryPath
             $tag = git describe --tags --abbrev=0 2>&1
             Pop-Location
-            
+
             if ($LASTEXITCODE -ne 0) {
                 return $null
             }
-            
+
             return [PSCustomObject]@{
                 Name = $tag.Trim()
             }
@@ -84,7 +84,7 @@ class GitService : IGitService {
             return $null
         }
     }
-    
+
     <#
     .SYNOPSIS
         Gets the current commit hash.
@@ -93,21 +93,21 @@ class GitService : IGitService {
         if ([string]::IsNullOrWhiteSpace($repositoryPath)) {
             $repositoryPath = Get-Location
         }
-        
+
         if (-not $this.IsRepository($repositoryPath)) {
             throw [InvalidOperationException]::new("Not a git repository: $repositoryPath")
         }
-        
+
         try {
             Push-Location $repositoryPath
             $hash = git rev-parse HEAD 2>&1
             $shortHash = git rev-parse --short HEAD 2>&1
             Pop-Location
-            
+
             if ($LASTEXITCODE -ne 0) {
                 throw [InvalidOperationException]::new("Failed to get commit hash: $hash")
             }
-            
+
             return [PSCustomObject]@{
                 Full = $hash.Trim()
                 Short = $shortHash.Trim()
@@ -118,7 +118,7 @@ class GitService : IGitService {
             throw [InvalidOperationException]::new("Failed to get commit hash: $_", $_.Exception)
         }
     }
-    
+
     <#
     .SYNOPSIS
         Searches for a pattern in tracked files.
@@ -127,28 +127,28 @@ class GitService : IGitService {
         if ([string]::IsNullOrWhiteSpace($pattern)) {
             throw [ArgumentException]::new("Pattern cannot be empty", "pattern")
         }
-        
+
         try {
             $gitArgs = @('grep', '-l', $pattern)
-            
+
             if (-not [string]::IsNullOrWhiteSpace($filePattern)) {
                 $gitArgs += '--'
                 $gitArgs += $filePattern
             }
-            
+
             $files = & git @gitArgs 2>&1
-            
+
             if ($LASTEXITCODE -ne 0) {
                 return @()
             }
-            
+
             return @($files)
         }
         catch {
             return @()
         }
     }
-    
+
     <#
     .SYNOPSIS
         Checks if a path is a Git repository.
@@ -157,7 +157,7 @@ class GitService : IGitService {
         if ([string]::IsNullOrWhiteSpace($path)) {
             return $false
         }
-        
+
         $gitDir = Join-Path -Path $path -ChildPath '.git'
         return Test-Path -Path $gitDir
     }

@@ -1,11 +1,11 @@
-<#
+﻿<#
 .SYNOPSIS
     Clears the project registry cache, forcing a full rescan on next access.
 
 .DESCRIPTION
     Invalidates the cached project registry stored in the configuration.
     This forces Get-PSmmProjects to perform a full disk scan on its next invocation.
-    
+
     Use this function when you know projects have been added, removed, or modified outside
     of the normal PSmediaManager operations (e.g., manual file system changes).
 
@@ -35,7 +35,7 @@ function Clear-PSmmProjectRegistry {
     try {
         if ($Config.Projects.ContainsKey('Registry')) {
             Write-Verbose 'Clearing project registry cache'
-            
+
             # Reset the registry to force a rescan
             $Config.Projects.Registry = @{
                 Master = @{}
@@ -43,10 +43,10 @@ function Clear-PSmmProjectRegistry {
                 LastScanned = [datetime]::MinValue
                 ProjectDirs = @{}
             }
-            
+
             Write-PSmmLog -Level DEBUG -Context 'Clear-PSmmProjectRegistry' `
                 -Message 'Project registry cache cleared' -File
-            
+
             Write-Verbose 'Project registry cache cleared successfully'
         }
         else {

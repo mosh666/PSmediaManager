@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 [CmdletBinding()]
 param(
     [switch]$CodeCoverage,
@@ -110,7 +110,7 @@ if ($CodeCoverage) {
                     $testedModules[$moduleName] = $true
                 }
             }
-            
+
             foreach ($m in $testedModules.Keys) {
                 $moduleRoot = Join-Path -Path (Join-Path -Path $repoRoot -ChildPath 'src/Modules') -ChildPath $m
                 if (-not (Test-Path -Path $moduleRoot)) { continue }

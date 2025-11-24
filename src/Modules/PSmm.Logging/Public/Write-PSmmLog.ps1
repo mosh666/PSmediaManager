@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Writes a log message to configured targets (file and/or console).
 
@@ -89,16 +89,16 @@ function Write-PSmmLog {
         }
 
         # Add requested targets
-        if ($File -and (Get-Command Add-LoggingTarget_File -ErrorAction SilentlyContinue)) { 
-            Add-LoggingTarget_File 
+        if ($File -and (Get-Command Add-LoggingTarget_File -ErrorAction SilentlyContinue)) {
+            Add-LoggingTarget_File
         }
-        if ($Console -and (Get-Command Add-LoggingTarget_Console -ErrorAction SilentlyContinue)) { 
-            Add-LoggingTarget_Console 
+        if ($Console -and (Get-Command Add-LoggingTarget_Console -ErrorAction SilentlyContinue)) {
+            Add-LoggingTarget_Console
         }
 
         # Set context if provided
-        if (-not [string]::IsNullOrWhiteSpace($Context)) { 
-            Set-LogContext -Context $Context 
+        if (-not [string]::IsNullOrWhiteSpace($Context)) {
+            Set-LogContext -Context $Context
         }
 
         # Build final log message with context

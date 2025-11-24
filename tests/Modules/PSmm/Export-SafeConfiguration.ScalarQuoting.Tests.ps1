@@ -1,4 +1,4 @@
-Describe 'Export-SafeConfiguration - Scalar quoting and numeric formatting' {
+﻿Describe 'Export-SafeConfiguration - Scalar quoting and numeric formatting' {
     BeforeAll {
         # Dot-source the implementation so nested helpers are available
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm/Public/Export-SafeConfiguration.ps1'

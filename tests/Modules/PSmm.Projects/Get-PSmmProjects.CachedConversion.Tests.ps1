@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
  $repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -17,7 +17,7 @@ Describe 'Get-PSmmProjects cached registry conversion' {
         # Remove modules to ensure clean state for this test
         if (Get-Module -Name 'PSmm.Projects' -ErrorAction SilentlyContinue) { Remove-Module -Name 'PSmm.Projects' -Force }
         if (Get-Module -Name 'PSmm' -ErrorAction SilentlyContinue) { Remove-Module -Name 'PSmm' -Force }
-        
+
         Import-Module -Name $psmmManifest -Force -ErrorAction Stop
         Import-Module -Name $projectsManifest -Force -ErrorAction Stop
     }

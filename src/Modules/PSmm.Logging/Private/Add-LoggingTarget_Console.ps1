@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Adds a console logging target to the PSLogs configuration.
 

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Rotates log files based on age and/or quantity limits.
 
@@ -67,7 +67,7 @@ function Invoke-LogRotation {
         if ($null -eq $FileSystem) {
             $FileSystem = [FileSystemService]::new()
         }
-        
+
         # Validate path using FileSystem service
         if (-not $FileSystem.TestPath($Path)) {
             throw "Path not found: $Path"
@@ -77,7 +77,7 @@ function Invoke-LogRotation {
         Write-Verbose "Pattern: $Pattern, MaxAgeDays: $MaxAgeDays, MaxFiles: $MaxFiles"
 
         # Get all log files sorted by last write time (newest first)
-        $files = @($FileSystem.GetChildItem($Path, $Pattern, 'File') | 
+        $files = @($FileSystem.GetChildItem($Path, $Pattern, 'File') |
                 Sort-Object LastWriteTime -Descending)
 
         if ($files.Count -eq 0) {

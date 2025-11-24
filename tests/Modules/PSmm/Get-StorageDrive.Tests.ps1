@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -25,7 +25,7 @@ Describe 'Get-StorageDrive' {
             Mock Get-Disk { @([pscustomobject]@{ Number = 0; Manufacturer = 'ACME'; Model = 'Turbo'; SerialNumber = 'SN001'; PartitionStyle = 'GPT' }) }
             # No partitions associated
             Mock Get-CimAssociatedInstance { @() }
-            
+
             $res = Get-StorageDrive -Verbose
             $res | Should -BeNullOrEmpty
         }

@@ -1,11 +1,11 @@
-<#
+﻿<#
 .SYNOPSIS
     PowerShell module for PSmediaManager project management.
 
 .DESCRIPTION
     Provides functions for creating, selecting, and managing media projects including
     directory structure setup, database initialization, and project configuration.
-    
+
     Features:
     - Project creation and initialization
     - Project selection and switching
@@ -32,7 +32,7 @@ if (Test-Path $CoreModulePath) {
     if (-not (Get-Module -Name 'PSmm')) {
         Import-Module $CoreModulePath -Force -Global -ErrorAction Stop
     }
-    
+
     # Also dot-source the required class files to ensure types are available
     $ClassesPath = Join-Path -Path (Split-Path $PSScriptRoot -Parent) -ChildPath 'PSmm\Classes'
     . (Join-Path $ClassesPath 'Interfaces.ps1')
@@ -64,7 +64,7 @@ try {
     # Import public functions
     if (Test-Path $PublicPath) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
-        
+
         if ($PublicFunctions.Count -gt 0) {
             foreach ($Function in $PublicFunctions) {
                 try {
@@ -84,11 +84,11 @@ try {
     else {
         throw "Public functions path not found: $PublicPath"
     }
-    
+
     # Import private functions
     if (Test-Path $PrivatePath) {
         $PrivateFunctions = @(Get-ChildItem -Path "$PrivatePath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
-        
+
         if ($PrivateFunctions.Count -gt 0) {
             foreach ($Function in $PrivateFunctions) {
                 try {

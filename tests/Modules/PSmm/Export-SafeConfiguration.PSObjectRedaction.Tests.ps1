@@ -1,4 +1,4 @@
-#Requires -Version 7.5.4
+﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 Describe 'Export-SafeConfiguration - PSObject redaction' {
@@ -19,7 +19,7 @@ Describe 'Export-SafeConfiguration - PSObject redaction' {
         Test-Path $exportPath | Should -BeTrue
         $content = Get-Content -Path $exportPath -Raw
 
-        $content | Should -Match 'Password\s*=\s*\*{2,}|Password\s*=\s*''\*{2,}''' 
+        $content | Should -Match 'Password\s*=\s*\*{2,}|Password\s*=\s*''\*{2,}'''
         $content | Should -Match 'Secret\s*=\s*\*{2,}|Secret\s*=\s*''\*{2,}'''
         # Token may be redacted or preserved depending on implementation; accept both
         ($content -match "Token\s*=\s*'abc123'" -or $content -match "Token\s*=\s*'\*{2,}'") | Should -BeTrue
