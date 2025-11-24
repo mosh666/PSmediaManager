@@ -76,7 +76,7 @@ jobs:
       - name: Run Script Analyzer
         run: |
           $pwsh = "$env:PWSH_754_PATH"
-          & $pwsh -NoLogo -NoProfile -Command "Import-Module PSScriptAnalyzer; Invoke-ScriptAnalyzer -Path ./src -Recurse -EnableExit"
+          & $pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File tests/Invoke-PSScriptAnalyzer.ps1 -TargetPath ./src -Verbose
 
       - name: Run Pester tests with coverage
         run: |
