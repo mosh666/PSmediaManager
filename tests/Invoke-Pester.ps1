@@ -4,6 +4,7 @@ param(
     [switch]$CodeCoverage,
     [string]$TestPath,
     [string]$CoverageTarget,
+    [switch]$WithPSScriptAnalyzer,
     [switch]$Quiet
 )
 
@@ -51,6 +52,22 @@ Write-Verbose "Using test path: $TestPath"
 Write-Verbose "Using coverage target: $CoverageTarget"
 Write-Verbose "Script directory: $scriptDirectory"
 Write-Verbose "Repository root: $repoRoot"
+
+if ($WithPSScriptAnalyzer) {
+    $analyzeScript = Join-Path -Path $scriptDirectory -ChildPath 'Invoke-PSScriptAnalyzer.ps1'
+    if (-not (Test-Path -Path $analyzeScript)) {
+        throw "PSScriptAnalyzer invoke script not found at $analyzeScript. Create `tests/Invoke-PSScriptAnalyzer.ps1`"
+    }
+    Write-Host "Running PSScriptAnalyzer..."
+    try {
+        & $analyzeScript -TargetPath (Join-Path -Path $repoRoot -ChildPath 'src') -SettingsFile (Join-Path -Path $scriptDirectory -ChildPath 'PSScriptAnalyzer.Settings.psd1')
+    }
+    catch {
+        Write-Host 'PSScriptAnalyzer reported issues.' -ForegroundColor Red
+        [Console]::Error.WriteLine($_.Exception.Message)
+        [System.Environment]::Exit(1)
+    }
+}
 
 if (-not (Get-Module -Name Pester -ListAvailable)) {
     throw 'Pester module is not available. Install it via Install-Module Pester -Scope CurrentUser'

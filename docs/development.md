@@ -37,11 +37,21 @@ Add new test file under matching module path. Keep one `Describe` block per func
 
 ## Static Analysis
 
+You can run static analysis using the built-in `Invoke-ScriptAnalyzer` or the project helper.
+
+Run the helper which uses the project's default settings and writes results to `tests/PSScriptAnalyzerResults.json`:
+
 ```pwsh
-Invoke-ScriptAnalyzer -Path ./src -Recurse
+./tests/Invoke-PSScriptAnalyzer.ps1
 ```
 
-Resolve all warnings before PR submission (or justify exclusions).
+Or run it together with the Pester suite (recommended for local pre-commit checks):
+
+```pwsh
+./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer
+```
+
+Resolve all warnings and errors (errors are treated as failures by the helper) before PR submission, or add justified exclusions to `tests/PSScriptAnalyzer.Settings.psd1`.
 
 ## Documentation Updates
 
