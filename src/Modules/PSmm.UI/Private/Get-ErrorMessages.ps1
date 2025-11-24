@@ -54,7 +54,7 @@ function Get-ErrorMessages {
         # Return empty array if hashtable is null or empty
         if ($null -eq $ErrorHashtable -or $ErrorHashtable.Count -eq 0) {
             Write-Verbose 'No errors found (hashtable is null or empty)'
-            return @()
+            return [string[]]@()
         }
 
         # Recursively collect error messages
@@ -65,15 +65,16 @@ function Get-ErrorMessages {
 
         # Return array
         if ($count -eq 0) {
-            return @()
+            return [string[]]@()
         }
         else {
-            return $messages.ToArray()
+            # Ensure we return a strongly-typed string[] rather than object[]
+            return [string[]]$messages.ToArray()
         }
     }
     catch {
         Write-Warning "Failed to retrieve error messages: $_"
-        return @()
+        return [string[]]@()
     }
 }
 

@@ -1,7 +1,7 @@
 ﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
-function Ensure-KeePassCliAvailability {
+function Get-KeePassCli {
     [CmdletBinding()]
     [OutputType([System.Management.Automation.CommandInfo])]
     param(
@@ -31,7 +31,7 @@ function Ensure-KeePassCliAvailability {
         return $resolution.Command
     }
 
-    Write-PSmmLog -Level WARNING -Context 'Ensure-KeePassCli' `
+    Write-PSmmLog -Level WARNING -Context 'Get-KeePassCli' `
         -Message 'keepassxc-cli.exe not found; attempting automatic KeePassXC installation (Option A)' -Console -File
 
     if (-not (Get-Command -Name Install-KeePassXC -ErrorAction SilentlyContinue)) {
@@ -48,7 +48,7 @@ function Ensure-KeePassCliAvailability {
         throw $message
     }
 
-    Write-PSmmLog -Level SUCCESS -Context 'Ensure-KeePassCli' `
+    Write-PSmmLog -Level SUCCESS -Context 'Get-KeePassCli' `
         -Message 'keepassxc-cli.exe available after automatic installation' -Console -File
 
     return $postResolution.Command

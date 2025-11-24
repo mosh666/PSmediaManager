@@ -47,7 +47,7 @@ function Get-PSmmProjectPorts {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '',
         Justification = 'Function returns multiple ports; plural form is semantically correct')]
     [CmdletBinding()]
-    [OutputType([PSCustomObject[]])]
+    [OutputType([PSCustomObject[]],[object[]])]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateNotNull()]

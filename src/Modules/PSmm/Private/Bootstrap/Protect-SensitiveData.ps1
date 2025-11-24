@@ -4,7 +4,7 @@ Set-StrictMode -Version Latest
 #region ########## PRIVATE ##########
 function Protect-ConfigurationData {
     [CmdletBinding()]
-    [OutputType([object])]
+    [OutputType([hashtable],[object[]],[string])]
     param(
         [Parameter(Mandatory)]
         [AllowNull()]

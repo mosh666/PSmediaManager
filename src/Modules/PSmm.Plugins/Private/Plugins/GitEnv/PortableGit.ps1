@@ -40,6 +40,8 @@ function Invoke-Installer-PortableGit {
         $FileSystem
     )
     try {
+        # Mark injected but unused parameter as intentionally unused for static analysis
+        $null = $FileSystem
         $ExtractPath = Join-Path -Path $Paths.Root -ChildPath (Split-Path $InstallerPath -LeafBase).Substring(0, (Split-Path $InstallerPath -LeafBase).Length - 3)
         $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -Process $Process
         Start-Process -FilePath $sevenZipCmd -ArgumentList "x `"$InstallerPath`" -o`"$ExtractPath`"" -Wait

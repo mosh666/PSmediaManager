@@ -59,7 +59,7 @@ Describe 'Ensure-KeePassCliAvailability' {
                 function Install-KeePassXC { param($Config,$Http,$Crypto,$FileSystem,$Process) $script:ensureCallCount++ }
 
                 try {
-                    $result = Ensure-KeePassCliAvailability -Config $config -Http ([pscustomobject]@{}) -Crypto ([pscustomobject]@{}) -FileSystem ([pscustomobject]@{}) -Process ([pscustomobject]@{})
+                        $result = Get-KeePassCli -Config $config -Http ([pscustomobject]@{}) -Crypto ([pscustomobject]@{}) -FileSystem ([pscustomobject]@{}) -Process ([pscustomobject]@{})
                     $result | Should -Be $fakeCommand
                     $script:ensureCallCount | Should -Be 0
                 }
@@ -95,7 +95,7 @@ Describe 'Ensure-KeePassCliAvailability' {
                 function Install-KeePassXC { param($Config,$Http,$Crypto,$FileSystem,$Process) $script:ensureCallCount++; @{ CurrentVersion = '2.7.10'; CurrentInstaller = 'KeePassXC.zip' } }
 
                 try {
-                    $result = Ensure-KeePassCliAvailability -Config $config -Http ([pscustomobject]@{}) -Crypto ([pscustomobject]@{}) -FileSystem ([pscustomobject]@{}) -Process ([pscustomobject]@{})
+                        $result = Get-KeePassCli -Config $config -Http ([pscustomobject]@{}) -Crypto ([pscustomobject]@{}) -FileSystem ([pscustomobject]@{}) -Process ([pscustomobject]@{})
                     $result | Should -Be $fakeCommand
                     $script:ensureCallCount | Should -Be 1
                 }
@@ -129,7 +129,7 @@ Describe 'Ensure-KeePassCliAvailability' {
                 try {
                     $threw = $false
                     try {
-                        Ensure-KeePassCliAvailability -Config $config -Http ([pscustomobject]@{}) -Crypto ([pscustomobject]@{}) -FileSystem ([pscustomobject]@{}) -Process ([pscustomobject]@{})
+                            Get-KeePassCli -Config $config -Http ([pscustomobject]@{}) -Crypto ([pscustomobject]@{}) -FileSystem ([pscustomobject]@{}) -Process ([pscustomobject]@{})
                     }
                     catch {
                         $threw = $true

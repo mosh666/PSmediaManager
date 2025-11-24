@@ -18,5 +18,6 @@
     # Project-wide excludes (rule names)
     ExcludeRules = @(
         # 'PSAvoidTrailingWhitespace'  # enable if you want to ignore trailing-whitespace informational findings
+        'TypeNotFound' # types are often defined at runtime or imported via module load; suppress parse-time noise
     )
 }

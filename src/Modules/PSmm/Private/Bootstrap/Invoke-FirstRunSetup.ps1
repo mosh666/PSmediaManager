@@ -34,7 +34,7 @@ Set-StrictMode -Version Latest
 
 function Invoke-FirstRunSetup {
     [CmdletBinding()]
-    [OutputType([bool])]
+    [OutputType([bool],[string])]
     param(
         [Parameter()]
         [ValidateNotNullOrEmpty()]

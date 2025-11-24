@@ -69,7 +69,9 @@ function Test-PluginFunction {
 }
 
 function Get-ResolvedPluginCommands {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Returns command mapping for multiple plugin commands; plural noun is intentional')]
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -84,7 +86,7 @@ function Get-ResolvedPluginCommands {
 }
 
 function Set-ResolvedPluginCommandPath {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Low')]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -105,14 +107,20 @@ function Set-ResolvedPluginCommandPath {
         return
     }
 
-    $commands[$CommandName] = $CommandPath
-    Write-Verbose "Resolved $CommandName at: $CommandPath"
-    Write-PSmmLog -Level INFO -Context 'Confirm-Plugins' `
-        -Message "Resolved $CommandName at $CommandPath" -Console -File
+    if ($PSCmdlet.ShouldProcess($CommandName, "Set resolved plugin command path to $CommandPath")) {
+        $commands[$CommandName] = $CommandPath
+        Write-Verbose "Resolved $CommandName at: $CommandPath"
+        Write-PSmmLog -Level INFO -Context 'Confirm-Plugins' `
+            -Message "Resolved $CommandName at $CommandPath" -Console -File
+    }
+    else {
+        Write-Verbose "Skipping set of resolved plugin command for '$CommandName' (WhatIf/Confirm)."
+    }
 }
 
 function Resolve-PluginCommandPath {
     [CmdletBinding()]
+    [OutputType([string])]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -160,7 +168,8 @@ function Resolve-PluginCommandPath {
     Executes constructor in global scope where PSmm classes are defined via ScriptsToProcess.
 #>
 function New-PSmmServiceInstance {
-    [CmdletBinding()]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidGlobalVars', '', Justification = 'Temporary global variable is used to execute constructor in global scope where PSmm types are defined')]
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Low')]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -169,6 +178,12 @@ function New-PSmmServiceInstance {
 
     try {
         Write-Verbose "[New-PSmmServiceInstance] Creating instance of $TypeName via global scope"
+
+        if (-not $PSCmdlet.ShouldProcess($TypeName, 'Instantiate PSmm service instance')) {
+            Write-Verbose "Instantiation of $TypeName skipped by ShouldProcess"
+            return
+        }
+
         # Use & with script block defined in global scope
         $global:__tempConstructor = [scriptblock]::Create("[$TypeName]::new()")
         $instance = & $global:__tempConstructor
@@ -493,6 +508,8 @@ function Get-InstallState {
 
     try {
         $pluginName = $Plugin.Config.Name
+        # Mark injected but unused parameter as intentionally unused for static analysis
+        $null = $Process
         Write-Verbose "Getting install state for: $pluginName"
 
         # Check if plugin is installed
@@ -595,6 +612,9 @@ function Get-LatestDownloadUrl {
 
     try {
         $pluginName = $Plugin.Config.Name
+        # Mark injected but unused parameters as intentionally unused for static analysis
+        $null = $FileSystem
+        $null = $Process
         $source = $Plugin.Config.Source
 
         # Ensure State bucket exists to store version metadata
@@ -697,6 +717,8 @@ function Get-Installer {
 
     try {
         $pluginName = $Plugin.Config.Name
+        # Mark injected but unused parameter as intentionally unused for static analysis
+        $null = $Process
         $fileName = Split-Path -Path $Url -Leaf
         $downloadPath = Join-Path -Path $Paths._Downloads -ChildPath $fileName
 

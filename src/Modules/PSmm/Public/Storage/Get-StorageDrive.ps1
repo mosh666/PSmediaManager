@@ -39,7 +39,7 @@ Set-StrictMode -Version Latest
 
 function Get-StorageDrive {
     [CmdletBinding()]
-    [OutputType([PSCustomObject[]])]
+    [OutputType([PSCustomObject[]],[object[]])]
     param()
 
     # Cross-platform guard: On non-Windows platforms (or when CIM cmdlets are unavailable),

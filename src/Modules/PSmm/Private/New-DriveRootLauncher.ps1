@@ -30,7 +30,7 @@
         - Log warnings if creation fails (e.g., read-only drive)
     #>
 
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
@@ -69,8 +69,13 @@
         foreach ($legacy in @($legacyCmd, $legacyPs1)) {
             if (Test-Path -LiteralPath $legacy -PathType Leaf) {
                 try {
-                    Remove-Item -LiteralPath $legacy -Force -ErrorAction Stop
-                    Write-Verbose "Removed legacy launcher: $legacy"
+                    if ($PSCmdlet.ShouldProcess($legacy, 'Remove legacy launcher')) {
+                        Remove-Item -LiteralPath $legacy -Force -ErrorAction Stop
+                        Write-Verbose "Removed legacy launcher: $legacy"
+                    }
+                    else {
+                        Write-Verbose "Skipping removal of legacy launcher (WhatIf/Confirm): $legacy"
+                    }
                 }
                 catch {
                     Write-Warning "Failed to remove legacy launcher '$legacy': $_"
@@ -87,6 +92,11 @@
         }
 
         try {
+            if (-not $PSCmdlet.ShouldProcess($launcherPath, 'Create drive root launcher')) {
+                Write-Verbose "Creation of launcher skipped by ShouldProcess: $launcherPath"
+                return
+            }
+
             $shortcut = $shell.CreateShortcut($launcherPath)
             $shortcut.TargetPath = 'pwsh.exe'
             $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$repoLauncher`""

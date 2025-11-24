@@ -175,7 +175,7 @@ function Get-PSmmProjects {
                     if ($entry -is [hashtable] -and $entry.ContainsKey('Projects')) {
                         $projectsArray = $entry['Projects']
                     }
-                    elseif ($entry -ne $null -and $entry.PSObject.Properties.Match('Projects').Count -gt 0) {
+                    elseif ($null -ne $entry -and $entry.PSObject.Properties.Match('Projects').Count -gt 0) {
                         $projectsArray = $entry.Projects
                     }
                     else {
@@ -184,7 +184,7 @@ function Get-PSmmProjects {
                     }
 
                     # Ensure $projectsArray is an array
-                    if ($projectsArray -eq $null) { $projectsArray = @() }
+                    if ($null -eq $projectsArray) { $projectsArray = @() }
                     elseif (-not ($projectsArray -is [System.Collections.IEnumerable]) -or ($projectsArray -is [string])) { $projectsArray = @($projectsArray) }
 
                     $cachedMaster[$label] = $projectsArray
@@ -198,14 +198,14 @@ function Get-PSmmProjects {
                     if ($entry -is [hashtable] -and $entry.ContainsKey('Projects')) {
                         $projectsArray = $entry['Projects']
                     }
-                    elseif ($entry -ne $null -and $entry.PSObject.Properties.Match('Projects').Count -gt 0) {
+                    elseif ($null -ne $entry -and $entry.PSObject.Properties.Match('Projects').Count -gt 0) {
                         $projectsArray = $entry.Projects
                     }
                     else {
                         $projectsArray = $entry
                     }
 
-                    if ($projectsArray -eq $null) { $projectsArray = @() }
+                    if ($null -eq $projectsArray) { $projectsArray = @() }
                     elseif (-not ($projectsArray -is [System.Collections.IEnumerable]) -or ($projectsArray -is [string])) { $projectsArray = @($projectsArray) }
 
                     $cachedBackup[$label] = $projectsArray
@@ -298,6 +298,7 @@ function Get-PSmmProjects {
         # Build a compact per-drive registry summary to avoid duplicating per-project arrays
         function Convert-ProjectsToDriveRegistry {
             [CmdletBinding()]
+            [OutputType([hashtable])]
             param(
                 [Parameter(Mandatory)][hashtable]$ProjectsByLabel
             )

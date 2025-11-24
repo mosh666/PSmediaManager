@@ -107,6 +107,9 @@ $outPath = Join-Path -Path $scriptDirectory -ChildPath 'PSScriptAnalyzerResults.
 # Normalize results to an array so `.Count` checks are safe (handles single object or $null)
 $results = @($results)
 
+# Filter out noisy parse-time type errors (TypeNotFound) that are intentionally resolved at runtime
+$results = @($results) | Where-Object { $_.RuleName -ne 'TypeNotFound' }
+
 if ($results -and $results.Count -gt 0) {
     Write-Host "PSScriptAnalyzer found $($results.Count) issue(s):" -ForegroundColor Yellow
     $results | Select-Object @{Name='FilePath';Expression={$_.ScriptName}}, RuleName, Severity, Line, Message | Format-Table -AutoSize

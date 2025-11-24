@@ -138,7 +138,7 @@ function Invoke-PSmm {
             #region ----- Load Secrets (Skip if setup is pending)
             if (-not $setupPending) {
                 Write-Verbose 'Ensuring KeePassXC CLI is available before loading secrets...'
-                $null = Ensure-KeePassCliAvailability -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $fileSystemService -Process $processService
+                $null = Get-KeePassCli -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $fileSystemService -Process $processService
 
                 Write-Verbose 'Loading secrets from KeePassXC vault...'
                 # Load secrets after logging is initialized so warnings can be properly logged

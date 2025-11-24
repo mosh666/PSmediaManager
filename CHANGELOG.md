@@ -25,6 +25,8 @@ When preparing a release, move the items into a new versioned section and update
 - Documentation: added changelog link to `README.md`.
 - Repository metadata: tidied `.github/CODEOWNERS` comment line.
 
+- Chore (2025-11-24): Documentation & metadata tidy — added changelog link to `README.md` and cleaned `.github/CODEOWNERS` comment.
+
 These are small documentation/metadata updates; move to a versioned release entry when shipping.
 
 ### Deprecated

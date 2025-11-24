@@ -95,7 +95,7 @@ function Confirm-PowerShellVersion {
         $currentVersion = $PSVersionTable.PSVersion
 
         # Optionally record current version in configuration if supported
-        try { $Config.Requirements.PowerShell.VersionCurrent = $currentVersion } catch { }
+        try { $Config.Requirements.PowerShell.VersionCurrent = $currentVersion } catch { Write-Verbose "Unable to record current PowerShell version in config: $_" }
 
         if ($currentVersion -lt $minimumVersion) {
             $message = "PowerShell version too low. Required: >=$minimumVersion, Current: $currentVersion"

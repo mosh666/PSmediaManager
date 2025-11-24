@@ -49,6 +49,7 @@ if (-not (Get-Variable -Name _VaultMasterPasswordCache -Scope Script -ErrorActio
 }
 
 function Get-KeePassCliCandidatePaths {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Returns multiple candidate paths; plural noun is intentional')]
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]

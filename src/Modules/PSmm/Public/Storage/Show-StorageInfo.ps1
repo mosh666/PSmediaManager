@@ -147,12 +147,12 @@ function Show-StorageDevice {
     }
 
     # Display basic information in sorted order with two-column layout
-    Format-TwoColumn 'Drive Letter' $Config.DriveLetter $statusColor 'Serial Number' $Config.SerialNumber 'White'
-    Format-TwoColumn 'Label' $Config.Label 'Yellow' 'Manufacturer' $(if ($drive) { $drive.Manufacturer } else { 'N/A' }) 'White'
-    Format-TwoColumn 'Model' $(if ($drive) { $drive.Model } else { 'N/A' }) 'White' 'File System' $(if ($drive) { $drive.FileSystem } else { 'N/A' }) 'White'
-    Format-TwoColumn 'Partition Kind' $(if ($drive) { $drive.PartitionKind } else { 'N/A' }) 'White' 'Total Space' $(if ($drive) { "$($drive.TotalSpace) GB" } else { 'N/A' }) 'White'
-    Format-TwoColumn 'Used Space' $(if ($drive) { "$($drive.UsedSpace) GB ($('{0:P2}' -f ($drive.UsedSpace / $drive.TotalSpace)))" } else { 'N/A' }) 'Magenta' 'Free Space' $(if ($drive) { "$($drive.FreeSpace) GB ($('{0:P2}' -f ($drive.FreeSpace / $drive.TotalSpace)))" } else { 'N/A' }) 'Green'
-    Format-TwoColumn 'Health Status' $(if ($drive) { $drive.HealthStatus } else { 'N/A' }) 'Green' 'Projects' $(if ($drive) { $drive.Number } else { 'N/A' }) 'White'
+    Format-TwoColumn -Key1 'Drive Letter' -Value1 $Config.DriveLetter -Color1 $statusColor -Key2 'Serial Number' -Value2 $Config.SerialNumber -Color2 'White'
+    Format-TwoColumn -Key1 'Label' -Value1 $Config.Label -Color1 'Yellow' -Key2 'Manufacturer' -Value2 $(if ($drive) { $drive.Manufacturer } else { 'N/A' }) -Color2 'White'
+    Format-TwoColumn -Key1 'Model' -Value1 $(if ($drive) { $drive.Model } else { 'N/A' }) -Color1 'White' -Key2 'File System' -Value2 $(if ($drive) { $drive.FileSystem } else { 'N/A' }) -Color2 'White'
+    Format-TwoColumn -Key1 'Partition Kind' -Value1 $(if ($drive) { $drive.PartitionKind } else { 'N/A' }) -Color1 'White' -Key2 'Total Space' -Value2 $(if ($drive) { "$($drive.TotalSpace) GB" } else { 'N/A' }) -Color2 'White'
+    Format-TwoColumn -Key1 'Used Space' -Value1 $(if ($drive) { "$($drive.UsedSpace) GB ($('{0:P2}' -f ($drive.UsedSpace / $drive.TotalSpace)))" } else { 'N/A' }) -Color1 'Magenta' -Key2 'Free Space' -Value2 $(if ($drive) { "$($drive.FreeSpace) GB ($('{0:P2}' -f ($drive.FreeSpace / $drive.TotalSpace)))" } else { 'N/A' }) -Color2 'Green'
+    Format-TwoColumn -Key1 'Health Status' -Value1 $(if ($drive) { $drive.HealthStatus } else { 'N/A' }) -Color1 'Green' -Key2 'Projects' -Value2 $(if ($drive) { $drive.Number } else { 'N/A' }) -Color2 'White'
 
     Write-PSmmHost ''
 }

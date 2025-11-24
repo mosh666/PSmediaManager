@@ -366,6 +366,7 @@ function Invoke-PSmmUI {
 #>
 function Invoke-SystemInfoMenu {
     [CmdletBinding()]
+    [OutputType([string])]
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -434,6 +435,7 @@ function Invoke-SystemInfoMenu {
 #>
 function Invoke-ProjectMenu {
     [CmdletBinding()]
+    [OutputType([string])]
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]

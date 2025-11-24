@@ -34,6 +34,7 @@ Set-StrictMode -Version Latest
 #region ########## PRIVATE ##########
 
 function Test-ConfigurationExports {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Validates multiple configuration exports; plural noun is intentional')]
     [CmdletBinding()]
     [OutputType([bool])]
     param(
