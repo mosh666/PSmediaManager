@@ -320,9 +320,9 @@ try {
             $uiExists = if ($null -ne $appConfig.UI) { 'Yes' } else { 'No' }
             $uiWidth = if ($null -ne $appConfig.UI -and $appConfig.UI.ContainsKey('Width')) { $appConfig.UI.Width } else { 'N/A' }
             $ansiFgCount = if ($null -ne $appConfig.UI -and $appConfig.UI.ContainsKey('ANSI') -and $appConfig.UI.ANSI.ContainsKey('FG')) { ($appConfig.UI.ANSI.FG.Keys | Measure-Object).Count } else { 0 }
-            Write-Host "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=$cfgType, UI=$uiExists, Width=$uiWidth, FGColors=$ansiFgCount)" -ForegroundColor Cyan
+            Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=$cfgType, UI=$uiExists, Width=$uiWidth, FGColors=$ansiFgCount)" -ForegroundColor Cyan
         }
-        catch { Write-Host "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=UNKNOWN, error collecting UI details: $($_.Exception.Message))" -ForegroundColor Cyan }
+        catch { Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=UNKNOWN, error collecting UI details: $($_.Exception.Message))" -ForegroundColor Cyan }
         Invoke-PSmmUI -Config $appConfig
         Write-Verbose 'UI session completed'
     }
@@ -410,10 +410,10 @@ finally {
     # Display exit message
     Write-Output ''
     if ($exitCode -eq 0) {
-        Write-Host "$($appConfig.DisplayName) exited successfully.`n" -ForegroundColor Green
+        Write-PSmmHost "$($appConfig.DisplayName) exited successfully.`n" -ForegroundColor Green
     }
     else {
-        Write-Host "$($appConfig.DisplayName) exited with errors. Check the log for details.`n" -ForegroundColor Yellow
+        Write-PSmmHost "$($appConfig.DisplayName) exited with errors. Check the log for details.`n" -ForegroundColor Yellow
     }
 
     # Exit with appropriate code

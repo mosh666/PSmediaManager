@@ -84,9 +84,9 @@ function Initialize-SystemVault {
             $resolvedPw = $script:_VaultMasterPasswordCache
         }
         if (-not $resolvedPw) {
-            Write-Host ''
-            Write-Host 'Create vault master password' -ForegroundColor Cyan
-            Write-Host 'The password must be 12+ chars and include upper, lower, and a digit.' -ForegroundColor Yellow
+            Write-PSmmHost ''
+            Write-PSmmHost 'Create vault master password' -ForegroundColor Cyan
+            Write-PSmmHost 'The password must be 12+ chars and include upper, lower, and a digit.' -ForegroundColor Yellow
             $maxAttempts = 3
             $attempt = 0
             do {
@@ -108,12 +108,12 @@ function Initialize-SystemVault {
                 $lengthOk = ($plain1.Length -ge 12)
                 $complexOk = ($plain1 -match '[A-Z]' -and $plain1 -match '[a-z]' -and $plain1 -match '\d')
                 if ($plain1 -ne $plain2) {
-                    Write-Host 'Passwords do not match. Try again.' -ForegroundColor Red
+                    Write-PSmmHost 'Passwords do not match. Try again.' -ForegroundColor Red
                     $attempt++
                     continue
                 }
                 if (-not $lengthOk -or -not $complexOk) {
-                    Write-Host 'Password not complex enough (need 12+ chars incl. upper, lower, digit).' -ForegroundColor Red
+                    Write-PSmmHost 'Password not complex enough (need 12+ chars incl. upper, lower, digit).' -ForegroundColor Red
                     $attempt++
                     continue
                 }
@@ -157,8 +157,8 @@ function Initialize-SystemVault {
             Write-PSmmLog -Level SUCCESS -Context 'Initialize-SystemVault' -Message "System vault ready at: $dbPath" -Console -File
         }
 
-            Write-Host "`n[OK] System vault initialized" -ForegroundColor Green
-            Write-Host "  Database: $dbPath" -ForegroundColor Gray
+            Write-PSmmHost "`n[OK] System vault initialized" -ForegroundColor Green
+            Write-PSmmHost "  Database: $dbPath" -ForegroundColor Gray
         return $true
     }
     catch {
@@ -281,7 +281,7 @@ function Save-SystemSecret {
             # The database password will be prompted interactively
             # Use a temporary file for the entry password to avoid stdin issues
 
-            Write-Host ""
+            Write-PSmmHost ""
             # Resolve vault password: prefer explicit parameter, then module cache, then prompt
             $resolvedVaultPw = $VaultMasterPassword
             if (-not $resolvedVaultPw -and $script:_VaultMasterPasswordCache) {
@@ -289,9 +289,9 @@ function Save-SystemSecret {
                 Write-Verbose "Using cached vault master password for secret save"
             }
             if (-not $resolvedVaultPw) {
-                Write-Host "To save the secret, please enter your vault master password." -ForegroundColor Cyan
-                Write-Host "(It will not be shown while typing)" -ForegroundColor Yellow
-                Write-Host ""
+                Write-PSmmHost "To save the secret, please enter your vault master password." -ForegroundColor Cyan
+                Write-PSmmHost "(It will not be shown while typing)" -ForegroundColor Yellow
+                Write-PSmmHost ""
                 $resolvedVaultPw = Read-Host "Enter vault master password" -AsSecureString
                 # Offer to cache the password for this session
                 $cacheAns = Read-Host 'Cache this master password for this session? [Y/n]'
@@ -389,7 +389,7 @@ function Save-SystemSecret {
                 }
             }
 
-            Write-Host "[OK] $SecretType saved successfully to KeePass vault" -ForegroundColor Green
+            Write-PSmmHost "[OK] $SecretType saved successfully to KeePass vault" -ForegroundColor Green
 
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
                 Write-PSmmLog -Level SUCCESS -Context 'Save-SystemSecret' `

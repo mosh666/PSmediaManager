@@ -83,7 +83,7 @@ function Start-PSmmdigiKam {
             # Check if this is a template project
             if ($projectName -eq '_Template_') {
                 Write-Warning 'digiKam cannot be started for template projects'
-                Write-Host ''
+                Write-PSmmHost ''
                 Read-Host -Prompt 'Press Enter to continue'
                 return
             }
@@ -94,7 +94,7 @@ function Start-PSmmdigiKam {
                 return
             }
 
-            Write-Host ''
+            Write-PSmmHost ''
             Write-PSmmLog -Level INFO -Context 'digiKam' -Message 'Starting digiKam...' -Console -File
 
             # Initialize project-specific digiKam configuration
@@ -144,16 +144,16 @@ function Start-PSmmdigiKam {
             Write-PSmmLog -Level SUCCESS -Context 'digiKam' -Message "digiKam started successfully (PID: $($digiKamProcess.Id)) for project '$projectName'" -Console -File
 
             # Display project-specific information
-            Write-Host ''
-            Write-Host "digiKam Configuration:" -ForegroundColor Green
-            Write-Host "  Project: $projectName" -ForegroundColor White
-            Write-Host "  Database Port: $databasePort" -ForegroundColor White
-            Write-Host "  APPDIR: $appDir" -ForegroundColor White
-            Write-Host "  Config File: $digiKamRcPath" -ForegroundColor White
-            Write-Host ''
-            Write-Host 'Metadata profile location:' -ForegroundColor Green
-            Write-Host "  $($projectConfig.MetadataProfile)" -ForegroundColor White
-            Write-Host ''
+            Write-PSmmHost ''
+            Write-PSmmHost "digiKam Configuration:" -ForegroundColor Green
+            Write-PSmmHost "  Project: $projectName" -ForegroundColor White
+            Write-PSmmHost "  Database Port: $databasePort" -ForegroundColor White
+            Write-PSmmHost "  APPDIR: $appDir" -ForegroundColor White
+            Write-PSmmHost "  Config File: $digiKamRcPath" -ForegroundColor White
+            Write-PSmmHost ''
+            Write-PSmmHost 'Metadata profile location:' -ForegroundColor Green
+            Write-PSmmHost "  $($projectConfig.MetadataProfile)" -ForegroundColor White
+            Write-PSmmHost ''
 
             Write-Verbose "digiKam started with PID: $($digiKamProcess.Id)"
         }

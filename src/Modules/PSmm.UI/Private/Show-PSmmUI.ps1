@@ -87,7 +87,7 @@ function Show-Header {
     $borderChar = $PSSpecialChar.SixPointStar
 
     Format-UI -Columns $Columns -Width $Config.UI.Width -ColumnSeparator '' -Border $borderChar -Config $Config
-    Write-Host ''
+    Write-PSmmHost ''
 
     # Display error messages if enabled
     if ($ShowStorageErrors) {
@@ -124,7 +124,7 @@ function Show-Header {
                 )
                 Format-UI -Columns $ErrorColumns -Width $Config.UI.Width -Config $Config
             }
-            Write-Output ''
+            Write-PSmmHost ''
         }
     }
 
@@ -370,7 +370,7 @@ function Show-MenuMain {
             @($MatchingKey)
         }
         else {
-            Write-Host "Storage Group '$StorageGroup' not found. Available groups: $($Config.Storage.Keys -join ', ')" -ForegroundColor Red
+            Write-PSmmHost "Storage Group '$StorageGroup' not found. Available groups: $($Config.Storage.Keys -join ', ')" -ForegroundColor Red
             return
         }
     }
@@ -567,14 +567,14 @@ function Show-MenuMain {
                     }
                 } elseif ($storageConfig -and -not $storageConfig.PSObject.Properties['Backups']) {
                     # Older configuration (or not yet built) where Backups property is missing entirely
-                    Write-Host '  No backup configuration defined for this storage group' -ForegroundColor DarkGray
+                    Write-PSmmHost '  No backup configuration defined for this storage group' -ForegroundColor DarkGray
                 } elseif ($storageConfig.PSObject.Properties['Backups'] -and ($null -eq $storageConfig.Backups -or $storageConfig.Backups.Count -eq 0)) {
                     # Backups property exists but empty
-                    Write-Host '  No backup drives registered for this storage group' -ForegroundColor DarkGray
+                    Write-PSmmHost '  No backup drives registered for this storage group' -ForegroundColor DarkGray
                 }
 
                 # Show a message if no projects found
-                Write-Host '  No projects found on this storage group' -ForegroundColor DarkGray
+                    Write-PSmmHost '  No projects found on this storage group' -ForegroundColor DarkGray
             }
         }
 
@@ -884,7 +884,7 @@ function Show-Menu_Project {
         }
         catch {
             Write-Warning "Show-ProjectMenuOptions_NoProcesses failed: $_"
-            Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Red
+            Write-PSmmHost "Error details: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
     else {
@@ -894,11 +894,11 @@ function Show-Menu_Project {
         }
         catch {
             Write-Warning "Show-ProjectMenuOptions_ProcessesRunning failed: $_"
-            Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Red
+            Write-PSmmHost "Error details: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
 
-    Write-Host ''
+    Write-PSmmHost ''
 
     # Common footer with navigation options
     $ReturnColumns = @(
@@ -963,7 +963,7 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         [Parameter(Mandatory)]
         [ValidateNotNull()]
         [object]$Config
-    )    Write-Host ''
+    )    Write-PSmmHost ''
 
     # Media overview
     $OverviewColumns = @(
@@ -976,7 +976,7 @@ function Show-ProjectMenuOptions_ProcessesRunning {
     )
     Format-UI -Columns $OverviewColumns -Width $Config.UI.Width -Config $Config
 
-    Write-Host ''
+    Write-PSmmHost ''
 
     # Pricing options
     $PricingColumns = @(
@@ -1009,7 +1009,7 @@ function Show-ProjectMenuOptions_ProcessesRunning {
     )
     Format-UI -Columns $NewPricingColumns -Width $Config.UI.Width -Config $Config
 
-    Write-Host ''
+    Write-PSmmHost ''
 
     # Media processing plugins
     $ImageMagickColumns = @(
@@ -1032,7 +1032,7 @@ function Show-ProjectMenuOptions_ProcessesRunning {
     )
     Format-UI -Columns $FfmpegColumns -Width $Config.UI.Width -Config $Config
 
-    Write-Host ''
+    Write-PSmmHost ''
 
     # Stop processes option
     $StopColumns = @(
@@ -1086,7 +1086,7 @@ function Show-Menu_SysInfo {
     )
     Format-UI -Columns $ConfigColumns -Width $Config.UI.Width -Config $Config
 
-    Write-Host ''
+    Write-PSmmHost ''
 
     $ReturnColumns = @(
         @{

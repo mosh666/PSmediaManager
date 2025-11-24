@@ -39,7 +39,7 @@ function Invoke-PSmmUI {
     try {
         Write-Verbose 'Starting PSmediaManager UI...'
         # Ensure at least one visible line even if formatting fails
-        Write-Host '[UI] Starting interactive session...' -ForegroundColor Green
+        Write-PSmmHost '[UI] Starting interactive session...' -ForegroundColor Green
         if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
             Write-PSmmLog -Level NOTICE -Context 'Invoke-PSmmUI' -Message 'UI interactive session starting' -File
         }
@@ -145,7 +145,7 @@ function Invoke-PSmmUI {
                 'S' {
                     # Storage Group selector
                     Write-Output ''
-                    Write-Host 'Available Storage Groups:' -ForegroundColor Cyan
+                    Write-PSmmHost 'Available Storage Groups:' -ForegroundColor Cyan
 
                     # Display each storage group with Master drive info
                     foreach ($groupKey in ($Config.Storage.Keys | Sort-Object)) {
@@ -155,20 +155,20 @@ function Invoke-PSmmUI {
                             if (-not [string]::IsNullOrWhiteSpace($masterDrive.DriveLetter)) {
                                 $driveInfo += " ($($masterDrive.DriveLetter))"
                             }
-                            Write-Host "  [$groupKey] $driveInfo" -ForegroundColor Cyan
+                            Write-PSmmHost "  [$groupKey] $driveInfo" -ForegroundColor Cyan
                         }
                         else {
-                            Write-Host "  [$groupKey] (No Master Drive)" -ForegroundColor DarkGray
+                            Write-PSmmHost "  [$groupKey] (No Master Drive)" -ForegroundColor DarkGray
                         }
                     }
 
-                    Write-Host '  [A] Show All' -ForegroundColor Cyan
+                    Write-PSmmHost '  [A] Show All' -ForegroundColor Cyan
                     Write-Output ''
                     $GroupSelection = Read-Host 'Select Storage Group'
 
                     if ($GroupSelection -eq 'A' -or [string]::IsNullOrWhiteSpace($GroupSelection)) {
                         $SelectedStorageGroup = $null
-                        Write-Host 'Showing all storage groups' -ForegroundColor Green
+                        Write-PSmmHost 'Showing all storage groups' -ForegroundColor Green
                     }
                     else {
                         # Find matching storage group key (handles string vs int comparison)
@@ -176,7 +176,7 @@ function Invoke-PSmmUI {
 
                         if ($MatchingKey) {
                             $SelectedStorageGroup = $MatchingKey
-                            Write-Host "Filtering to Storage Group $MatchingKey" -ForegroundColor Green
+                            Write-PSmmHost "Filtering to Storage Group $MatchingKey" -ForegroundColor Green
                         }
                         else {
                             Write-Warning "Invalid storage group '$GroupSelection'. Available: $($Config.Storage.Keys -join ', ')"
@@ -454,8 +454,8 @@ function Invoke-ProjectMenu {
         }
         catch {
             Write-Warning "Project menu display failed: $_"
-            Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host "Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
+            Write-PSmmHost "Error details: $($_.Exception.Message)" -ForegroundColor Red
+            Write-PSmmHost "Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
             Pause
         }
 
@@ -556,7 +556,7 @@ function Show-InvalidSelection {
         [switch]$Wait
     )
 
-    Write-Host ''
+    Write-PSmmHost ''
     $InvalidColumns = @(
         @{
             Text = 'Invalid selection, please try again.'
@@ -567,6 +567,6 @@ function Show-InvalidSelection {
     # Use no decorative border; 'None' previously produced a literal 'N' border due to non-empty string.
     # Pass empty string to suppress border characters entirely.
     Format-UI -Columns $InvalidColumns -Width 80 -Border ''
-    Write-Host ''
+    Write-PSmmHost ''
     if ($Wait) { Pause } else { Start-Sleep -Milliseconds 500 }
 }

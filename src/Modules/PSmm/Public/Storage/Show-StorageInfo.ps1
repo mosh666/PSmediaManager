@@ -39,18 +39,18 @@ function Show-StorageInfo {
     )
 
     try {
-        Write-Host "`n==================== Storage Configuration ====================" -ForegroundColor Cyan
+        Write-PSmmHost "`n==================== Storage Configuration ====================" -ForegroundColor Cyan
 
         # Get available drives if showing details
         $availableDrives = if ($ShowDetails) { Get-StorageDrive } else { $null }
 
         # Process each storage group
         foreach ($storageGroup in $Config.Storage.Keys | Sort-Object) {
-            Write-Host "`n--- Storage Group $storageGroup ---" -ForegroundColor Yellow
+            Write-PSmmHost "`n--- Storage Group $storageGroup ---" -ForegroundColor Yellow
 
             # Display Master storage
             if ($Config.Storage.$storageGroup.ContainsKey('Master')) {
-                Write-Host '  Master:' -ForegroundColor Green
+                Write-PSmmHost '  Master:' -ForegroundColor Green
                 Show-StorageDevice -Config $Config.Storage.$storageGroup.Master `
                     -AvailableDrives $availableDrives `
                     -ShowDetails:$ShowDetails
@@ -61,12 +61,12 @@ function Show-StorageInfo {
                 $backupStorage = $Config.Storage.$storageGroup.Backup
 
                 if ($backupStorage.Count -eq 0) {
-                    Write-Host '  Backup: (none configured)' -ForegroundColor DarkGray
+                    Write-PSmmHost '  Backup: (none configured)' -ForegroundColor DarkGray
                 }
                 else {
-                    Write-Host '  Backup:' -ForegroundColor Green
+                    Write-PSmmHost '  Backup:' -ForegroundColor Green
                     foreach ($backupId in $backupStorage.Keys | Sort-Object) {
-                        Write-Host "    Backup $backupId" -ForegroundColor Magenta
+                        Write-PSmmHost "    Backup $backupId" -ForegroundColor Magenta
                         Show-StorageDevice -Config $backupStorage.$backupId `
                             -AvailableDrives $availableDrives `
                             -ShowDetails:$ShowDetails `
@@ -76,7 +76,7 @@ function Show-StorageInfo {
             }
         }
 
-        Write-Host "`n===============================================================`n" -ForegroundColor Cyan
+        Write-PSmmHost "`n===============================================================`n" -ForegroundColor Cyan
     }
     catch {
         Write-Error "Failed to display storage information: $_"
@@ -131,18 +131,18 @@ function Show-StorageDevice {
         } else { '' }
 
         if ($part2) {
-            Write-Host $prefix -NoNewline
-            Write-Host "$Key1" -NoNewline -ForegroundColor Cyan
-            Write-Host ": " -NoNewline
-            Write-Host ("{0,-$($col2Width-2)}" -f $Value1) -NoNewline -ForegroundColor $Color1
-            Write-Host "$Key2" -NoNewline -ForegroundColor Cyan
-            Write-Host ": " -NoNewline
-            Write-Host $Value2 -ForegroundColor $Color2
+            Write-PSmmHost $prefix -NoNewline
+            Write-PSmmHost "$Key1" -NoNewline -ForegroundColor Cyan
+            Write-PSmmHost ": " -NoNewline
+            Write-PSmmHost ("{0,-$($col2Width-2)}" -f $Value1) -NoNewline -ForegroundColor $Color1
+            Write-PSmmHost "$Key2" -NoNewline -ForegroundColor Cyan
+            Write-PSmmHost ": " -NoNewline
+            Write-PSmmHost $Value2 -ForegroundColor $Color2
         } else {
-            Write-Host $prefix -NoNewline
-            Write-Host "$Key1" -NoNewline -ForegroundColor Cyan
-            Write-Host ": " -NoNewline
-            Write-Host $Value1 -ForegroundColor $Color1
+            Write-PSmmHost $prefix -NoNewline
+            Write-PSmmHost "$Key1" -NoNewline -ForegroundColor Cyan
+            Write-PSmmHost ": " -NoNewline
+            Write-PSmmHost $Value1 -ForegroundColor $Color1
         }
     }
 
@@ -154,7 +154,7 @@ function Show-StorageDevice {
     Format-TwoColumn 'Used Space' $(if ($drive) { "$($drive.UsedSpace) GB ($('{0:P2}' -f ($drive.UsedSpace / $drive.TotalSpace)))" } else { 'N/A' }) 'Magenta' 'Free Space' $(if ($drive) { "$($drive.FreeSpace) GB ($('{0:P2}' -f ($drive.FreeSpace / $drive.TotalSpace)))" } else { 'N/A' }) 'Green'
     Format-TwoColumn 'Health Status' $(if ($drive) { $drive.HealthStatus } else { 'N/A' }) 'Green' 'Projects' $(if ($drive) { $drive.Number } else { 'N/A' }) 'White'
 
-    Write-Host ''
+    Write-PSmmHost ''
 }
 
 #endregion ########## PUBLIC ##########

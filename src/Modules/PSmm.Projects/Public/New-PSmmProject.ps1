@@ -137,13 +137,13 @@ function New-PSmmProject {
             New-KeePassDatabase -vaultPath $vaultPath -dbName $dbName
 
             # Prompt for MariaDB credentials entry
-            Write-Host "`nPlease enter a secure password for MariaDB root user:" -ForegroundColor Yellow
-            Write-Host "Press ENTER without typing to auto-generate a secure password" -ForegroundColor Gray
+            Write-PSmmHost "`nPlease enter a secure password for MariaDB root user:" -ForegroundColor Yellow
+            Write-PSmmHost "Press ENTER without typing to auto-generate a secure password" -ForegroundColor Gray
             $mariaDBPassword = Read-Host "MariaDB Password" -AsSecureString
 
             # Validate that user entered a password
             if ($mariaDBPassword.Length -eq 0) {
-                Write-Host "Generating a secure random password..." -ForegroundColor Yellow
+                Write-PSmmHost "Generating a secure random password..." -ForegroundColor Yellow
 
                 # Generate a cryptographically secure random password
                 $passwordBytes = New-Object byte[] 24
@@ -155,10 +155,10 @@ function New-PSmmProject {
                 $randomPassword = [Convert]::ToBase64String($passwordBytes).Substring(0, 20)
 
                 # Display the generated password to user
-                Write-Host "`nGenerated password: " -NoNewline -ForegroundColor Cyan
-                Write-Host $randomPassword -ForegroundColor Green
-                Write-Host "IMPORTANT: Save this password in a secure location NOW!" -ForegroundColor Red
-                Write-Host "Press any key to continue after saving the password..." -ForegroundColor Yellow
+                Write-PSmmHost "`nGenerated password: " -NoNewline -ForegroundColor Cyan
+                Write-PSmmHost $randomPassword -ForegroundColor Green
+                Write-PSmmHost "IMPORTANT: Save this password in a secure location NOW!" -ForegroundColor Red
+                Write-PSmmHost "Press any key to continue after saving the password..." -ForegroundColor Yellow
                 $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 
                 # Convert to SecureString securely (from character array to avoid string in memory)

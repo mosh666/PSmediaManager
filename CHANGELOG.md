@@ -43,6 +43,10 @@ These are small documentation/metadata updates; move to a versioned release entr
 
 - Fix: Constructed `SecureString` safely in `src/Modules/PSmm.Plugins/Private/Confirm-Plugins.ps1` to avoid using `ConvertTo-SecureString -AsPlainText -Force`. (commit `c148f77`)
 - Fix: Normalize analyzer runner outputs in `tests/Invoke-PSScriptAnalyzer.ps1` (`$results` and `$errors` coerced to arrays) to prevent `.Count` property errors when a single object is returned. (commit `c148f77`)
+- Chore: Add `Write-PSmmHost` wrapper and replace scattered `Write-Host` calls across interactive scripts to centralize host output and improve static analysis compliance. (2025-11-24)
+- Fix: Allow empty messages in `Write-PSmmHost` to prevent parameter binding errors when emitting blank lines during interactive setup. (2025-11-24)
+- Fix: Harden `Write-PSmmHost` with comment-based help, `[OutputType]` and an analyzer suppression attribute for intentional `Write-Host` usage in interactive path. (2025-11-24)
+- Perf/Quality: Reduced PSScriptAnalyzer issues from 216 → 72 by replacing `Write-Host` usages and improving wrapper behavior; results saved to `tests/PSScriptAnalyzerResults.json`. (2025-11-24)
 
 ### Security
 

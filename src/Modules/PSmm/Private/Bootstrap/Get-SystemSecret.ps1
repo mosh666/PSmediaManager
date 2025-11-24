@@ -218,12 +218,12 @@ function Get-SystemSecret {
 
         # Retrieve password field from KeePass entry
         # Provide master password via stdin to avoid silent prompt and to allow custom messaging.
-        Write-Host "Unlocking vault to read secret ($SecretType)..." -ForegroundColor Cyan
+        Write-PSmmHost "Unlocking vault to read secret ($SecretType)..." -ForegroundColor Cyan
 
         # Resolve from cache if present
         $masterPw = $script:_VaultMasterPasswordCache
         if (-not $masterPw) {
-            Write-Host "Enter vault master password (input hidden):" -ForegroundColor Yellow
+            Write-PSmmHost "Enter vault master password (input hidden):" -ForegroundColor Yellow
             # Prompt user explicitly (KeePassXC would otherwise prompt without context)
             $masterPw = Read-Host 'Vault Master Password' -AsSecureString
             # Offer to cache for this session

@@ -182,7 +182,7 @@ function Format-UI {
         }
 
         # Write output directly to host to ensure visibility
-        Write-Host $output
+        Write-PSmmHost $output
 
         if ([string]::IsNullOrWhiteSpace(($output -replace '\x1b\[[0-9;]*m', '').Trim())) {
             Write-Verbose '[Format-UI] Output appears empty after stripping ANSI sequences.'

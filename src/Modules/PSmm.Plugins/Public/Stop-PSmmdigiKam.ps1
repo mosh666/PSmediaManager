@@ -67,7 +67,7 @@ function Stop-PSmmdigiKam {
                 return
             }
 
-            Write-Host ''
+            Write-PSmmHost ''
             Write-PSmmLog -Level INFO -Context 'digiKam' -Message 'Stopping digiKam...' -Console -File
 
             # Get project-specific paths - check if this is the current project
@@ -180,7 +180,7 @@ function Stop-PSmmdigiKam {
                 Write-PSmmLog -Level INFO -Context 'digiKam' -Message 'No running digiKam or MariaDB processes found for this project' -Console -File
             }
 
-            Write-Host ''
+            Write-PSmmHost ''
         }
         catch {
             $errorMessage = if ($_.Exception -is [MediaManagerException]) {
