@@ -56,6 +56,7 @@ These are small documentation/metadata updates; move to a versioned release entr
 - Tooling: Dot-source `tests/Preload-PSmmTypes.ps1` within `tests/Invoke-PSScriptAnalyzer.ps1` so CI runs preload PSmm classes/interfaces and no longer spam `TypeNotFound` parse noise.
 - Tooling: Made `tests/Preload-PSmmTypes.ps1` path calculations platform-agnostic (no Windows-only separators) so CI on Linux can preload PSmm classes and avoid `TypeNotFound` spam.
 - CI: Updated `.github/workflows/ci.yml` to run the repository's `tests/Invoke-PSScriptAnalyzer.ps1` wrapper (with preload and filtering) instead of a raw `Invoke-ScriptAnalyzer` call so GitHub Actions respects the same analyzer setup as local devs.
+- Tests: Hardened `tests/Invoke-Pester.ps1` shutdown logic by forcing `Environment.Exit` on GitHub Actions while defaulting to `exit` locally; added `-PassThru` to keep the result object in scripts without auto-exiting. Prevents CI hangs without trapping interactive shells.
 
 - Fix (2025-11-24): Export `Write-PSmmHost` from the `PSmm` module and ensure exit messaging is written before modules are unloaded.
   - Symptom: `The term 'Write-PSmmHost' is not recognized` during application shutdown in some sessions.

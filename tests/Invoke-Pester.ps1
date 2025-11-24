@@ -5,7 +5,8 @@ param(
     [string]$TestPath,
     [string]$CoverageTarget,
     [switch]$WithPSScriptAnalyzer,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$PassThru
 )
 
 Set-StrictMode -Version Latest
@@ -341,7 +342,32 @@ if ($result.FailedCount -gt 0) {
     [Console]::Error.WriteLine($msg)
 }
 else {
-Write-Host 'All Pester tests passed.' -ForegroundColor Green
+    Write-Host 'All Pester tests passed.' -ForegroundColor Green
 }
 
-exit
+$ciContext = [string]::Equals($env:GITHUB_ACTIONS, 'true', [System.StringComparison]::OrdinalIgnoreCase) -or
+    [string]::Equals($env:MEDIA_MANAGER_FORCE_EXIT, '1', [System.StringComparison]::OrdinalIgnoreCase)
+
+[int]$exitCode = if ($result.FailedCount -gt 0) {
+    [Math]::Min([int][Math]::Abs($result.FailedCount), [int]::MaxValue)
+}
+else {
+    0
+}
+
+$global:LASTEXITCODE = $exitCode
+
+if ($PassThru) {
+    if ($exitCode -ne 0) {
+        throw $msg
+    }
+    return $result
+}
+
+if ($ciContext) {
+    Write-Verbose "CI context detected. Forcing process exit with code $exitCode via Environment::Exit"
+    [System.Environment]::Exit($exitCode)
+}
+else {
+    exit $exitCode
+}
