@@ -27,6 +27,9 @@ When preparing a release, move the items into a new versioned section and update
 
 - Chore (2025-11-24): Documentation & metadata tidy — added changelog link to `README.md` and cleaned `.github/CODEOWNERS` comment.
 
+- Startup script: recalculated `Start-PSmediaManager.ps1`'s path to `src/PSmediaManager.ps1` with nested `Join-Path` calls to avoid analyzer complaints and edge-case path concatenation errors.
+- Tooling: wrapped the `TypeNotFound` filter in `tests/Invoke-PSScriptAnalyzer.ps1` so the analyzer results stay in an array even when PowerShell returns a single object.
+
 These are small documentation/metadata updates; move to a versioned release entry when shipping.
 
 ### Deprecated
@@ -36,6 +39,7 @@ These are small documentation/metadata updates; move to a versioned release entr
 ### Removed
 
 - Breaking API removals.
+- Tests: retired `tests/Modules/PSmm/Exit-Order.Tests.ps1` now that `Write-PSmmHost` export coverage is handled via module tests and integration smoke runs.
 
 ### Fixed
 

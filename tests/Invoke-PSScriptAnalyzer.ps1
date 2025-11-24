@@ -108,7 +108,7 @@ $outPath = Join-Path -Path $scriptDirectory -ChildPath 'PSScriptAnalyzerResults.
 $results = @($results)
 
 # Filter out noisy parse-time type errors (TypeNotFound) that are intentionally resolved at runtime
-$results = @($results) | Where-Object { $_.RuleName -ne 'TypeNotFound' }
+$results = @($results | Where-Object { $_.RuleName -ne 'TypeNotFound' })
 
 if ($results -and $results.Count -gt 0) {
     Write-Host "PSScriptAnalyzer found $($results.Count) issue(s):" -ForegroundColor Yellow

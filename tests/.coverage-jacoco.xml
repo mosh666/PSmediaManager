@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd"[]>
-<report name="Pester (11/24/2025 19:53:23)">
-  <sessioninfo id="this" start="1764013981898" dump="1764014003685" />
+<report name="Pester (11/24/2025 20:11:20)">
+  <sessioninfo id="this" start="1764015061848" dump="1764015080590" />
   <package name="Modules/PSmm.Logging/Public">
     <class name="Modules/PSmm.Logging/Public/Set-LogContext" sourcefilename="PSmm.Logging/Public/Set-LogContext.ps1">
       <method name="&lt;script&gt;" desc="()" line="25">

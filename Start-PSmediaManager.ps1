@@ -63,7 +63,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Determine the path to the main application script
-$MainScript = Join-Path $PSScriptRoot 'src' 'PSmediaManager.ps1'
+$MainScript = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath 'src') -ChildPath 'PSmediaManager.ps1'
 
 # Verify the main script exists
 if (-not (Test-Path $MainScript -PathType Leaf)) {

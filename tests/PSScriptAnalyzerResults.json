@@ -1,23 +1,7 @@
-[
-  {
-    "FilePath": "Get-SystemSecret.ps1",
-    "RuleName": "PSUseSingularNouns",
-    "Severity": 1,
-    "Line": 51,
-    "Message": "The cmdlet 'Get-KeePassCliCandidatePaths' uses a plural noun. A singular noun should be used instead."
-  },
-  {
-    "FilePath": "Test-SecretsSecurity.ps1",
-    "RuleName": "PSUseSingularNouns",
-    "Severity": 1,
-    "Line": 36,
-    "Message": "The cmdlet 'Test-ConfigurationExports' uses a plural noun. A singular noun should be used instead."
-  },
-  {
-    "FilePath": "Confirm-Plugins.ps1",
-    "RuleName": "PSUseSingularNouns",
-    "Severity": 1,
-    "Line": 71,
-    "Message": "The cmdlet 'Get-ResolvedPluginCommands' uses a plural noun. A singular noun should be used instead."
-  }
-]
+{
+  "FilePath": "Start-PSmediaManager.ps1",
+  "RuleName": "PSAvoidUsingPositionalParameters",
+  "Severity": 0,
+  "Line": 66,
+  "Message": "Cmdlet 'Join-Path' has positional parameter. Please use named parameters instead of positional parameters when calling a command."
+}
