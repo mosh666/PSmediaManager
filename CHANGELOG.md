@@ -39,6 +39,11 @@ These are small documentation/metadata updates; move to a versioned release entr
 
 - Bug fixes.
 
+#### 2025-11-24
+
+- Fix: Constructed `SecureString` safely in `src/Modules/PSmm.Plugins/Private/Confirm-Plugins.ps1` to avoid using `ConvertTo-SecureString -AsPlainText -Force`. (commit `c148f77`)
+- Fix: Normalize analyzer runner outputs in `tests/Invoke-PSScriptAnalyzer.ps1` (`$results` and `$errors` coerced to arrays) to prevent `.Count` property errors when a single object is returned. (commit `c148f77`)
+
 ### Security
 
 - Vulnerability fixes and notes.
