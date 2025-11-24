@@ -2,6 +2,7 @@
 
 Portable, modular PowerShell-based media management application. PSmediaManager orchestrates external tooling (digiKam, FFmpeg, ImageMagick, MariaDB, ExifTool, KeePassXC, MKVToolNix, Git utilities) via a plugin layer while providing a safe configuration system, structured logging, project management, and an interactive console UI.
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/a41b0b4adba94c519e9c8bbfcffd5236)](https://app.codacy.com/gh/mosh666/PSmediaManager?utm_source=github.com&utm_medium=referral&utm_content=mosh666/PSmediaManager&utm_campaign=Badge_Grade)
 [![CI](https://github.com/mosh666/PSmediaManager/actions/workflows/ci.yml/badge.svg)](https://github.com/mosh666/PSmediaManager/actions/workflows/ci.yml)
 [![Coverage Artifacts](https://img.shields.io/badge/coverage-uploaded--via--Pester-blue)](https://github.com/mosh666/PSmediaManager/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
