@@ -398,6 +398,15 @@ finally {
     # Temporary environment path tracking removed; no-op for unregister.
     Write-Verbose 'Temporary environment path tracking removed; skipping unregister.'
 
+    # Display exit message while module helpers are still available
+    Write-Output ''
+    if ($exitCode -eq 0) {
+        Write-PSmmHost "$($appConfig.DisplayName) exited successfully.`n" -ForegroundColor Green
+    }
+    else {
+        Write-PSmmHost "$($appConfig.DisplayName) exited with errors. Check the log for details.`n" -ForegroundColor Yellow
+    }
+
     # Remove imported modules (clean up PowerShell session)
     Write-Verbose 'Removing imported modules...'
     try {
@@ -405,15 +414,6 @@ finally {
     }
     catch {
         Write-Warning "Failed to remove modules: $_"
-    }
-
-    # Display exit message
-    Write-Output ''
-    if ($exitCode -eq 0) {
-        Write-PSmmHost "$($appConfig.DisplayName) exited successfully.`n" -ForegroundColor Green
-    }
-    else {
-        Write-PSmmHost "$($appConfig.DisplayName) exited with errors. Check the log for details.`n" -ForegroundColor Yellow
     }
 
     # Exit with appropriate code

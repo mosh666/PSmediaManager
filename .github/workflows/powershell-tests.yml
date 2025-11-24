@@ -20,6 +20,8 @@ jobs:
     runs-on: windows-latest
     env:
       POWERSHELL_TELEMETRY_OPTOUT: '1'
+      MEDIA_MANAGER_TEST_MODE: '1'
+      MEDIA_MANAGER_SKIP_READKEY: '1'
 
     steps:
       - name: Checkout repository

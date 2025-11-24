@@ -164,3 +164,7 @@ Export-ModuleMember -Function @(
     # Drive Root Launcher
     'New-DriveRootLauncher'
 )
+
+# Ensure host output helper is exported so scripts (outside the module)
+# can call it after importing PSmm. This centralizes host I/O.
+Export-ModuleMember -Function 'Write-PSmmHost'

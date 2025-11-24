@@ -109,6 +109,12 @@ Write-PSmmLog -Level Info -Message 'Started session'
 
 See module manifests for full public function lists.
 
+### Recent Fixes
+
+- Exported `Write-PSmmHost` from the `PSmm` module and ensured exit messaging runs before modules are unloaded.
+	- Symptom: `The term 'Write-PSmmHost' is not recognized` could occur during shutdown.
+	- Files: `src/Modules/PSmm/PSmm.psm1`, `src/Modules/PSmm/PSmm.psd1`, `src/PSmediaManager.ps1`.
+
 ## Configuration System
 
 Built around `AppConfiguration` and `AppConfigurationBuilder` classes:

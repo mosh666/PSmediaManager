@@ -57,6 +57,8 @@
         'Save-SystemSecret'
         # Drive Root Launcher
         'New-DriveRootLauncher'
+        # Host output helper exported so scripts can call centralized output
+        'Write-PSmmHost'
     )
 
     # Cmdlets to export from this module
