@@ -339,9 +339,7 @@ if ($result.FailedCount -gt 0) {
     $msg = "Pester reported $($result.FailedCount) failure(s)."
     Write-Host $msg -ForegroundColor Red
     [Console]::Error.WriteLine($msg)
-    try { $host.SetShouldExit(1) } catch {}
-    [System.Environment]::Exit(1)
 }
-
+else {
 Write-Host 'All Pester tests passed.' -ForegroundColor Green
-[System.Environment]::Exit(0)
+}

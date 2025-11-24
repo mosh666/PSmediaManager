@@ -17,7 +17,7 @@ $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDirectory
 
 if ([string]::IsNullOrWhiteSpace($TargetPath)) {
-    $TargetPath = Join-Path -Path $repoRoot -ChildPath 'src'
+    $TargetPath = Join-Path -Path $repoRoot -ChildPath ''
 }
 
 if ([string]::IsNullOrWhiteSpace($SettingsFile)) {
@@ -52,7 +52,7 @@ if (Test-Path -Path $SettingsFile) {
 
 # Build exclude paths (full paths) for known noisy folders
 $excludePaths = @()
-$possibleExcludes = @('tests','docs','.git','vendor')
+$possibleExcludes = @('tests','.git')
 foreach ($p in $possibleExcludes) {
     $full = Join-Path -Path $repoRoot -ChildPath $p
     if (Test-Path -Path $full) { $excludePaths += $full }
