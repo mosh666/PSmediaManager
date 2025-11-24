@@ -56,7 +56,7 @@ Write-Verbose "Repository root: $repoRoot"
 if ($WithPSScriptAnalyzer) {
     $analyzeScript = Join-Path -Path $scriptDirectory -ChildPath 'Invoke-PSScriptAnalyzer.ps1'
     if (-not (Test-Path -Path $analyzeScript)) {
-        throw "PSScriptAnalyzer invoke script not found at $analyzeScript. Create `tests/Invoke-PSScriptAnalyzer.ps1`"
+        throw "PSScriptAnalyzer invoke script not found at $analyzeScript. Create tests/Invoke-PSScriptAnalyzer.ps1"
     }
     Write-Host "Running PSScriptAnalyzer..."
     try {
