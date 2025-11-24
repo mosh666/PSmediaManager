@@ -27,7 +27,8 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 15. [Contributing](#contributing)
 16. [Roadmap](#roadmap)
 17. [FAQ](#faq)
-18. [License](#license)
+18. [Changelog](#changelog)
+19. [License](#license)
 
 ## Features
 
@@ -281,6 +282,10 @@ Planned enhancements (subject to change):
 ---
 
 If you find issues or have feature ideas, please open an issue. Feedback accelerates maturity.
+
+## Changelog
+
+See the full changelog and release notes in the repository root: [CHANGELOG.md](./CHANGELOG.md)
 
 ## License
 

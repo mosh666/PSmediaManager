@@ -1,0 +1,88 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+This project adheres to "Keep a Changelog" ([Keep a Changelog](https://keepachangelog.com/en/1.0.0/)) and uses Semantic Versioning ([SemVer](https://semver.org/)).
+
+The format below is designed for clear GitHub Releases and PowerShell module maintenance.
+
+## [Unreleased]
+
+Use this section for in-progress changes that will be included in the next release.
+
+When preparing a release, move the items into a new versioned section and update the date.
+
+### Added
+
+- New features.
+
+### Changed
+
+- Backwards-compatible changes to existing functionality.
+
+#### Current edits (2025-11-24)
+
+- Documentation: added changelog link to `README.md`.
+- Repository metadata: tidied `.github/CODEOWNERS` comment line.
+
+These are small documentation/metadata updates; move to a versioned release entry when shipping.
+
+### Deprecated
+
+- Once-proposed features scheduled for removal.
+
+### Removed
+
+- Breaking API removals.
+
+### Fixed
+
+- Bug fixes.
+
+### Security
+
+- Vulnerability fixes and notes.
+
+## [v1.0.0] - YYYY-MM-DD
+
+- Initial public scaffold and core modules.
+
+---
+
+## How to use this changelog (recommended workflow)
+
+- Keep entries under `Unreleased` as you work (use the category headings above).
+- When ready to ship:
+
+  1. Create a release branch or tag (e.g. `vX.Y.Z`).
+  2. Move `Unreleased` entries into a new header `## [vX.Y.Z] - YYYY-MM-DD` and fill the date.
+  3. Create a GitHub Release with the same notes (you can paste the section body into the release description).
+  4. Tag the commit: `git tag -a vX.Y.Z -m "Release vX.Y.Z"` and `git push --tags`.
+
+## PowerShell-specific recommendations
+
+- If this repo publishes PowerShell modules (PSD1 manifests), update module `Version` in the appropriate `*.psd1` files to match the release tag.
+
+  - Example: update `ModuleVersion` or `Version` fields inside `src/Modules/PSmm/PSmm.psd1`.
+
+- Add a short compatibility note when changing minimum PowerShell requirement (e.g. `PowerShell 7.5.4+`).
+
+- When changes affect public cmdlet names/signatures, list the impacted functions (module and function names).
+
+## Automating releases (optional)
+
+- Use GitHub Actions or Release Drafter to generate draft release notes automatically.
+
+- Example: configure an Action to use `git log --format=%B` or `github-release-notes` to combine Conventional Commit messages into release notes.
+
+## Tips
+
+- Use Conventional Commits for clear automated release note generation (e.g., `feat:`, `fix:`, `chore:`).
+- Keep `Unreleased` concise. Move entries to a versioned section at release time.
+- Link to issues/PRs for context when relevant (e.g., `(#123)`).
+
+## References
+
+- [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
+- [Semantic Versioning](https://semver.org/)
+- [GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
