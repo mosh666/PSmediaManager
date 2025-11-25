@@ -200,16 +200,22 @@ Write-PSmmLog -Level Info -Message 'Initialization complete'
 
 Pester suite resides under `tests/Modules/...` with helpers in `tests/Support`.
 
-Run all tests:
+Run the repository harness (mirrors CI) to execute analyzer + tests with coverage:
 
 ```pwsh
-./tests/Invoke-Pester.ps1
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer -CodeCoverage -Quiet
 ```
 
-Update coverage baseline (post validated changes):
+Key behavior:
+
+- Wraps `Invoke-PSScriptAnalyzer.ps1`, which preloads PSmm types so `TypeNotFound` noise is filtered before enforcing errors.
+- Persists results to `tests/PSScriptAnalyzerResults.json`, `tests/TestResults.xml`, `.coverage-jacoco.xml`, and `.coverage-latest.json` (currently 61.35% line coverage enforced by baseline).
+- Supports `-PassThru` for tooling scenarios and sets the exit code the same way GitHub Actions does (Environment.Exit in CI contexts).
+
+After legitimate coverage improvements, refresh the baseline to keep CI green:
 
 ```pwsh
-./tests/Update-CoverageBaseline.ps1
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Update-CoverageBaseline.ps1
 ```
 
 Guidelines:
@@ -217,24 +223,26 @@ Guidelines:
 - Prefer focused unit tests per exported function.
 - Add regression tests when fixing bugs (especially config/serialization edge cases).
 - Keep mocks isolated in `tests/Support` scripts.
+- Use `-PassThru` during local authoring when you need the raw Pester result without exiting your shell.
 
-Static Analysis:
+Static Analysis (standalone run with repo settings):
 
 ```pwsh
-Invoke-ScriptAnalyzer -Path ./src -Recurse
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-PSScriptAnalyzer.ps1 -TargetPath ./src -Verbose
 ```
 
 ## Development
 
 Recommended workflow:
 
-1. Create a feature branch: `git switch -c feature/<short-desc>`.
-2. Add or adjust module functions (use approved PowerShell verbs).
-3. Add Pester tests first (TDD where practical).
-4. Run `Invoke-ScriptAnalyzer` & tests locally.
-5. Update README / docs for new public functions.
-6. Use Conventional Commits for history clarity: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`.
-7. Submit PR targeting `main`.
+1. Use the GitHub issue templates to propose features/bugs before starting work.
+2. Create a feature branch: `git switch -c feature/<short-desc>`.
+3. Add or adjust module functions (use approved PowerShell verbs; prefer `Set-StrictMode -Version Latest`).
+4. Write/extend Pester coverage alongside the change.
+5. Run `./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer -CodeCoverage` (same command CI executes) plus any targeted analyzer runs.
+6. Update README / docs for new public functions, configuration keys, or workflows.
+7. Use Conventional Commits for history clarity: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `ci:`, `chore:`.
+8. Submit PRs via the provided template and ensure the CODEOWNERS reviewers auto-requested by GitHub are satisfied.
 
 Coding Practices:
 
@@ -243,33 +251,34 @@ Coding Practices:
 - Use classes for complex services (see `Classes/Services`).
 - Keep manifests (`*.psd1`) curated: only export intentional public surface.
 
-Potential CI (GitHub Actions) suggestions:
+Continuous integration:
 
-- Lint / analyze: PSScriptAnalyzer.
-- Unit tests: Pester with coverage artifact upload.
-- Security scanning: script / secret scanning.
-- Release tagging: auto update module version & release notes.
+- `.github/workflows/ci.yml` installs PowerShell 7.5.4, the required PSGallery modules, runs `tests/Invoke-PSScriptAnalyzer.ps1`, then `tests/Invoke-Pester.ps1 -CodeCoverage -Quiet`, and uploads analyzer/test/coverage artifacts.
+- `.github/workflows/codacy.yml` runs Codacy Analysis CLI and uploads SARIF results via `github/codeql-action/upload-sarif@v4` so findings appear in GitHub code scanning alongside CodeQL results.
+- Coverage baselines are enforced via `tests/.coverage-baseline.json`; commits that lower coverage fail CI until baseline is updated intentionally.
 
 ## Security
 
 - Secrets stored via KeePassXC CLI integration (not plain text).
 - Redaction utilities for configuration exports.
 - No silent elevation or registry writes outside project registry scope.
-- Report vulnerabilities via ISSUE with label `security` or follow `SECURITY.md` guidance.
+- Automated scanning: CodeQL (via GitHub Advanced Security) and Codacy SARIF uploads run on every push/PR to `main` and `dev` plus a weekly schedule.
+- Report vulnerabilities privately using the GitHub Security Advisories form (preferred) or follow the steps in [SECURITY.md](SECURITY.md) for a sanitized disclosure that includes an `Export-SafeConfiguration` snapshot.
 
 ## Contributing
 
-See `CONTRIBUTING.md` for detailed guidelines. Highlights:
+See `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` for detailed guidelines. Highlights:
 
-- Discuss large changes first via issue.
-- Ensure tests + analyzer pass; include docs updates.
-- Maintain modular boundaries (do not couple UI logic into core services).
+- Discuss large changes first via issue or GitHub Discussion; use the provided templates so maintainers have reproducible context.
+- Ensure analyzer + tests pass locally using the same harness CI consumes; include docs updates for any public surface change.
+- Maintain modular boundaries (do not couple UI logic into core services) and keep PowerShell best practices (approved verbs, comment-based help for public functions).
+- By contributing you agree to follow the Code of Conduct and accept that CODEOWNERS may request additional changes before merge.
 
 ## Roadmap
 
 Planned enhancements (subject to change):
 
-- Add GitHub Actions CI pipeline (lint, test, artifact packaging).
+- Re-enable the Linux matrix in CI once analyzer preloading stabilizes across platforms.
 - Plugin caching strategy & hash verification.
 - Optional PowerShell Gallery packaging of core modules.
 - Extended UI navigation (search/filter projects).

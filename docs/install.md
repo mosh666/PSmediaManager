@@ -51,6 +51,16 @@ git pull origin main
 
 Re-run `Confirm-Plugins` for any newly added external tool definitions.
 
+## Post-Install Validation
+
+Before opening a pull request or filing an issue, run the same harness that GitHub Actions executes to confirm analyzers and tests succeed locally:
+
+```pwsh
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer -CodeCoverage -Quiet
+```
+
+The script preloads PSmm classes, enforces the coverage baseline stored in `tests/.coverage-baseline.json`, and writes analyzer/test artifacts under `tests/`. Matching CI behavior locally speeds up reviews and reduces failed checks.
+
 ## Optional: Shortcut Wrapper
 
 Create a `.ps1` or OS shortcut that runs `Start-PSmediaManager.ps1` for rapid access.

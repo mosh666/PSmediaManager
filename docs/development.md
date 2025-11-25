@@ -2,8 +2,9 @@
 
 ## Branching
 
-- `main`: stable, reviewed code.
-- `feature/<short-desc>`: new work.
+- `main`: stable, reviewed code intended for releases.
+- `dev`: active integration branch where maintainers stage upcoming changes. Base contributor work on `dev` unless coordinating directly on `main`.
+- `feature/<short-desc>`: contributor branches forked from `dev` (preferred) or `main` when hotfixes are required.
 - Optional `hotfix/<issue-id>` for rapid patches.
 
 ## Commits
@@ -27,37 +28,32 @@ refactor: extract plugin version resolver
 
 ## Testing
 
-Run entire suite:
+Run the exact harness that CI executes so analyzer, tests, and coverage behave identically:
 
 ```pwsh
-./tests/Invoke-Pester.ps1
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer -CodeCoverage -Quiet
 ```
 
-Add new test file under matching module path. Keep one `Describe` block per function family.
+This script dot-sources `tests/Invoke-PSScriptAnalyzer.ps1`, preloads PSmm classes (preventing `TypeNotFound` noise), enforces the coverage baseline stored in `tests/.coverage-baseline.json`, and captures diagnostics under `tests/.coverage-debug.txt` whenever coverage paths change.
+
+Add new test files under the matching `tests/Modules/<ModuleName>` path. Keep one `Describe` block per function family and narrow `Context` blocks for edge cases.
 
 ## Static Analysis
 
-You can run static analysis using the built-in `Invoke-ScriptAnalyzer` or the project helper.
-
-Run the helper which uses the project's default settings and writes results to `tests/PSScriptAnalyzerResults.json`:
+Always prefer the repository helper so the curated settings and preload script are honored:
 
 ```pwsh
-./tests/Invoke-PSScriptAnalyzer.ps1
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-PSScriptAnalyzer.ps1 -TargetPath ./src -Verbose
 ```
 
-Or run it together with the Pester suite (recommended for local pre-commit checks):
-
-```pwsh
-./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer
-```
-
-Resolve all warnings and errors (errors are treated as failures by the helper) before PR submission, or add justified exclusions to `tests/PSScriptAnalyzer.Settings.psd1`.
+Running `./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer` automatically invokes the helper. Results are normalized to arrays, filtered for intentional `TypeNotFound` entries, and written to `tests/PSScriptAnalyzerResults.json` for triage. Resolve all warnings/errors (errors fail the helper) or document well-justified suppressions in `tests/PSScriptAnalyzer.Settings.psd1`.
 
 ## Documentation Updates
 
-- Update `README.md` for new public features.
-- Expand relevant doc section.
-- If adding configuration keys, update `configuration.md`.
+- Update `README.md` for new public features or workflows.
+- Expand any relevant doc section (`architecture.md`, `modules.md`, `install.md`, etc.).
+- If adding configuration keys, update `configuration.md` and note how to export them safely via `Export-SafeConfiguration`.
+- Mention CI/security workflow impacts (new jobs, prerequisites) so GitHub users know which checks run.
 
 ## Release Process (Proposed)
 
@@ -67,11 +63,12 @@ Resolve all warnings and errors (errors are treated as failures by the helper) b
 4. Draft GitHub Release summarizing changes.
 5. (Future) Publish modules to PowerShell Gallery.
 
-## CI Suggestions (Future)
+## Automation & Quality Gates
 
-- Workflow: lint + test matrix (Windows, Linux).
-- Cache: PowerShell modules & plugin archives.
-- Artifacts: coverage report, safe config snapshot.
+- `.github/workflows/ci.yml` (push/PR to `main` and `dev` + manual dispatch) installs PowerShell 7.5.4, trusts PSGallery for dependency installs, runs `tests/Invoke-PSScriptAnalyzer.ps1`, executes `tests/Invoke-Pester.ps1 -CodeCoverage -Quiet`, and uploads analyzer/test/coverage artifacts (`tests/TestResults.xml`, `.coverage-jacoco.xml`, `.coverage-latest.json`, `.coverage-debug.txt`). Failures block merges via required GitHub checks.
+- `.github/workflows/codacy.yml` runs on the same branches plus a weekly cron. It executes Codacy Analysis CLI, emits SARIF, and uploads results via `github/codeql-action/upload-sarif@v4` so findings land in GitHub Advanced Security next to CodeQL alerts.
+- Coverage improvements must be accompanied by an updated `tests/.coverage-baseline.json`. The harness exits non-zero if coverage falls below the baseline (currently 61.35%).
+- Issue/PR templates and CODEOWNERS live under `.github/`; use them so reviewers get adequate context and the right maintainers are auto-assigned.
 
 ## Performance Considerations
 

@@ -95,4 +95,10 @@ This document explains how PSmediaManager composes modules, services, and extern
 - **Additional Plugins**: expand requirements file, implement install/verify helpers, document in README and `docs/modules.md`.
 - **Automation**: integrate GitHub Actions for lint/test, publish artifacts, and optionally sign releases.
 
+## Quality Assurance Flow
+
+- Developers and CI both call `tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer -CodeCoverage`, ensuring analyzer preloading, coverage enforcement, and exit-code parity between local machines and GitHub Actions.
+- Standalone analyzer runs (`tests/Invoke-PSScriptAnalyzer.ps1`) dot-source `tests/Preload-PSmmTypes.ps1` so Windows and Linux runners share the same type resolution path, eliminating `TypeNotFound` noise before errors are surfaced.
+- GitHub Actions uploads analyzer/test/coverage artifacts, while Codacy SARIF uploads (via `codacy.yml`) keep GitHub Advanced Security dashboards populated with PowerShell-specific findings.
+
 For conceptual entry points refer back to [docs/index.md](index.md) and module-specific pages.

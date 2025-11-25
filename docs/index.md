@@ -17,6 +17,14 @@ Welcome to the PSmediaManager documentation portal. This site expands on the hig
 - Inspectable: configuration export & redaction tooling.
 - Testable: comprehensive Pester coverage for core behaviors.
 - Extensible: plugin shell for external tooling & future integrations.
+- Secure: repository-first workflows with automated analyzers, SARIF uploads, and enforced coverage baselines.
+
+## Quality & Security Automation
+
+- `tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer -CodeCoverage` mirrors the GitHub Actions job, enforces the coverage baseline, and emits artifacts consumed by release tooling.
+- `tests/Invoke-PSScriptAnalyzer.ps1` preloads PSmm types to keep PSScriptAnalyzer deterministic across Windows/Linux runners.
+- `.github/workflows/ci.yml` runs analyzer + tests on every push/PR to `main` and `dev`.
+- `.github/workflows/codacy.yml` uploads Codacy SARIF findings via `github/codeql-action/upload-sarif@v4`, complementing CodeQL scans in GitHub Advanced Security.
 
 ## High-Level Architecture
 

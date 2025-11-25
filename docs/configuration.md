@@ -28,6 +28,8 @@ Automatic handling includes:
 - Cyclic reference detection to prevent infinite traversal.
 - Redaction for known secret placeholders.
 
+> **GitHub best practice:** When opening a bug report, attach the sanitized output from `Export-SafeConfiguration` so maintainers can reproduce issues without exposing secrets. Security vulnerabilities should follow [SECURITY.md](../SECURITY.md) and leverage GitHub Security Advisories when possible.
+
 ## Secrets Management
 
 KeePassXC CLI is leveraged for secure secret storage.

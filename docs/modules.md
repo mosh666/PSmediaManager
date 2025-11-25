@@ -20,6 +20,7 @@ Extension Tips:
 
 - Keep cross-cutting concerns (logging, UI) out of the core.
 - Add new services under `Classes/Services` when logic grows beyond simple functions.
+- Use `Write-PSmmHost` (exported from the core module) instead of raw `Write-Host` so shutdown messaging, analyzer suppressions, and UI parity remain intact.
 
 ## PSmm.Logging
 
@@ -97,6 +98,7 @@ Guidelines:
 
 - Avoid business logic inside UI functions; delegate to services.
 - Provide clear, short labels for option prompts.
+- Emit console output via `Write-PSmmHost` to keep analyzer suppressions centralized and to respect the interactive/CI separation baked into the wrapper.
 
 ## Adding a New Module
 

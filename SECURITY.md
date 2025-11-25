@@ -6,10 +6,10 @@ Version `1.0.0` is the current focus. Older revisions should be updated to lates
 
 ## Reporting a Vulnerability
 
-1. DO NOT open a public issue with exploit details.
-2. Instead, create a minimal reproduction (sanitized) and email the maintainer (contact to be defined) or open a private security advisory if enabled.
+1. **Do not** open a public issue with exploit details.
+2. Use GitHub's *Report a vulnerability* flow (Security ➜ Advisories) so maintainers and CODEOWNERS receive a private notification. If that is unavailable, email the maintainer listed in CODEOWNERS via their GitHub profile.
 3. Provide environment details (PowerShell version, OS) and affected functions.
-4. Include a safe configuration export (via `Export-SafeConfiguration`) if relevant.
+4. Include a safe configuration export (via `Export-SafeConfiguration`) and any relevant logs with secrets redacted.
 
 ## Scope
 
