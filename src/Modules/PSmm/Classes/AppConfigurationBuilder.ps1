@@ -167,9 +167,10 @@ class AppConfigurationBuilder {
 
                         if ($storageData.ContainsKey('Master') -and $storageData.Master) {
                             $masterLabel = if ($storageData.Master.ContainsKey('Label')) { $storageData.Master.Label } else { '' }
-                            $masterDrive = if ($storageData.Master.ContainsKey('DriveLetter')) { $storageData.Master.DriveLetter } else { '' }
+                            $masterDrive = ''
                             $masterSerial = if ($storageData.Master.ContainsKey('SerialNumber')) { $storageData.Master.SerialNumber } else { '' }
-                            Write-Verbose "Loading Master for Storage.$key : Label=$masterLabel, Drive=$masterDrive, Serial=$masterSerial"
+
+                            Write-Verbose "Loading Master for Storage.$key : Label=$masterLabel, Serial=$masterSerial"
                             $group.Master = [StorageDriveConfig]::new($masterLabel, $masterDrive)
                             $group.Master.SerialNumber = $masterSerial
                             Write-Verbose "Set Master.SerialNumber to: $($group.Master.SerialNumber)"
@@ -184,9 +185,10 @@ class AppConfigurationBuilder {
                                 foreach ($backupKey in $backupKeys) {
                                     $backup = $storageData.Backup[$backupKey]
                                     $backupLabel = if ($backup.ContainsKey('Label')) { $backup.Label } else { '' }
-                                    $backupDriveLetter = if ($backup.ContainsKey('DriveLetter')) { $backup.DriveLetter } else { '' }
+                                    $backupDriveLetter = ''
                                     $backupSerial = if ($backup.ContainsKey('SerialNumber')) { $backup.SerialNumber } else { '' }
-                                    Write-Verbose "Loading Backup.$backupKey for Storage.$key : Label=$backupLabel, Drive=$backupDriveLetter, Serial=$backupSerial"
+
+                                    Write-Verbose "Loading Backup.$backupKey for Storage.$key : Label=$backupLabel, Serial=$backupSerial"
 
                                     $backupDriveConfig = [StorageDriveConfig]::new($backupLabel, $backupDriveLetter)
                                     $backupDriveConfig.SerialNumber = $backupSerial

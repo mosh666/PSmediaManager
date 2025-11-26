@@ -49,6 +49,12 @@ Guidelines:
 
 The configuration builder resolves storage roots, plugin directories, and log locations. Ensure target drives have sufficient space for media operations.
 
+## Storage Configuration
+
+- Keys: use `Label` and `SerialNumber` for each storage device (Master and numbered Backups).
+- Runtime-derived: `DriveLetter` and `Path` are discovered at runtime and no longer belong in `PSmm.App.psd1`.
+- Removed: `StorageType` is not needed (only disk is supported) and is ignored if present.
+
 ## Extending Configuration
 
 When adding new config entries:

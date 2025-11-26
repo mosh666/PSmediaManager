@@ -124,6 +124,12 @@ Built around `AppConfiguration` and `AppConfigurationBuilder` classes:
 - Redaction & safe serialization via `Export-SafeConfiguration` for sharing.
 - Supports quoting, scalar formatting, cyclic reference detection (see tests).
 
+Recent updates:
+
+- Storage device discovery (Label/SerialNumber) is runtime-derived; `DriveLetter` and `Path` are discovered at startup and should not be stored in `PSmm.App.psd1`.
+- Removed obsolete `StorageType` field from configuration; only disk-backed storage is supported.
+- Test mode: when `$env:MEDIA_MANAGER_TEST_MODE` is set to `1`, runtime folders (logs, plugins, vault) are created within the test workspace to keep system drives clean.
+
 Best Practices:
 
 - Keep secrets only in KeePassXC-managed vault; reference via secret retrieval functions (`Get-SystemSecret`).

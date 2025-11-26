@@ -23,6 +23,7 @@ When preparing a release, move the items into a new versioned section and update
 - Test infrastructure: Enhanced test environment isolation by detecting `MEDIA_MANAGER_TEST_MODE` environment variable to prevent runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) from being created on system drive during test execution.
 - Documentation: Added "Test Environment Isolation" section to `docs/development.md` explaining test mode behavior and path resolution strategy.
 - Documentation: Expanded "Data & Storage Layout" section in `docs/architecture.md` to document production vs test mode path resolution differences.
+- Configuration: Clarified that `DriveLetter` and `Path` are discovered at runtime and should not be persisted in `src/Config/PSmm/PSmm.App.psd1`. Removed now-ignored `StorageType` from examples.
 
 #### Previous edits (2025-11-24)
 
@@ -56,6 +57,7 @@ These are small documentation/metadata updates; move to a versioned release entr
 #### 2025-11-26
 
 - Fix (Test Infrastructure): Prevented Pester tests from creating `PSmm.Log`, `PSmm.Plugins`, and `PSmm.Vault` folders on the system drive (C:\) by implementing test mode detection in `AppConfigurationBuilder`. When `MEDIA_MANAGER_TEST_MODE='1'` is set (automatically by `Invoke-Pester.ps1`), runtime folders are created within the test directory instead of at the drive root, ensuring test isolation and preventing system pollution. Production behavior remains unchanged with runtime folders placed at drive root. (commit `97845fc`)
+- Fix (Configuration Builder): Normalized storage configuration handling to derive `DriveLetter` and `Path` at runtime and ignore obsolete `StorageType` entries, preventing mismatches between persisted and live configuration. Updated `src/Modules/PSmm/Classes/AppConfigurationBuilder.ps1` accordingly.
 
 #### 2025-11-24
 

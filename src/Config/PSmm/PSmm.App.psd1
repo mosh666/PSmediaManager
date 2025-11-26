@@ -114,37 +114,25 @@ Set-StrictMode -Version Latest
             1 = @{
                 Backup = @{
                     1 = @{
-                        DriveLetter = ''
                         Label = 'Media-1-Backup-1'
-                        Path = '\\'
                         SerialNumber = '2204EQ403864'
-                        StorageType = 'Disk'
                     }
                     2 = @{
-                        DriveLetter = ''
                         Label = 'Media-1-Backup-2'
-                        Path = '\\'
                         SerialNumber = '2204GS402792'
-                        StorageType = 'Disk'
                     }
                 }
                 Master = @{
-                    DriveLetter = ''
                     Label = 'Media-1'
-                    Path = '\\'
                     SerialNumber = 'R381505X0SNNM7S'
-                    StorageType = 'Disk'
                 }
             }
             2 = @{
                 Backup = @{
                 }
                 Master = @{
-                    DriveLetter = ''
                     Label = 'Media-2'
-                    Path = '\\'
                     SerialNumber = '0B80620165E8'
-                    StorageType = 'Disk'
                 }
             }
         }
