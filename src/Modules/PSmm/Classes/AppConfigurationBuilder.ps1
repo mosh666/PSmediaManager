@@ -73,9 +73,15 @@ class AppConfigurationBuilder {
 
         $paths = $null
         if ($looksLikeRepoRoot) {
-            $runtimeRoot = [System.IO.Path]::GetPathRoot($resolvedPath)
-            if ([string]::IsNullOrWhiteSpace($runtimeRoot)) {
-                $runtimeRoot = $resolvedPath
+            # In test mode, keep runtime root within test directory to avoid creating folders on system drive
+            $isTestMode = $env:MEDIA_MANAGER_TEST_MODE -eq '1'
+            $runtimeRoot = if ($isTestMode) {
+                # Use the test root itself for runtime folders instead of drive root
+                $resolvedPath
+            } else {
+                # In production, use drive root for runtime folders (PSmm.Log, PSmm.Plugins, PSmm.Vault)
+                $driveRoot = [System.IO.Path]::GetPathRoot($resolvedPath)
+                if ([string]::IsNullOrWhiteSpace($driveRoot)) { $resolvedPath } else { $driveRoot }
             }
             $paths = [AppPaths]::new($resolvedPath, $runtimeRoot)
         }

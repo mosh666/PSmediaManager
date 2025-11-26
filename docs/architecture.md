@@ -53,18 +53,32 @@ This document explains how PSmediaManager composes modules, services, and extern
 ## Data & Storage Layout
 
 ```text
-<Repo Root>
- ├─ src/Modules         # Module manifests & implementations
- ├─ src/Config          # Requirements and template configs
- ├─ plugins/            # (runtime) downloaded portable tools
- ├─ projects/           # User-created project directories
- ├─ logs/               # Rotating logs (structured text)
- ├─ temp/               # Extracted archives / working files
- └─ secrets/            # KeePassXC vault (user-defined)
+<Drive Root>              # Production: drive root (e.g., D:\)
+ ├─ PSmm.Log/            # Rotating logs (date-based filenames)
+ ├─ PSmm.Plugins/        # Downloaded portable tools (FFmpeg, digiKam, etc.)
+ │   ├─ _Downloads/      # Temporary download cache
+ │   └─ _Temp/           # Extraction working directory
+ └─ PSmm.Vault/          # KeePassXC database for secrets
+
+<Repo Root>              # Repository structure
+ ├─ src/
+ │   ├─ Modules/         # Module manifests & implementations
+ │   └─ Config/          # Requirements and template configs
+ ├─ tests/               # Pester tests & coverage artifacts
+ └─ docs/                # Documentation
 ```
 
-- Paths are derived from configuration objects to support relocating the repo.
-- No global registry or ProgramData writes beyond optional project registry maintenance (documented in module functions).
+**Path Resolution Strategy:**
+
+- **Production Mode**: Runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) are placed at the drive root for easy access and management. This allows the application to maintain state independently of the source code location.
+
+- **Test Mode**: When `MEDIA_MANAGER_TEST_MODE='1'` is set (automatically by `Invoke-Pester.ps1`), runtime folders are created within the test directory instead of the system drive. This ensures test isolation and prevents pollution of the system drive.
+
+- **AppConfigurationBuilder**: Detects repository structure (presence of `src/` folder) and adjusts the runtime root accordingly:
+  - In production: Uses `GetPathRoot()` to place runtime folders at drive root
+  - In test mode: Uses the test root directory to contain all artifacts
+
+Paths are derived from configuration objects to support relocating the repo or running in isolated test environments.
 
 ## Plugin Acquisition Lifecycle
 
