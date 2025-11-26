@@ -211,6 +211,7 @@ Key behavior:
 - Wraps `Invoke-PSScriptAnalyzer.ps1`, which preloads PSmm types so `TypeNotFound` noise is filtered before enforcing errors.
 - Persists results to `tests/PSScriptAnalyzerResults.json`, `tests/TestResults.xml`, `.coverage-jacoco.xml`, and `.coverage-latest.json` (currently 61.35% line coverage enforced by baseline).
 - Supports `-PassThru` for tooling scenarios and sets the exit code the same way GitHub Actions does (Environment.Exit in CI contexts).
+- **Test Isolation**: Automatically sets `MEDIA_MANAGER_TEST_MODE='1'` to ensure runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) are created within test directories rather than on the system drive, preventing test pollution and enabling parallel test execution.
 
 After legitimate coverage improvements, refresh the baseline to keep CI green:
 
@@ -224,6 +225,7 @@ Guidelines:
 - Add regression tests when fixing bugs (especially config/serialization edge cases).
 - Keep mocks isolated in `tests/Support` scripts.
 - Use `-PassThru` during local authoring when you need the raw Pester result without exiting your shell.
+- Tests run in isolated environments with automatic cleanup of temporary directories.
 
 Static Analysis (standalone run with repo settings):
 

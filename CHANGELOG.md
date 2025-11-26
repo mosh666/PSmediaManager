@@ -18,7 +18,13 @@ When preparing a release, move the items into a new versioned section and update
 
 ### Changed
 
-#### Current edits (2025-11-24)
+#### Current edits (2025-11-26)
+
+- Test infrastructure: Enhanced test environment isolation by detecting `MEDIA_MANAGER_TEST_MODE` environment variable to prevent runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) from being created on system drive during test execution.
+- Documentation: Added "Test Environment Isolation" section to `docs/development.md` explaining test mode behavior and path resolution strategy.
+- Documentation: Expanded "Data & Storage Layout" section in `docs/architecture.md` to document production vs test mode path resolution differences.
+
+#### Previous edits (2025-11-24)
 
 - Documentation: added changelog link to `README.md`.
 - Repository metadata: tidied `.github/CODEOWNERS` comment line.
@@ -46,6 +52,10 @@ These are small documentation/metadata updates; move to a versioned release entr
 - CI: removed `.github/workflows/powershell-tests.yml` because the consolidated `ci.yml` plus the improved `tests/Invoke-Pester.ps1` cover the same validation steps.
 
 ### Fixed
+
+#### 2025-11-26
+
+- Fix (Test Infrastructure): Prevented Pester tests from creating `PSmm.Log`, `PSmm.Plugins`, and `PSmm.Vault` folders on the system drive (C:\) by implementing test mode detection in `AppConfigurationBuilder`. When `MEDIA_MANAGER_TEST_MODE='1'` is set (automatically by `Invoke-Pester.ps1`), runtime folders are created within the test directory instead of at the drive root, ensuring test isolation and preventing system pollution. Production behavior remains unchanged with runtime folders placed at drive root. (commit `97845fc`)
 
 #### 2025-11-24
 
