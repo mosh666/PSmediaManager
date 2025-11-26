@@ -22,6 +22,7 @@ When preparing a release, move the items into a new versioned section and update
 
 - Test infrastructure: Enhanced test environment isolation by detecting `MEDIA_MANAGER_TEST_MODE` environment variable to prevent runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) from being created on system drive during test execution.
 - Test infrastructure: Added automatic working directory validation to `tests/Invoke-Pester.ps1` to ensure tests always run from the repository root, preventing path resolution issues and improving reliability.
+- Test infrastructure: Added `tests/_tmp` to `.gitignore` to exclude temporary test artifacts from version control.
 - Documentation: Added "Test Environment Isolation" section to `docs/development.md` explaining test mode behavior and path resolution strategy.
 - Documentation: Expanded "Data & Storage Layout" section in `docs/architecture.md` to document production vs test mode path resolution differences.
 - Configuration: Clarified that `DriveLetter` and `Path` are discovered at runtime and should not be persisted in `src/Config/PSmm/PSmm.App.psd1`. Removed now-ignored `StorageType` from examples.

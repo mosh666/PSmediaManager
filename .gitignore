@@ -51,3 +51,4 @@ REFACTORING_ANALYSIS_DETAILED.md
 REFACTORING_SUMMARY.md
 psa_fix_log.txt
 tests/psa_*.ps1
+tests/_tmp
