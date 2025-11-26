@@ -16,6 +16,14 @@ $ErrorActionPreference = 'Stop'
 
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDirectory
+
+# Ensure we're running from the repository root
+$currentLocation = Get-Location
+if ($currentLocation.Path -ne $repoRoot) {
+    Write-Warning "Current location is '$($currentLocation.Path)' but repository root is '$repoRoot'"
+    Write-Host "Changing directory to repository root: $repoRoot" -ForegroundColor Yellow
+    Set-Location -Path $repoRoot
+}
 $baselinePath = Join-Path -Path $scriptDirectory -ChildPath '.coverage-baseline.json'
 
 function Get-CoverageDocument {
