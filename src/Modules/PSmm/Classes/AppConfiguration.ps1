@@ -433,6 +433,7 @@ class StorageDriveConfig {
 #>
 class StorageGroupConfig {
     [string]$GroupId
+    [string]$DisplayName
     [StorageDriveConfig]$Master
     [Dictionary[string, StorageDriveConfig]]$Backups
     [Dictionary[string, string]]$Paths

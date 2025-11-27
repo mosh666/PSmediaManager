@@ -263,6 +263,55 @@ class AppConfigurationBuilder {
         return $this
     }
 
+    [AppConfigurationBuilder] LoadStorageFile([string]$storagePath) {
+        $this.EnsureNotBuilt()
+
+        if (-not (Test-Path -Path $storagePath)) {
+            Write-Verbose "Storage file not found: $storagePath"
+            return $this
+        }
+
+        try {
+            $storageData = Import-PowerShellDataFile -Path $storagePath
+        }
+        catch {
+            throw "Failed to load storage file '$storagePath': $_"
+        }
+
+        if (-not ($storageData -is [hashtable]) -or -not $storageData.ContainsKey('Storage')) {
+            throw "Storage file is invalid. Expected a hashtable with 'Storage' root."
+        }
+
+        foreach ($groupKey in $storageData.Storage.Keys) {
+            $groupTable = $storageData.Storage[$groupKey]
+            $group = [StorageGroupConfig]::new([string]$groupKey)
+            if ($groupTable.ContainsKey('DisplayName')) { $group.DisplayName = $groupTable.DisplayName }
+
+            if ($groupTable.ContainsKey('Master') -and $groupTable.Master) {
+                $mLabel = if ($groupTable.Master.ContainsKey('Label')) { $groupTable.Master.Label } else { '' }
+                $mSerial = if ($groupTable.Master.ContainsKey('SerialNumber')) { $groupTable.Master.SerialNumber } else { '' }
+                $group.Master = [StorageDriveConfig]::new($mLabel, '')
+                $group.Master.SerialNumber = $mSerial
+            }
+
+            if ($groupTable.ContainsKey('Backup') -and $groupTable.Backup -is [hashtable]) {
+                foreach ($bk in ($groupTable.Backup.Keys | Where-Object { $_ -match '^[0-9]+' } | Sort-Object {[int]$_})) {
+                    $b = $groupTable.Backup[$bk]
+                    if ($null -eq $b) { continue }
+                    $bLabel = if ($b.ContainsKey('Label')) { $b.Label } else { '' }
+                    $bSerial = if ($b.ContainsKey('SerialNumber')) { $b.SerialNumber } else { '' }
+                    $cfg = [StorageDriveConfig]::new($bLabel, '')
+                    $cfg.SerialNumber = $bSerial
+                    $group.Backups[[string]$bk] = $cfg
+                }
+            }
+
+            $this._config.Storage[[string]$groupKey] = $group
+        }
+
+        return $this
+    }
+
     [AppConfigurationBuilder] InitializeDirectories() {
         $this.EnsureNotBuilt()
         $this._config.Paths.EnsureDirectoriesExist()
@@ -365,6 +414,125 @@ class AppConfigurationBuilder {
 
     [AppConfiguration] GetConfig() {
         return $this._config
+    }
+
+    <#
+    .SYNOPSIS
+        Reads storage configuration from a PSmm.Storage.psd1 file.
+    
+    .DESCRIPTION
+        Loads the storage hashtable from the specified .psd1 file.
+        Returns $null if the file doesn't exist or is invalid.
+    #>
+    static [hashtable] ReadStorageFile([string]$storagePath) {
+        if (-not (Test-Path -Path $storagePath -PathType Leaf)) {
+            return $null
+        }
+
+        try {
+            $storageData = Import-PowerShellDataFile -Path $storagePath
+            if (-not ($storageData -is [hashtable]) -or -not $storageData.ContainsKey('Storage')) {
+                Write-Warning "Storage file is invalid. Expected a hashtable with 'Storage' root."
+                return $null
+            }
+            return $storageData.Storage
+        }
+        catch {
+            Write-Warning "Failed to read storage file '$storagePath': $_"
+            return $null
+        }
+    }
+
+    <#
+    .SYNOPSIS
+        Writes storage configuration to a PSmm.Storage.psd1 file with renumbering.
+    
+    .DESCRIPTION
+        Renumbers all storage groups sequentially (1, 2, 3...) and writes
+        the configuration to the specified path in .psd1 format.
+    #>
+    static [void] WriteStorageFile([string]$storagePath, [hashtable]$storageHashtable) {
+        # Renumber groups sequentially
+        $renumbered = @{}
+        $numericKeys = @()
+        foreach ($k in $storageHashtable.Keys) {
+            if ($k -match '^[0-9]+$') {
+                $numericKeys += [int]$k
+            }
+        }
+        $sorted = $numericKeys | Sort-Object
+        $newId = 1
+        foreach ($oldId in $sorted) {
+            $renumbered[[string]$newId] = $storageHashtable[[string]$oldId]
+            $newId++
+        }
+
+        # Convert to .psd1 format
+        $psd1Content = [AppConfigurationBuilder]::ConvertStorageToPsd1($renumbered)
+        
+        # Ensure directory exists
+        $configRoot = Split-Path -Path $storagePath -Parent
+        if (-not (Test-Path -Path $configRoot)) {
+            $null = New-Item -Path $configRoot -ItemType Directory -Force
+        }
+
+        # Write to file
+        Set-Content -Path $storagePath -Value $psd1Content -Encoding UTF8
+    }
+
+    <#
+    .SYNOPSIS
+        Converts a storage hashtable to .psd1 format string.
+    
+    .DESCRIPTION
+        Serializes the storage groups hashtable to PowerShell Data File format
+        with proper indentation and escaping.
+    #>
+    static [string] ConvertStorageToPsd1([hashtable]$storageHashtable) {
+        $lines = @()
+        $lines += '@{'
+        $lines += '    Storage = @{'
+        
+        if ($storageHashtable.Count -eq 0) {
+            $lines += '    }'
+        }
+        else {
+            foreach ($groupId in ($storageHashtable.Keys | Sort-Object {[int]$_})) {
+                $group = $storageHashtable[$groupId]
+                $displayName = if ($group.ContainsKey('DisplayName')) { $group.DisplayName } else { "Storage Group $groupId" }
+                # Escape single quotes in display name
+                $displayName = $displayName -replace "'", "''"
+                
+                $lines += "        '$groupId' = @{"
+                $lines += "            DisplayName = '$displayName'"
+                
+                if ($group.ContainsKey('Master') -and $group.Master) {
+                    $mLabel = if ($group.Master.ContainsKey('Label')) { $group.Master.Label -replace "'", "''" } else { '' }
+                    $mSerial = if ($group.Master.ContainsKey('SerialNumber')) { $group.Master.SerialNumber -replace "'", "''" } else { '' }
+                    $lines += "            Master      = @{ Label = '$mLabel'; SerialNumber = '$mSerial' }"
+                }
+                
+                if ($group.ContainsKey('Backup') -and $group.Backup -and $group.Backup.Count -gt 0) {
+                    $lines += '            Backup      = @{'
+                    foreach ($bKey in ($group.Backup.Keys | Sort-Object {[int]$_})) {
+                        $b = $group.Backup[$bKey]
+                        $bLabel = if ($b.ContainsKey('Label')) { $b.Label -replace "'", "''" } else { '' }
+                        $bSerial = if ($b.ContainsKey('SerialNumber')) { $b.SerialNumber -replace "'", "''" } else { '' }
+                        $lines += "                '$bKey' = @{ Label = '$bLabel'; SerialNumber = '$bSerial' }"
+                    }
+                    $lines += '            }'
+                }
+                else {
+                    $lines += '            Backup      = @{}'
+                }
+                
+                $lines += '        }'
+            }
+            $lines += '    }'
+        }
+        
+        $lines += '}'
+        return ($lines -join [Environment]::NewLine)
     }
 }
 

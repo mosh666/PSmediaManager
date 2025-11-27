@@ -110,32 +110,14 @@ Set-StrictMode -Version Latest
             OnlyColorizeLevel = $false
             Format = '[%{timestamp:+yyyyMMdd HHmmss.fff}] [%{level:-9}] [%{caller:-28}] %{message} %{body}'
         }
-        Storage = @{
-            1 = @{
-                Backup = @{
-                    1 = @{
-                        Label = 'Media-1-Backup-1'
-                        SerialNumber = '2204EQ403864'
-                    }
-                    2 = @{
-                        Label = 'Media-1-Backup-2'
-                        SerialNumber = '2204GS402792'
-                    }
-                }
-                Master = @{
-                    Label = 'Media-1'
-                    SerialNumber = 'R381505X0SNNM7S'
-                }
-            }
-            2 = @{
-                Backup = @{
-                }
-                Master = @{
-                    Label = 'Media-2'
-                    SerialNumber = '0B80620165E8'
-                }
-            }
-        }
+        # Storage configuration is intentionally empty in the repo.
+        # On first start, PSmediaManager detects USB and Removable drives and guides you
+        # through a wizard to create storage groups. The resulting config is
+        # written to <DriveRoot>\PSmm.Config\PSmm.Storage.psd1 and loaded at runtime.
+        #
+        # Expected schema (persisted on drive):
+        # Storage = @{ '<id>' = @{ DisplayName; Master = @{ Label; SerialNumber }; Backup = @{ '<n>' = @{ Label; SerialNumber } } } }
+        Storage = @{}
     }
     Projects = @{
         Paths = @{

@@ -224,4 +224,27 @@ class ICryptoService {
     }
 }
 
+<#
+.SYNOPSIS
+    Interface for storage drive operations.
+    Provides testable abstraction over physical disk and volume queries.
+#>
+class IStorageService {
+    [object[]] GetStorageDrives() {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+
+    [object] FindDriveBySerial([string]$serialNumber) {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+
+    [object] FindDriveByLabel([string]$label) {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+
+    [object[]] GetRemovableDrives() {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+}
+
 #endregion System Service Interfaces

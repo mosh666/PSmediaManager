@@ -279,13 +279,13 @@ function Export-SafeConfiguration {
                 if ($null -eq $Dictionary) { return @() }
 
                 if ($Dictionary -is [System.Collections.IDictionary]) {
-                    return $Dictionary.Keys
+                    return @($Dictionary.Keys)
                 }
 
                 $keysProp = $Dictionary.PSObject.Properties['Keys']
-                if ($keysProp) { return $keysProp.Value }
+                if ($keysProp) { return @($keysProp.Value) }
 
-                try { return $Dictionary.Keys } catch { return @() }
+                try { return @($Dictionary.Keys) } catch { return @() }
             }
 
             $typeNames = @($Configuration.PSObject.TypeNames)
@@ -515,7 +515,9 @@ function Export-SafeConfiguration {
                 }
             }
 
-            if ($reg -or $nestedDrives.Count -gt 0 -or (_GetDictionaryKeys $flatDrives).Count -gt 0) {
+            $hasNestedDrives = $nestedDrives -and @($nestedDrives.Keys).Count -gt 0
+            $hasFlatDrives = @(_GetDictionaryKeys $flatDrives).Count -gt 0
+            if ($reg -or $hasNestedDrives -or $hasFlatDrives) {
                 $registryLastScanned = $null
                 if ($reg) { $registryLastScanned = _GetMemberValue -InputObject $reg -Name 'LastScanned' }
 
@@ -529,7 +531,7 @@ function Export-SafeConfiguration {
 
                 $storageRegistry = @{
                     LastScanned = $registryLastScanned
-                    Drives = if ($nestedDrives.Count -gt 0) { $nestedDrives } else { @{} }
+                    Drives = if ($nestedDrives -and @($nestedDrives.Keys).Count -gt 0) { $nestedDrives } else { @{} }
                 }
             }
 
