@@ -1,86 +1,16 @@
 [
   {
-    "FilePath": "Resolve-StorageWizardMessage.ps1",
-    "RuleName": "PSAvoidAssignmentToAutomaticVariable",
+    "FilePath": "Test-DuplicateSerial.ps1",
+    "RuleName": "PSReviewUnusedParameter",
     "Severity": 1,
-    "Line": 22,
-    "Message": "The Variable 'Args' is an automatic variable that is built into PowerShell, assigning to it might have undesired side effects. If assignment is not by design, please use a different name."
+    "Line": 61,
+    "Message": "The parameter 'TestInputs' has been declared but not used."
   },
   {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSAvoidTrailingWhitespace",
-    "Severity": 0,
-    "Line": 241,
-    "Message": "Line has trailing whitespace"
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSAvoidTrailingWhitespace",
-    "Severity": 0,
-    "Line": 245,
-    "Message": "Line has trailing whitespace"
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSUseDeclaredVarsMoreThanAssignments",
+    "FilePath": "Test-DuplicateSerial.ps1",
+    "RuleName": "PSReviewUnusedParameter",
     "Severity": 1,
-    "Line": 62,
-    "Message": "The variable 'gotoBack' is assigned but never used."
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSUseDeclaredVarsMoreThanAssignments",
-    "Severity": 1,
-    "Line": 235,
-    "Message": "The variable 'psd1' is assigned but never used."
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSUseDeclaredVarsMoreThanAssignments",
-    "Severity": 1,
-    "Line": 237,
-    "Message": "The variable 'content' is assigned but never used."
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSAvoidUsingPositionalParameters",
-    "Severity": 0,
-    "Line": 44,
-    "Message": "Cmdlet 'Write-WizardLog' has positional parameter. Please use named parameters instead of positional parameters when calling a command."
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSAvoidUsingPositionalParameters",
-    "Severity": 0,
-    "Line": 134,
-    "Message": "Cmdlet 'Write-WizardLog' has positional parameter. Please use named parameters instead of positional parameters when calling a command."
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSAvoidUsingPositionalParameters",
-    "Severity": 0,
-    "Line": 140,
-    "Message": "Cmdlet 'Write-WizardLog' has positional parameter. Please use named parameters instead of positional parameters when calling a command."
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSAvoidUsingPositionalParameters",
-    "Severity": 0,
-    "Line": 170,
-    "Message": "Cmdlet 'Write-WizardLog' has positional parameter. Please use named parameters instead of positional parameters when calling a command."
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSAvoidUsingPositionalParameters",
-    "Severity": 0,
-    "Line": 176,
-    "Message": "Cmdlet 'Write-WizardLog' has positional parameter. Please use named parameters instead of positional parameters when calling a command."
-  },
-  {
-    "FilePath": "Invoke-StorageWizard.ps1",
-    "RuleName": "PSAvoidUsingPositionalParameters",
-    "Severity": 0,
-    "Line": 271,
-    "Message": "Cmdlet 'Write-WizardLog' has positional parameter. Please use named parameters instead of positional parameters when calling a command."
+    "Line": 65,
+    "Message": "The parameter 'TestInputIndex' has been declared but not used."
   }
 ]

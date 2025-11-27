@@ -24,12 +24,12 @@ class StorageService : IStorageService {
     <#
     .SYNOPSIS
         Gets information about physical storage drives.
-        
+
     .DESCRIPTION
         Retrieves detailed information about all physical disk drives in the system,
         including drive letter, label, serial number, manufacturer, model, and space information.
         This function is used to identify and validate storage drives by their serial numbers.
-        
+
     .OUTPUTS
         Array of PSCustomObjects with the following properties:
         - Label: Volume label
@@ -54,7 +54,7 @@ class StorageService : IStorageService {
         # Cross-platform guard: On non-Windows platforms (or when CIM cmdlets are unavailable),
         # return an empty result instead of throwing. This keeps callers resilient in WSL/Linux.
         try {
-            $isWindowsPlatform = $global:IsWindows -or (-not (Get-Variable -Name 'IsWindows' -ErrorAction SilentlyContinue))
+            $isWindowsPlatform = if (Test-Path Variable:\IsWindows) { $script:IsWindows } else { $true }
             if (-not $isWindowsPlatform -or -not (Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue)) {
                 Write-Verbose "StorageService: Windows CIM APIs are unavailable on this platform; returning empty result."
                 return @()
@@ -165,7 +165,7 @@ class StorageService : IStorageService {
 
         $drives = $this.GetStorageDrives()
         $matchingDrive = $drives | Where-Object { $_.SerialNumber -eq $serialNumber } | Select-Object -First 1
-        
+
         return $matchingDrive
     }
 
@@ -180,7 +180,7 @@ class StorageService : IStorageService {
 
         $drives = $this.GetStorageDrives()
         $matchingDrive = $drives | Where-Object { $_.Label -eq $label } | Select-Object -First 1
-        
+
         return $matchingDrive
     }
 

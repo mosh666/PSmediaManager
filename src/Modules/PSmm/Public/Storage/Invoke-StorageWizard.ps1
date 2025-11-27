@@ -55,7 +55,7 @@ function Invoke-StorageWizard {
 
     $logAvail = Get-Command Write-PSmmLog -ErrorAction SilentlyContinue
     function Write-WizardLog([string]$level, [string]$id, [string]$msg) {
-        if ($logAvail) { Write-PSmmLog -Level $level -Context 'StorageWizard' -Message ("$($id): $($msg)") -Console -File }
+        if ($logAvail) { Write-PSmmLog -Level $level -Context 'StorageWizard' -Message ("$($ id): $($msg)") -Console -File }
         else { Write-Verbose "$($id): $($msg)" }
     }
 
@@ -93,18 +93,18 @@ function Invoke-StorageWizard {
         # Log excluded fixed/internal drives at VERBOSE level for diagnostics
         $excludedDrives = @($allDrives | Where-Object { -not ($_.IsRemovable -or ($_.BusType -eq 'USB') -or ($_.InterfaceType -eq 'USB')) })
         if ($excludedDrives.Count -gt 0) {
-            Write-WizardLog 'VERBOSE' 'PSMM-STORAGE-EXCLUDED' "Excluded $($excludedDrives.Count) fixed/internal drive(s) not matching USB/removable criteria:"
+            Write-WizardLog -level 'VERBOSE' -id 'PSMM-STORAGE-EXCLUDED' -msg "Excluded $($excludedDrives.Count) fixed/internal drive(s) not matching USB/removable criteria:"
             foreach ($d in $excludedDrives) {
                 $sizeGB = [int]([math]::Round([double]$d.TotalSpace, 0))
                 $label = if ([string]::IsNullOrWhiteSpace($d.Label)) { '(NoLabel)' } else { $d.Label }
                 $letter = if ([string]::IsNullOrWhiteSpace($d.DriveLetter)) { 'N/A' } else { $d.DriveLetter }
                 $model = if ([string]::IsNullOrWhiteSpace($d.Model)) { 'Unknown' } else { $d.Model }
-                Write-WizardLog 'VERBOSE' 'PSMM-STORAGE-EXCLUDED-DETAIL' "  $letter $label ($sizeGB GB) - Model: $model, BusType: $($d.BusType), DriveType: $($d.DriveType), Serial: $($d.SerialNumber)"
+                Write-WizardLog -level 'VERBOSE' -id 'PSMM-STORAGE-EXCLUDED-DETAIL' -msg "  $letter $label ($sizeGB GB) - Model: $model, BusType: $($d.BusType), DriveType: $($d.DriveType), Serial: $($d.SerialNumber)"
             }
         }
-        
+
         $m = Resolve-StorageWizardMessage -Key 'PSMM-STORAGE-NO-USB'
-        Write-WizardLog 'WARNING' $m.Id $m.Text
+        Write-WizardLog -level 'WARNING' -id $m.Id -msg $m.Text
         if (-not $NonInteractive) {
             Write-PSmmHost $m.Text -ForegroundColor Yellow
         }
@@ -141,15 +141,14 @@ function Invoke-StorageWizard {
     $displayName = $null
     $master = $null
     $backups = @()
-    $gotoBack = $false
-    
+
     function Format-DriveRow($d) {
         $sizeGB = [int]([math]::Round([double]$d.TotalSpace, 0))
         $label = if ([string]::IsNullOrWhiteSpace($d.Label)) { '(NoLabel)' } else { $d.Label }
         $letter = if ([string]::IsNullOrWhiteSpace($d.DriveLetter)) { 'N/A' } else { $d.DriveLetter }
         return [PSCustomObject]@{ Label=$label; Letter=$letter; SizeGB=$sizeGB; Serial=$d.SerialNumber }
     }
-    
+
     $indexed = @()
     $i = 1
     foreach ($d in $candidateDrives) {
@@ -170,7 +169,7 @@ function Invoke-StorageWizard {
                     }
                     $inputName = Read-WizardInput $promptText
                     if ($inputName -match '^(?i)c$') { return $false }
-                    if ($inputName -match '^(?i)b$') { $gotoBack = $true; $step--; continue }
+                    if ($inputName -match '^(?i)b$') { $step--; continue }
                     if (-not [string]::IsNullOrWhiteSpace($inputName)) { $displayName = $inputName }
                 }
                 $step++
@@ -187,12 +186,12 @@ function Invoke-StorageWizard {
                     foreach ($row in $indexed) {
                         $view = $row.View
                         $marker = if ($row.Raw.SerialNumber -eq $existingMasterSerial) { ' <-- current' } else { '' }
-                        Write-Host ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
+                        Write-Information ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
                     }
-                    Write-Host ''
+                    Write-Information ''
                     $sel = Read-WizardInput 'Enter number, B=Back, C=Cancel'
                     if ($sel -match '^(?i)c$') { return $false }
-                    if ($sel -match '^(?i)b$') { $gotoBack = $true; $step--; continue }
+                    if ($sel -match '^(?i)b$') { $step--; continue }
                     if ($sel -notmatch '^[0-9]+$') { continue }
                     $chosen = $indexed | Where-Object { $_.Index -eq [int]$sel } | Select-Object -First 1
                     if (-not $chosen) { continue }
@@ -217,12 +216,12 @@ function Invoke-StorageWizard {
                         if ($row.Raw.DriveLetter -eq $master.DriveLetter -and $row.Raw.SerialNumber -eq $master.SerialNumber) { continue }
                         $view = $row.View
                         $marker = if ($existingBackupSerials -contains $row.Raw.SerialNumber) { ' <-- current' } else { '' }
-                        Write-Host ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
+                        Write-Information ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
                     }
-                    Write-Host ''
+                    Write-Information ''
                     $multi = Read-WizardInput 'Enter numbers (e.g., 2,3), B=Back, C=Cancel, or press Enter'
                     if ($multi -match '^(?i)c$') { return $false }
-                    if ($multi -match '^(?i)b$') { $gotoBack = $true; $step--; continue }
+                    if ($multi -match '^(?i)b$') { $step--; continue }
                     if (-not [string]::IsNullOrWhiteSpace($multi)) {
                         $nums = $multi -split '[, ]+' | Where-Object { $_ -match '^[0-9]+$' } | ForEach-Object { [int]$_ }
                         foreach ($n in $nums | Select-Object -Unique) {
@@ -231,13 +230,13 @@ function Invoke-StorageWizard {
                                 # Prevent collision with Master
                                 if ($cand.Raw.SerialNumber -eq $master.SerialNumber) {
                                     $m = Resolve-StorageWizardMessage -Key 'PSMM-STORAGE-MASTER-BACKUP-COLLISION'
-                                    Write-WizardLog 'WARNING' $m.Id $m.Text
+                                    Write-WizardLog -level 'WARNING' -id $m.Id -msg $m.Text
                                     continue
                                 }
                                 # Prevent duplicate serial within backups
                                 if ($backups | Where-Object { $_.SerialNumber -eq $cand.Raw.SerialNumber }) {
                                     $m = Resolve-StorageWizardMessage -Key 'PSMM-STORAGE-DUPLICATE-SERIAL'
-                                    Write-WizardLog 'WARNING' $m.Id $m.Text
+                                    Write-WizardLog -level 'WARNING' -id $m.Id -msg $m.Text
                                     continue
                                 }
                                 $backups += $cand.Raw
@@ -255,38 +254,38 @@ function Invoke-StorageWizard {
     foreach ($b in $backups) {
         $serialsToCheck += $b.SerialNumber
     }
-    
+
     $testInputsRef = [ref]$testInputs
     $testInputIndexRef = [ref]$testInputIndex
     $excludeGroupId = if ($Mode -eq 'Edit') { $groupId } else { '' }
-    
+
     try {
         $dupCheckResult = Test-DuplicateSerial -Config $Config -Serials $serialsToCheck -ExcludeGroupId $excludeGroupId -NonInteractive:$NonInteractive -TestInputs $testInputsRef -TestInputIndex $testInputIndexRef
         if (-not $dupCheckResult) {
-            Write-WizardLog 'NOTICE' 'PSMM-STORAGE-DUPLICATE-CANCELLED' 'User cancelled due to duplicate serial detection'
+            Write-WizardLog -level 'NOTICE' -id 'PSMM-STORAGE-DUPLICATE-CANCELLED' -msg 'User cancelled due to duplicate serial detection'
             return $false
         }
     }
     catch {
-        Write-WizardLog 'ERROR' 'PSMM-STORAGE-DUPLICATE-ERROR' "Duplicate validation failed: $_"
+        Write-WizardLog -level 'ERROR' -id 'PSMM-STORAGE-DUPLICATE-ERROR' -msg "Duplicate validation failed: $_"
         throw
     }
 
     # Summary
     $summaryMsg = Resolve-StorageWizardMessage -Key 'PSMM-STORAGE-SUMMARY'
     if (-not $NonInteractive) {
-        Write-Host ''
+        Write-Information ''
         Write-PSmmHost $summaryMsg.Text -ForegroundColor Cyan
-        Write-Host ''
+        Write-Information ''
         $mView = (Format-DriveRow $master)
-        Write-Host ("Master  : {0,-16} {1,-4} {2,6}GB {3}" -f ($mView.Label.Substring(0, [Math]::Min(16, $mView.Label.Length))), $mView.Letter, $mView.SizeGB, $mView.Serial)
+        Write-Information ("Master  : {0,-16} {1,-4} {2,6}GB {3}" -f ($mView.Label.Substring(0, [Math]::Min(16, $mView.Label.Length))), $mView.Letter, $mView.SizeGB, $mView.Serial)
         $idx = 1
         foreach ($b in $backups) {
             $bView = (Format-DriveRow $b)
-            Write-Host ("Backup {0}: {1,-16} {2,-4} {3,6}GB {4}" -f $idx, ($bView.Label.Substring(0, [Math]::Min(16, $bView.Label.Length))), $bView.Letter, $bView.SizeGB, $bView.Serial)
+            Write-Information ("Backup {0}: {1,-16} {2,-4} {3,6}GB {4}" -f $idx, ($bView.Label.Substring(0, [Math]::Min(16, $bView.Label.Length))), $bView.Letter, $bView.SizeGB, $bView.Serial)
             $idx++
         }
-        Write-Host ''
+        Write-Information ''
         $confirmText = if ($Mode -eq 'Edit') { 'Update storage configuration?' } else { 'Write storage configuration?' }
         $confirm = Read-WizardInput "$confirmText (Y/N)"
         if ($confirm -notmatch '^(?i)y$') { return $false }
@@ -294,7 +293,7 @@ function Invoke-StorageWizard {
 
     # Persist to file (merge-safe for Add/Edit modes)
     $storagePath = Join-Path -Path $DriveRoot -ChildPath 'PSmm.Config\PSmm.Storage.psd1'
-    
+
     # Load existing storage hashtable
     $storageHashtable = [AppConfigurationBuilder]::ReadStorageFile($storagePath)
     if ($null -eq $storageHashtable) {
@@ -322,17 +321,17 @@ function Invoke-StorageWizard {
     try {
         [AppConfigurationBuilder]::WriteStorageFile($storagePath, $storageHashtable)
         $actionVerb = if ($Mode -eq 'Edit') { 'updated' } else { 'written' }
-        Write-WizardLog 'NOTICE' 'PSMM-STORAGE-WRITTEN' "Storage configuration $actionVerb to $storagePath"
+        Write-WizardLog -level 'NOTICE' -id 'PSMM-STORAGE-WRITTEN' -msg "Storage configuration $actionVerb to $storagePath"
     }
     catch {
-        Write-WizardLog 'ERROR' 'PSMM-STORAGE-WRITE-FAILED' "Failed to write storage file: $_"
+        Write-WizardLog -level 'ERROR' -id 'PSMM-STORAGE-WRITE-FAILED' -msg "Failed to write storage file: $_"
         throw
     }
 
     # Reload storage from file to get renumbered groups
     $Config.Storage.Clear()
     $reloaded = [AppConfigurationBuilder]::ReadStorageFile($storagePath)
-    
+
     if ($null -ne $reloaded) {
         foreach ($gKey in $reloaded.Keys) {
             $gTable = $reloaded[$gKey]
@@ -370,7 +369,7 @@ function Invoke-StorageWizard {
         }
     }
     catch {
-        Write-WizardLog 'WARNING' 'PSMM-STORAGE-DRIVE-REFRESH-FAILED' "Failed to refresh storage drives: $_"
+        Write-WizardLog -level 'WARNING' -id 'PSMM-STORAGE-DRIVE-REFRESH-FAILED' -msg "Failed to refresh storage drives: $_"
     }
 
     foreach ($gKey in $Config.Storage.Keys) {

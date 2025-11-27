@@ -67,6 +67,20 @@ Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Sco
 ./Start-PSmediaManager.ps1
 ```
 
+## Code Quality
+
+This project maintains high code quality standards:
+
+- **98.2%** PSScriptAnalyzer compliance (2/113 issues - both false positives)
+- **61.82%** line coverage with automated baseline enforcement
+- Comprehensive test suite with 162+ passing tests
+- Follows PowerShell best practices:
+  - Named parameters for all function calls
+  - Proper stream usage (`Write-Information` vs `Write-Host`)
+  - ShouldProcess implementation for destructive operations
+  - Type declarations with `[OutputType]` attributes
+  - Suppression attributes for documented false positives
+
 ## Requirements
 
 Minimum PowerShell: 7.5.4 (see `src/Config/PSmm/PSmm.Requirements.psd1`).

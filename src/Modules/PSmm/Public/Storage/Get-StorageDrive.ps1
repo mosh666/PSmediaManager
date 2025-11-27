@@ -6,7 +6,7 @@
     Retrieves detailed information about all physical disk drives in the system,
     including drive letter, label, serial number, manufacturer, model, and space information.
     This function is used to identify and validate storage drives by their serial numbers.
-    
+
     This function serves as a public wrapper around the StorageService class, maintaining
     backward compatibility while delegating to the testable service implementation.
 

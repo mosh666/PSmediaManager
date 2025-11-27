@@ -19,7 +19,7 @@ function Resolve-StorageWizardMessage {
         [string]$Key,
 
         [Parameter()]
-        [hashtable]$Args
+        [hashtable]$Arguments
     )
 
     $messages = @{
@@ -36,10 +36,10 @@ function Resolve-StorageWizardMessage {
     }
 
     # Optional lightweight templating with {Name} placeholders
-    if ($Args) {
-        foreach ($k in $Args.Keys) {
+    if ($Arguments) {
+        foreach ($k in $Arguments.Keys) {
             $placeholder = '{' + $k + '}'
-            $text = $text -replace [regex]::Escape($placeholder), [string]$Args[$k]
+            $text = $text -replace [regex]::Escape($placeholder), [string]$Arguments[$k]
         }
     }
 

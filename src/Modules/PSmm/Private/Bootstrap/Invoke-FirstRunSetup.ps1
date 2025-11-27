@@ -316,11 +316,11 @@ function Invoke-FirstRunSetup {
         # Get drive root and check if storage config already exists
         $driveRoot = [System.IO.Path]::GetPathRoot($Config.Paths.App.Vault)
         $storagePath = Join-Path -Path $driveRoot -ChildPath 'PSmm.Config\PSmm.Storage.psd1'
-        
+
         if (-not (Test-Path -Path $storagePath)) {
             Write-PSmmHost "Starting storage wizard..." -ForegroundColor Cyan
             Write-PSmmHost ""
-            
+
             try {
                 $wizardResult = Invoke-StorageWizard -Config $Config -DriveRoot $driveRoot -NonInteractive:$false
                 if (-not $wizardResult) {

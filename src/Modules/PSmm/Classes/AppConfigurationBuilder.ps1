@@ -419,7 +419,7 @@ class AppConfigurationBuilder {
     <#
     .SYNOPSIS
         Reads storage configuration from a PSmm.Storage.psd1 file.
-    
+
     .DESCRIPTION
         Loads the storage hashtable from the specified .psd1 file.
         Returns $null if the file doesn't exist or is invalid.
@@ -446,7 +446,7 @@ class AppConfigurationBuilder {
     <#
     .SYNOPSIS
         Writes storage configuration to a PSmm.Storage.psd1 file with renumbering.
-    
+
     .DESCRIPTION
         Renumbers all storage groups sequentially (1, 2, 3...) and writes
         the configuration to the specified path in .psd1 format.
@@ -469,7 +469,7 @@ class AppConfigurationBuilder {
 
         # Convert to .psd1 format
         $psd1Content = [AppConfigurationBuilder]::ConvertStorageToPsd1($renumbered)
-        
+
         # Ensure directory exists
         $configRoot = Split-Path -Path $storagePath -Parent
         if (-not (Test-Path -Path $configRoot)) {
@@ -483,7 +483,7 @@ class AppConfigurationBuilder {
     <#
     .SYNOPSIS
         Converts a storage hashtable to .psd1 format string.
-    
+
     .DESCRIPTION
         Serializes the storage groups hashtable to PowerShell Data File format
         with proper indentation and escaping.
@@ -492,7 +492,7 @@ class AppConfigurationBuilder {
         $lines = @()
         $lines += '@{'
         $lines += '    Storage = @{'
-        
+
         if ($storageHashtable.Count -eq 0) {
             $lines += '    }'
         }
@@ -502,16 +502,16 @@ class AppConfigurationBuilder {
                 $displayName = if ($group.ContainsKey('DisplayName')) { $group.DisplayName } else { "Storage Group $groupId" }
                 # Escape single quotes in display name
                 $displayName = $displayName -replace "'", "''"
-                
+
                 $lines += "        '$groupId' = @{"
                 $lines += "            DisplayName = '$displayName'"
-                
+
                 if ($group.ContainsKey('Master') -and $group.Master) {
                     $mLabel = if ($group.Master.ContainsKey('Label')) { $group.Master.Label -replace "'", "''" } else { '' }
                     $mSerial = if ($group.Master.ContainsKey('SerialNumber')) { $group.Master.SerialNumber -replace "'", "''" } else { '' }
                     $lines += "            Master      = @{ Label = '$mLabel'; SerialNumber = '$mSerial' }"
                 }
-                
+
                 if ($group.ContainsKey('Backup') -and $group.Backup -and $group.Backup.Count -gt 0) {
                     $lines += '            Backup      = @{'
                     foreach ($bKey in ($group.Backup.Keys | Sort-Object {[int]$_})) {
@@ -525,12 +525,12 @@ class AppConfigurationBuilder {
                 else {
                     $lines += '            Backup      = @{}'
                 }
-                
+
                 $lines += '        }'
             }
             $lines += '    }'
         }
-        
+
         $lines += '}'
         return ($lines -join [Environment]::NewLine)
     }

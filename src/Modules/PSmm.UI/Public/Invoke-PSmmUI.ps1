@@ -212,7 +212,7 @@ function Invoke-PSmmUI {
                         $driveRoot = [System.IO.Path]::GetPathRoot($Config.Paths.Root)
                         if (-not [string]::IsNullOrWhiteSpace($driveRoot)) {
                             if (Get-Command Invoke-ManageStorage -ErrorAction SilentlyContinue) {
-                                $result = Invoke-ManageStorage -Config $Config -DriveRoot $driveRoot
+                                $null = Invoke-ManageStorage -Config $Config -DriveRoot $driveRoot
                                 # ManageStorage handles its own confirmations and reloads
                             }
                             else {

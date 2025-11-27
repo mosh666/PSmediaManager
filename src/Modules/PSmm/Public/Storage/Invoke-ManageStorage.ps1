@@ -30,6 +30,7 @@ Set-StrictMode -Version Latest
 
 function Invoke-ManageStorage {
     [CmdletBinding()]
+    [OutputType([bool])]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -74,47 +75,47 @@ function Invoke-ManageStorage {
 
     :ManageLoop while ($true) {
         if (-not $NonInteractive) {
-            Write-Host ''
+            Write-Information ''
             Write-PSmmHost '=== Manage Storage ===' -ForegroundColor Cyan
-            Write-Host ''
-            Write-Host '[E] Edit Existing Group'
-            Write-Host '[A] Add New Group'
-            Write-Host '[R] Remove Group(s)'
-            Write-Host '[B] Back to Main Menu'
-            Write-Host ''
-            
+            Write-Information ''
+            Write-Information '[E] Edit Existing Group'
+            Write-Information '[A] Add New Group'
+            Write-Information '[R] Remove Group(s)'
+            Write-Information '[B] Back to Main Menu'
+            Write-Information ''
+
             $selection = Read-ManageInput 'Select an option'
-            
+
             switch -Regex ($selection) {
                 '^(?i)e$' {
                     # Edit existing group
-                    Write-ManageLog 'DEBUG' 'ManageStorage' 'User selected Edit'
-                    
+                    Write-ManageLog -level 'DEBUG' -context 'ManageStorage' -msg 'User selected Edit'
+
                     # List groups
                     if ($Config.Storage.Count -eq 0) {
                         Write-PSmmHost 'No storage groups configured.' -ForegroundColor Yellow
                         if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
                         continue
                     }
-                    
-                    Write-Host ''
+
+                    Write-Information ''
                     Write-PSmmHost 'Select a group to edit:' -ForegroundColor Cyan
                     foreach ($groupId in ($Config.Storage.Keys | Sort-Object {[int]$_})) {
                         $group = $Config.Storage[$groupId]
                         $displayName = if ($group.DisplayName) { $group.DisplayName } else { "Storage Group $groupId" }
-                        Write-Host "  [$groupId] $displayName"
+                        Write-Information "  [$groupId] $displayName"
                     }
-                    Write-Host ''
-                    
+                    Write-Information ''
+
                     $groupChoice = Read-ManageInput 'Enter group number or B to go back'
                     if ($groupChoice -match '^(?i)b$') { continue }
-                    
+
                     if ($groupChoice -notmatch '^[0-9]+$' -or -not $Config.Storage.ContainsKey($groupChoice)) {
                         Write-PSmmHost 'Invalid group selection.' -ForegroundColor Yellow
                         if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
                         continue
                     }
-                    
+
                     # Call wizard in Edit mode
                     try {
                         $result = Invoke-StorageWizard -Config $Config -DriveRoot $DriveRoot -Mode 'Edit' -GroupId $groupChoice
@@ -127,16 +128,16 @@ function Invoke-ManageStorage {
                         }
                     }
                     catch {
-                        Write-ManageLog 'ERROR' 'ManageStorage' "Failed to edit group: $_"
+                        Write-ManageLog -level 'ERROR' -context 'ManageStorage' -msg "Failed to edit group: $_"
                         Write-PSmmHost "Failed to edit group: $_" -ForegroundColor Red
                     }
                     if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
                 }
-                
+
                 '^(?i)a$' {
                     # Add new group
-                    Write-ManageLog 'DEBUG' 'ManageStorage' 'User selected Add'
-                    
+                    Write-ManageLog -level 'DEBUG' -context 'ManageStorage' -msg 'User selected Add'
+
                     try {
                         $result = Invoke-StorageWizard -Config $Config -DriveRoot $DriveRoot -Mode 'Add'
                         if ($result) {
@@ -148,34 +149,34 @@ function Invoke-ManageStorage {
                         }
                     }
                     catch {
-                        Write-ManageLog 'ERROR' 'ManageStorage' "Failed to add group: $_"
+                        Write-ManageLog -level 'ERROR' -context 'ManageStorage' -msg "Failed to add group: $_"
                         Write-PSmmHost "Failed to add group: $_" -ForegroundColor Red
                     }
                     if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
                 }
-                
+
                 '^(?i)r$' {
                     # Remove group(s)
-                    Write-ManageLog 'DEBUG' 'ManageStorage' 'User selected Remove'
-                    
+                    Write-ManageLog -level 'DEBUG' -context 'ManageStorage' -msg 'User selected Remove'
+
                     if ($Config.Storage.Count -eq 0) {
                         Write-PSmmHost 'No storage groups configured.' -ForegroundColor Yellow
                         if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
                         continue
                     }
-                    
-                    Write-Host ''
+
+                    Write-Information ''
                     Write-PSmmHost 'Select group(s) to remove:' -ForegroundColor Cyan
                     foreach ($groupId in ($Config.Storage.Keys | Sort-Object {[int]$_})) {
                         $group = $Config.Storage[$groupId]
                         $displayName = if ($group.DisplayName) { $group.DisplayName } else { "Storage Group $groupId" }
-                        Write-Host "  [$groupId] $displayName"
+                        Write-Information "  [$groupId] $displayName"
                     }
-                    Write-Host ''
-                    
+                    Write-Information ''
+
                     $removeChoice = Read-ManageInput 'Enter numbers (e.g., 2,3) or B to go back'
                     if ($removeChoice -match '^(?i)b$') { continue }
-                    
+
                     $groupsToRemove = @()
                     $nums = $removeChoice -split '[, ]+' | Where-Object { $_ -match '^[0-9]+$' } | ForEach-Object { [string]$_ } | Select-Object -Unique
                     foreach ($n in $nums) {
@@ -183,47 +184,47 @@ function Invoke-ManageStorage {
                             $groupsToRemove += $n
                         }
                     }
-                    
+
                     if ($groupsToRemove.Count -eq 0) {
                         Write-PSmmHost 'No valid groups selected.' -ForegroundColor Yellow
                         if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
                         continue
                     }
-                    
+
                     # Confirm removal
-                    Write-Host ''
+                    Write-Information ''
                     Write-PSmmHost "You are about to remove $($groupsToRemove.Count) group(s):" -ForegroundColor Yellow
                     foreach ($gid in $groupsToRemove) {
                         $g = $Config.Storage[$gid]
                         $dname = if ($g.DisplayName) { $g.DisplayName } else { "Storage Group $gid" }
-                        Write-Host "  - Group $gid : $dname"
+                        Write-Information "  - Group $gid : $dname"
                     }
-                    Write-Host ''
+                    Write-Information ''
                     $confirm = Read-ManageInput 'Confirm removal? (Y/N)'
                     if ($confirm -notmatch '^(?i)y$') {
                         Write-PSmmHost 'Removal cancelled.' -ForegroundColor Yellow
                         if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
                         continue
                     }
-                    
+
                     # Remove groups
                     try {
                         Remove-StorageGroup -Config $Config -DriveRoot $DriveRoot -GroupIds $groupsToRemove
                         Write-PSmmHost "Successfully removed $($groupsToRemove.Count) group(s)." -ForegroundColor Green
                     }
                     catch {
-                        Write-ManageLog 'ERROR' 'ManageStorage' "Failed to remove groups: $_"
+                        Write-ManageLog -level 'ERROR' -context 'ManageStorage' -msg "Failed to remove groups: $_"
                         Write-PSmmHost "Failed to remove groups: $_" -ForegroundColor Red
                     }
                     if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
                 }
-                
+
                 '^(?i)b$' {
                     # Back to main menu
-                    Write-ManageLog 'DEBUG' 'ManageStorage' 'User selected Back'
+                    Write-ManageLog -level 'DEBUG' -context 'ManageStorage' -msg 'User selected Back'
                     return $true
                 }
-                
+
                 default {
                     Write-PSmmHost 'Invalid selection. Please choose E, A, R, or B.' -ForegroundColor Yellow
                     if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
@@ -232,7 +233,7 @@ function Invoke-ManageStorage {
         }
         else {
             # NonInteractive mode - not supported for manage menu
-            Write-ManageLog 'WARNING' 'ManageStorage' 'NonInteractive mode not supported for Manage Storage menu'
+            Write-ManageLog -level 'WARNING' -context 'ManageStorage' -msg 'NonInteractive mode not supported for Manage Storage menu'
             return $false
         }
     }

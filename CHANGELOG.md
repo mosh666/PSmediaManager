@@ -21,6 +21,22 @@ When preparing a release, move the items into a new versioned section and update
 
 ### Changed
 
+#### Code Quality Improvements (2025-11-27)
+
+- **refactor**: Replaced 28 `Write-Host` calls with `Write-Information` across storage management and wizard functions for proper PowerShell stream handling.
+- **refactor**: Converted 13 positional parameters to named parameters in logging functions (Write-PSmmLog, Write-ManageLog, Write-WizardLog, Write-DupLog) improving code clarity and maintainability.
+- **refactor**: Added `[OutputType([bool])]` declarations to `Invoke-ManageStorage`, `Invoke-StorageWizard`, and `Test-DuplicateSerial` for better type inference.
+- **refactor**: Removed unused variable assignments (`$gotoBack` in Invoke-StorageWizard, `$result` in Invoke-PSmmUI).
+- **fix**: Renamed parameter `$Args` to `$Arguments` in `Resolve-StorageWizardMessage` to avoid automatic variable collision.
+- **fix**: Replaced `$global:IsWindows` with `Test-Path Variable:\IsWindows` check in `StorageService` for proper cross-platform variable scope handling.
+- **feat**: Implemented `SupportsShouldProcess` with `ConfirmImpact='High'` in `Remove-StorageGroup` for safer destructive operations with -WhatIf/-Confirm support.
+- **style**: Removed 59 trailing whitespace violations across 10 files (AppConfigurationBuilder.ps1, StorageService.ps1, Invoke-FirstRunSetup.ps1, Get-StorageDrive.ps1, Invoke-ManageStorage.ps1, Invoke-StorageWizard.ps1, Remove-StorageGroup.ps1, Test-DuplicateSerial.ps1).
+- **test**: Added suppression attributes for 2 false-positive PSReviewUnusedParameter warnings in `Test-DuplicateSerial` (TestInputs/TestInputIndex [ref] parameters used via .Value property in nested functions).
+- **chore**: Improved PSScriptAnalyzer compliance from 113 to 2 issues (98.2% reduction) - remaining issues are documented false positives.
+- **test**: Updated code coverage baseline from 61.35% to 61.82% line coverage (+0.47%) reflecting improved code quality.
+
+### Changed (Continued)
+
 #### Storage Refactoring (2025-11-27)
 
 - **BREAKING**: Refactored `Get-StorageDrive` function to delegate to `StorageService` class, maintaining backward compatibility while enabling better testability.

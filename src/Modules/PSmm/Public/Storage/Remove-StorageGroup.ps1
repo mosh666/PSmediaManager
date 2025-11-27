@@ -28,7 +28,7 @@
 Set-StrictMode -Version Latest
 
 function Remove-StorageGroup {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -63,9 +63,11 @@ function Remove-StorageGroup {
     $removedCount = 0
     foreach ($gid in $GroupIds) {
         if ($storageHashtable.ContainsKey($gid)) {
-            $storageHashtable.Remove($gid)
-            $removedCount++
-            Write-RemoveLog 'NOTICE' "Removed storage group $gid from configuration"
+            if ($PSCmdlet.ShouldProcess("Storage Group $gid", "Remove")) {
+                $storageHashtable.Remove($gid)
+                $removedCount++
+                Write-RemoveLog 'NOTICE' "Removed storage group $gid from configuration"
+            }
         }
         else {
             Write-RemoveLog 'WARNING' "Group $gid not found in storage configuration"
@@ -78,22 +80,24 @@ function Remove-StorageGroup {
     }
 
     # Write updated storage (with renumbering)
-    try {
-        [AppConfigurationBuilder]::WriteStorageFile($storagePath, $storageHashtable)
-        Write-RemoveLog 'NOTICE' "Updated storage file: $storagePath (removed $removedCount group(s), renumbered remaining)"
-    }
-    catch {
-        Write-RemoveLog 'ERROR' "Failed to write storage file: $_"
-        throw
+    if ($PSCmdlet.ShouldProcess($storagePath, "Update storage file")) {
+        try {
+            [AppConfigurationBuilder]::WriteStorageFile($storagePath, $storageHashtable)
+            Write-RemoveLog 'NOTICE' "Updated storage file: $storagePath (removed $removedCount group(s), renumbered remaining)"
+        }
+        catch {
+            Write-RemoveLog 'ERROR' "Failed to write storage file: $_"
+            throw
+        }
     }
 
     # Reload storage into Config (clear existing and reload from file)
     $Config.Storage.Clear()
-    
+
     if ($storageHashtable.Count -gt 0) {
         # Re-read from file to get renumbered groups
         $reloaded = [AppConfigurationBuilder]::ReadStorageFile($storagePath)
-        
+
         if ($null -ne $reloaded) {
             foreach ($groupKey in $reloaded.Keys) {
                 $groupTable = $reloaded[$groupKey]
