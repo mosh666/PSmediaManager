@@ -267,6 +267,22 @@ try {
         Write-Warning "Requirements file not found: $requirementsPath"
     }
 
+    # Load on-drive storage config scoped to the current running drive
+    # NOTE: Storage configuration is now handled in first-run setup (Invoke-FirstRunSetup)
+    # to provide a unified setup experience
+    $driveRoot = [System.IO.Path]::GetPathRoot($script:ModuleRoot)
+    if (-not [string]::IsNullOrWhiteSpace($driveRoot)) {
+        $storagePath = Join-Path -Path $driveRoot -ChildPath 'PSmm.Config\PSmm.Storage.psd1'
+
+        if (Test-Path -Path $storagePath) {
+            $null = $configBuilder.LoadStorageFile($storagePath)
+            Write-Verbose "Loaded on-drive storage configuration: $storagePath"
+        }
+        else {
+            Write-Verbose "No on-drive storage configuration found at: $storagePath"
+        }
+    }
+
     # Now build the final configuration with all loaded data
     # Note: Secrets will be loaded AFTER logging is initialized in Invoke-PSmm
     $appConfig = $configBuilder.
