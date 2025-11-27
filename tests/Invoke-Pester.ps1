@@ -339,9 +339,6 @@ if ($CodeCoverage) {
         $baseline | ConvertTo-Json -Depth 4 | Set-Content -Path $baselinePath -Encoding UTF8
         Write-Host "Coverage improved to ${latestLine}%. Baseline updated." -ForegroundColor Green
     }
-    else {
-        Write-Host "Coverage ${latestLine}% meets the baseline (${baselineLine}%)." -ForegroundColor Yellow
-    }
 }
 
 if ($result.FailedCount -gt 0) {
