@@ -15,8 +15,26 @@ When preparing a release, move the items into a new versioned section and update
 ### Added
 
 - CI/Security: Introduced `.github/workflows/codacy.yml` to run Codacy Analysis CLI on pushes, pull requests, and a weekly schedule so fresh findings flow into GitHub code scanning automatically.
+- **Storage**: Introduced `StorageService` class (`src/Modules/PSmm/Classes/Services/StorageService.ps1`) implementing `IStorageService` interface for testable storage drive operations.
+- **Storage**: Added comprehensive storage documentation (`docs/storage.md`) covering architecture, configuration, usage patterns, and testing strategies.
+- **Interfaces**: Added `IStorageService` interface to `Classes/Interfaces.ps1` for dependency injection and testability.
 
 ### Changed
+
+#### Storage Refactoring (2025-11-27)
+
+- **BREAKING**: Refactored `Get-StorageDrive` function to delegate to `StorageService` class, maintaining backward compatibility while enabling better testability.
+- **Storage**: `Get-StorageDrive` is now a thin wrapper around `StorageService::GetStorageDrives()` for backward compatibility.
+- **Storage**: Moved drive discovery logic from function to `StorageService` class with methods: `GetStorageDrives()`, `FindDriveBySerial()`, `FindDriveByLabel()`, `GetRemovableDrives()`.
+- **Module Loading**: Updated `PSmm.psm1` to include `Services\StorageService.ps1` in class loading sequence.
+- **Documentation**: Updated `docs/modules.md` to reference new `StorageService` and link to comprehensive storage documentation.
+- **Architecture**: Storage drive operations now follow the service pattern used by other infrastructure components (FileSystemService, CimService, etc.).
+- **Startup**: Enhanced `Start-PSmediaManager.ps1` with working directory validation to ensure script runs from repository root, preventing path resolution issues.
+- **First-Run Setup**: Integrated storage configuration into unified first-run setup flow as Step 5 (final step after vault creation and token storage), providing a seamless onboarding experience.
+- **Bootstrap**: Removed early storage wizard call from `PSmediaManager.ps1` that ran before first-run setup, consolidating all first-run tasks into `Invoke-FirstRunSetup`.
+- **Architecture**: Refactored `Invoke-FirstRunSetup` to accept and use a complete `AppConfiguration` object throughout all setup steps, eliminating temporary object reconstruction and ensuring consistent path access.
+- **Bug Fix**: Fixed AppPaths initialization error in first-run setup Step 5 by passing the fully initialized `AppConfiguration` object instead of creating incomplete temporary configs.
+- **Bug Fix**: Fixed configuration export "property 'Count' cannot be found" errors by ensuring `_GetDictionaryKeys` always returns arrays and using safe count checks (`@($collection.Keys).Count`) for hashtable operations.
 
 #### Current edits (2025-11-26)
 
@@ -26,6 +44,8 @@ When preparing a release, move the items into a new versioned section and update
 - Documentation: Added "Test Environment Isolation" section to `docs/development.md` explaining test mode behavior and path resolution strategy.
 - Documentation: Expanded "Data & Storage Layout" section in `docs/architecture.md` to document production vs test mode path resolution differences.
 - Configuration: Clarified that `DriveLetter` and `Path` are discovered at runtime and should not be persisted in `src/Config/PSmm/PSmm.App.psd1`. Removed now-ignored `StorageType` from examples.
+
+- Documentation: Improved `README.md` Quick Start and Testing sections with optional PSGallery module pre-install guidance, a tip to re-run `Confirm-Plugins` after updates, and a quick Pester run command for fast local validation.
 
 #### Previous edits (2025-11-24)
 

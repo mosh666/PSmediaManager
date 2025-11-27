@@ -60,6 +60,13 @@ pwsh -NoLogo -NoProfile -File .\Start-PSmediaManager.ps1
 
 On first run PSmediaManager will initialize required directories and you can begin confirming plugins or creating projects via UI menus or exported functions.
 
+If you see module import or analyzer warnings, pre-install the recommended PSGallery modules (optional) and re-run:
+
+```pwsh
+Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
+./Start-PSmediaManager.ps1
+```
+
 ## Requirements
 
 Minimum PowerShell: 7.5.4 (see `src/Config/PSmm/PSmm.Requirements.psd1`).
@@ -81,6 +88,8 @@ External Tools Managed via Plugins (examples):
 - digiKam
 
 Each plugin definition includes: source type (GitHub/Url), asset pattern for reliable version resolution, command path, and executable name. See `PSmm.Requirements.psd1` for the authoritative list.
+
+Tip: Run `Confirm-Plugins` after pulling new changes to ensure newly added tools are acquired.
 
 ## Installation & Portability
 
@@ -237,6 +246,12 @@ Static Analysis (standalone run with repo settings):
 
 ```pwsh
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-PSScriptAnalyzer.ps1 -TargetPath ./src -Verbose
+```
+
+Quick sanity run (no coverage, fastest):
+
+```pwsh
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-Pester.ps1 -Quiet
 ```
 
 ## Development

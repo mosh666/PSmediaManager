@@ -10,10 +10,18 @@ Key Functions:
 
 ```text
 Invoke-PSmm
-Confirm-Storage
+Confirm-Storage / Get-StorageDrive
 Export-SafeConfiguration
 Get-SystemSecret / Save-SystemSecret / Initialize-SystemVault
 New-CustomFileName
+```
+
+Key Services:
+
+```text
+StorageService (Classes/Services/StorageService.ps1)
+- GetStorageDrives(), FindDriveBySerial(), FindDriveByLabel()
+- Testable abstraction for drive discovery via Windows CIM APIs
 ```
 
 Extension Tips:
@@ -21,6 +29,11 @@ Extension Tips:
 - Keep cross-cutting concerns (logging, UI) out of the core.
 - Add new services under `Classes/Services` when logic grows beyond simple functions.
 - Use `Write-PSmmHost` (exported from the core module) instead of raw `Write-Host` so shutdown messaging, analyzer suppressions, and UI parity remain intact.
+- For storage operations, prefer using `StorageService` class directly for better testability.
+
+Storage Documentation:
+
+- See [Storage Drive Management](storage.md) for comprehensive documentation on storage subsystem architecture, configuration, and usage patterns.
 
 ## PSmm.Logging
 
