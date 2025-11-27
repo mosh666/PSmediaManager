@@ -53,6 +53,8 @@ Practices:
 - Enrich context early (session id, project name).
 - Keep log messages action-oriented & concise.
 - Consider future JSON line output mode for ingestion pipelines.
+- Uses a shim (`New-FileSystemService`) to construct the `FileSystemService` class lazily so logging functions work in isolation (e.g., when only PSmm.Logging is imported during tests).
+- Dedicated specs (`Initialize-Logging.Tests.ps1`, `Invoke-LogRotation.Tests.ps1`) exercise the helper and rotation paths to guard against regressions.
 
 ## PSmm.Plugins
 

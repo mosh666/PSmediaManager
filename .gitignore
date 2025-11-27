@@ -5,6 +5,7 @@ Vault/
 Plugins/
 *.Run.psd1
 *.log
+tmp-logs/
 
 # PSmediaManager module-level Plugins folders (keep these)
 !src/**/Plugins/

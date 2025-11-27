@@ -57,7 +57,7 @@
         # Secret and Token values must be masked (asterisks are literal in output)
         $content | Should -Not -Match 's3cr3t'
         $content | Should -Match "Secret\s*=\s*'\*{8}'"
-        $content | Should -Match "Token\s*=\s*'\*{8}'"
+        $content | Should -Match "Token\s*=\s*'(?:\*{8}|ghp_\*+)'"
 
         # Cyclic refs should appear as the marker (or be truncated to MaxDepth in very deep graphs)
         $content | Should -Match '\[CyclicRef\]|\[MaxDepth\]'

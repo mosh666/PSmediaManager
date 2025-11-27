@@ -284,6 +284,48 @@ class LoggingException : MediaManagerException {
 
 <#
 .SYNOPSIS
+    Exception thrown when external process execution fails.
+
+.DESCRIPTION
+    Provides additional context for process failures including:
+    - Process name
+    - Exit code
+    - Command line arguments
+    - Recovery suggestions tailored for process launch issues
+#>
+class ProcessException : MediaManagerException {
+    [string]$ProcessName
+    [int]$ExitCode
+    [string]$CommandLine
+
+    ProcessException([string]$message) : base($message, 'Process') {
+        $this.RecoverySuggestion = 'Verify executable path, permissions, and required dependencies.'
+    }
+
+    ProcessException([string]$message, [string]$processName) : base($message, 'Process') {
+        $this.ProcessName = $processName
+        $this.RecoverySuggestion = "Check process '$processName' exists and is accessible."
+    }
+
+    ProcessException([string]$message, [string]$processName, [Exception]$innerException) : base($message, 'Process', $innerException) {
+        $this.ProcessName = $processName
+        $this.RecoverySuggestion = "Inspect inner exception details for process '$processName'."
+    }
+
+    [void] SetExitCode([int]$exitCode) {
+        $this.ExitCode = $exitCode
+        $this.AddData('ExitCode', $exitCode)
+        $this.RecoverySuggestion = "Process exited with code $exitCode. Review logs or enable verbose output."
+    }
+
+    [void] SetCommandLine([string]$commandLine) {
+        $this.CommandLine = $commandLine
+        $this.AddData('CommandLine', $commandLine)
+    }
+}
+
+<#
+.SYNOPSIS
     Exception thrown when project operations fail.
 
 .DESCRIPTION

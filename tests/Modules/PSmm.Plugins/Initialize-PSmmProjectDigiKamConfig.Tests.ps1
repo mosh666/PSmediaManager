@@ -3,13 +3,13 @@ Set-StrictMode -Version Latest
 
 Describe 'Initialize-PSmmProjectDigiKamConfig' {
     BeforeAll {
-        $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
-        $script:pluginsManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Plugins/PSmm.Plugins.psd1'
-        $script:psmmManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm/PSmm.psd1'
-        $script:loggingManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
-        $script:importClassesScript = Join-Path -Path $script:repoRoot -ChildPath 'tests/Support/Import-PSmmClasses.ps1'
+        $script:moduleRepoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+        $script:pluginsManifest = Join-Path -Path $script:moduleRepoRoot -ChildPath 'src/Modules/PSmm.Plugins/PSmm.Plugins.psd1'
+        $script:psmmManifest = Join-Path -Path $script:moduleRepoRoot -ChildPath 'src/Modules/PSmm/PSmm.psd1'
+        $script:loggingManifest = Join-Path -Path $script:moduleRepoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
+        $script:importClassesScript = Join-Path -Path $script:moduleRepoRoot -ChildPath 'tests/Support/Import-PSmmClasses.ps1'
 
-        . $script:importClassesScript -RepositoryRoot $script:repoRoot
+        . $script:importClassesScript -RepositoryRoot $script:moduleRepoRoot
         foreach ($module in 'PSmm.Plugins', 'PSmm', 'PSmm.Logging') {
             if (Get-Module -Name $module -ErrorAction SilentlyContinue) {
                 Remove-Module -Name $module -Force
@@ -18,12 +18,15 @@ Describe 'Initialize-PSmmProjectDigiKamConfig' {
         foreach ($manifest in @($script:psmmManifest, $script:loggingManifest, $script:pluginsManifest)) {
             Import-Module -Name $manifest -Force -ErrorAction Stop
         }
+    }
 
-        $script:repoRoot = $TestDrive
+    BeforeEach {
+        $script:repoRoot = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString())
+        $null = New-Item -Path $script:repoRoot -ItemType Directory -Force
+
         $script:srcRoot = Join-Path -Path $script:repoRoot -ChildPath 'src'
         $null = New-Item -Path $script:srcRoot -ItemType Directory -Force
 
-        # Build minimal AppConfiguration
         $script:cfg = [AppConfiguration]::new()
         $script:cfg.Paths = [AppPaths]::new()
         $script:cfg.Paths.RepositoryRoot = $script:repoRoot
@@ -34,12 +37,10 @@ Describe 'Initialize-PSmmProjectDigiKamConfig' {
         $script:cfg.Paths.App.Plugins = [PluginsPaths]::new()
         $script:cfg.Paths.App.Plugins.Root = Join-Path $script:repoRoot 'Plugins'
 
-        # Ensure folders exist
-        $null = New-Item -Path $script:cfg.Paths.App.Config -ItemType Directory -Force
-        $null = New-Item -Path $script:cfg.Paths.App.ConfigDigiKam -ItemType Directory -Force
-        $null = New-Item -Path $script:cfg.Paths.App.Plugins.Root -ItemType Directory -Force
+        foreach ($path in @($script:cfg.Paths.App.Config, $script:cfg.Paths.App.ConfigDigiKam, $script:cfg.Paths.App.Plugins.Root)) {
+            $null = New-Item -Path $path -ItemType Directory -Force
+        }
 
-        # Provide required templates in Config\digiKam
         Set-Content -Path (Join-Path $script:cfg.Paths.App.ConfigDigiKam 'digiKam-rc-template') -Value @"
 [General]
 AppDir=%%ProjectPath%%/Config/digiKam
@@ -49,12 +50,10 @@ Port=%%DatabasePort%%
 
         Set-Content -Path (Join-Path $script:cfg.Paths.App.ConfigDigiKam 'digiKam-metadataProfile.dkamp') -Value 'profile' -Encoding UTF8
 
-        # Create plugin directories
         $null = New-Item -Path (Join-Path $script:cfg.Paths.App.Plugins.Root 'digiKam-8.8.0') -ItemType Directory -Force
         $null = New-Item -Path (Join-Path $script:cfg.Paths.App.Plugins.Root 'mariadb-11.5.2') -ItemType Directory -Force
 
-        # Project selection
-        $script:projectRoot = Join-Path -Path $TestDrive -ChildPath 'ProjectA'
+        $script:projectRoot = Join-Path -Path $script:repoRoot -ChildPath 'ProjectA'
         $null = New-Item -Path $script:projectRoot -ItemType Directory -Force
         $script:cfg.Projects = @{ Current = @{ Name = 'ProjectA'; Path = $script:projectRoot } }
     }
@@ -75,5 +74,46 @@ Port=%%DatabasePort%%
         $first = PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA'
         $second = PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA'
         $second.DigiKamRcPath | Should -Be $first.DigiKamRcPath
+    }
+
+    It 'skips work when WhatIf is used' {
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        $result = PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA' -WhatIf
+
+        $result | Should -BeOfType hashtable
+        $result.Count | Should -Be 0
+        Test-Path -Path (Join-Path $script:projectRoot 'Config/digiKam-rc') | Should -BeFalse
+    }
+
+    It 'throws when project is not selected' {
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        $script:cfg.Projects = @{ Current = @{ Name = 'OtherProject'; Path = $script:projectRoot } }
+
+        { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA' } |
+            Should -Throw -ExceptionType ([ConfigurationException])
+    }
+
+    It 'throws when project path does not exist' {
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Remove-Item -Path $script:projectRoot -Recurse -Force
+
+        { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA' } |
+            Should -Throw -ExceptionType ([ConfigurationException])
+    }
+
+    It 'throws when digiKam installation is missing' {
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Remove-Item -Path (Join-Path $script:cfg.Paths.App.Plugins.Root 'digiKam-8.8.0') -Recurse -Force
+
+        { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA' } |
+            Should -Throw -ExceptionType ([PluginRequirementException])
+    }
+
+    It 'throws when MariaDB installation is missing' {
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Remove-Item -Path (Join-Path $script:cfg.Paths.App.Plugins.Root 'mariadb-11.5.2') -Recurse -Force
+
+        { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA' } |
+            Should -Throw -ExceptionType ([PluginRequirementException])
     }
 }

@@ -45,6 +45,88 @@ function Get-DefaultBaseline {
         }
     }
 }
+
+function Complete-PesterRun {
+    param(
+        [Parameter(Mandatory)][int]$ExitCode,
+        [Parameter()][object]$Result,
+        [switch]$PassThru,
+        [switch]$CiContext
+    )
+
+    $global:LASTEXITCODE = $ExitCode
+
+    if ($PassThru) {
+        return $Result
+    }
+
+    if ($CiContext) {
+        Write-Verbose "CI context detected. Ending process with exit code $ExitCode"
+        [System.Environment]::Exit($ExitCode)
+    }
+
+    if ($Host -and ($Host.PSObject.Properties.Name -contains 'SetShouldExit')) {
+        $Host.SetShouldExit($ExitCode)
+    }
+
+    [System.Environment]::Exit($ExitCode)
+}
+
+function New-PesterRunSummary {
+    param(
+        [Parameter()][object]$Result,
+        [Parameter()][int]$ExitCode
+    )
+
+    if ($null -eq $Result) {
+        return [pscustomobject]@{
+            Result = if ($ExitCode -eq 0) { 'Passed' } else { 'Failed' }
+            PassedCount = 0
+            FailedCount = 0
+            SkippedCount = 0
+            TotalCount = 0
+            Duration = [timespan]::Zero
+            FailedTests = @()
+        }
+    }
+
+    $failedTests = @()
+    if ($Result.FailedCount -gt 0 -and $null -ne $Result.Failed) {
+        foreach ($failed in @($Result.Failed)) {
+            $failedTests += [pscustomobject]@{
+                Name = $failed.Name
+                Path = $failed.Path
+                Duration = $failed.Duration
+                ErrorMessage = if ($failed.ErrorRecord) { $failed.ErrorRecord.Exception.Message } else { '' }
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Result = if ($ExitCode -eq 0) { 'Passed' } else { 'Failed' }
+        PassedCount = $Result.PassedCount
+        FailedCount = $Result.FailedCount
+        SkippedCount = $Result.SkippedCount
+        InconclusiveCount = $Result.InconclusiveCount
+        TotalCount = $Result.TotalCount
+        Duration = $Result.Duration
+        FailedTests = $failedTests
+    }
+}
+
+function Write-RunMessage {
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ConsoleColor]$Color = [ConsoleColor]::White,
+        [switch]$EmitToError
+    )
+
+    Write-Host $Message -ForegroundColor $Color
+
+    if ($EmitToError) {
+        [System.Console]::Error.WriteLine($Message)
+    }
+}
 if ([string]::IsNullOrWhiteSpace($TestPath)) {
     $TestPath = Join-Path -Path $scriptDirectory -ChildPath 'Modules'
 }
@@ -142,6 +224,10 @@ if ($CodeCoverage) {
             }
 
             # Build a precise file list based on real matches between Public functions and existing tests
+            # Allow explicit file-level exclusions to keep unit coverage focused on testable code paths
+            $fileNameExclusions = @(
+                'Show-StorageInfo.ps1' # Console UI heavy; keep out of unit coverage denominator
+            )
             foreach ($moduleName in $testedModules.Keys) {
                 $moduleRoot = Join-Path -Path (Join-Path -Path $repoRoot -ChildPath 'src/Modules') -ChildPath $moduleName
                 $publicPath = Join-Path -Path $moduleRoot -ChildPath 'Public'
@@ -149,6 +235,7 @@ if ($CodeCoverage) {
 
                 $publicFunctions = Get-ChildItem -Path $publicPath -Filter '*.ps1' -Recurse -File -ErrorAction SilentlyContinue
                 foreach ($func in $publicFunctions) {
+                    if ($fileNameExclusions -contains $func.Name) { continue }
                     $funcName = [System.IO.Path]::GetFileNameWithoutExtension($func.Name)
                     $matchingTest = Get-ChildItem -Path (Join-Path -Path $TestPath -ChildPath $moduleName) -Filter ("$funcName.Tests.ps1") -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
                     if ($matchingTest) {
@@ -326,9 +413,6 @@ if ($CodeCoverage) {
 
     $baselineFailed = $false
     if ($latestLine -lt $baselineLine) {
-        $VerbosePreference = 'SilentlyContinue'
-        Write-Host "Code coverage ${latestLine}% is below the enforced baseline of ${baselineLine}%" -ForegroundColor Red
-        [Console]::Error.WriteLine("Exit code: 1")
         $baselineFailed = $true
     }
 
@@ -341,45 +425,45 @@ if ($CodeCoverage) {
     }
 }
 
-if ($result.FailedCount -gt 0) {
-    $VerbosePreference = 'SilentlyContinue'
-    $msg = "Pester reported $($result.FailedCount) failure(s)."
-    Write-Host $msg -ForegroundColor Red
-    [Console]::Error.WriteLine($msg)
-}
-elseif ($CodeCoverage -and $baselineFailed) {
-    $msg = "Code coverage $latestLine% is below the enforced baseline of $baselineLine%"
-}
-else {
-    Write-Host 'All Pester tests passed.' -ForegroundColor Green
-    $msg = ''
-}
-
 $ciContext = [string]::Equals($env:GITHUB_ACTIONS, 'true', [System.StringComparison]::OrdinalIgnoreCase) -or
     [string]::Equals($env:MEDIA_MANAGER_FORCE_EXIT, '1', [System.StringComparison]::OrdinalIgnoreCase)
 
-[int]$exitCode = if ($result.FailedCount -gt 0) {
-    [Math]::Min([int][Math]::Abs($result.FailedCount), [int]::MaxValue)
+$executionState = if ($result -and $result.PSObject.Properties.Name -contains 'FailedCount' -and $result.FailedCount -gt 0) {
+    'TestsFailed'
 }
 elseif ($CodeCoverage -and $baselineFailed) {
-    1
+    'CoverageBelowBaseline'
 }
 else {
-    0
+    'Success'
 }
 
-$global:LASTEXITCODE = $exitCode
+[int]$exitCode = 0
+switch ($executionState) {
+    'TestsFailed' {
+        $failureCount = if ($null -ne $result) { [int]$result.FailedCount } else { 1 }
+        $msg = "Pester reported $failureCount failure(s)."
+        Write-RunMessage -Message $msg -Color Red -EmitToError:$ciContext
+        $exitCode = [Math]::Min($failureCount, [int]::MaxValue)
+    }
+    'CoverageBelowBaseline' {
+        $coverageMsg = "Code coverage ${latestLine}% is below the enforced baseline of ${baselineLine}%"
+        Write-RunMessage -Message $coverageMsg -Color Red -EmitToError:$ciContext
+        $exitCode = 1
+    }
+    Default {
+        Write-Host 'All Pester tests passed.' -ForegroundColor Green
+        $exitCode = 0
+    }
+}
+
+$completionResult = Complete-PesterRun -ExitCode $exitCode -Result $result -PassThru:$PassThru -CiContext:$ciContext
 
 if ($PassThru) {
-    # In PassThru mode, return the result object regardless of exit code.
-    # Caller can inspect $result.FailedCount and $LASTEXITCODE to decide handling.
-    return $result
+    $summary = New-PesterRunSummary -Result $completionResult -ExitCode $exitCode
+    $summary
+        [void](Read-Host 'Press Enter to exit the test session')
+        [System.Environment]::exit($exitCode)
 }
 
-if ($ciContext) {
-    Write-Verbose "CI context detected. Forcing process exit with code $exitCode via Environment::Exit"
-    [System.Environment]::Exit($exitCode)
-}
-else {
-    exit $exitCode
-}
+return

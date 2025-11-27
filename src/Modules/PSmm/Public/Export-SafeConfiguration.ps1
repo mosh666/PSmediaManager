@@ -164,20 +164,31 @@ function Export-SafeConfiguration {
                 param(
                     [Parameter()][AllowNull()]$Value,
                     [int]$Level = 0,
-                    [int]$MaxDepth = 20
+                    [int]$MaxDepth = 20,
+                    [Parameter()][hashtable]$Visited
                 )
 
                 if ($null -eq $Value) { return $null }
                 if ($Level -gt $MaxDepth) { return '[MaxDepth]' }
 
+                if ($null -eq $Visited) { $Visited = @{} }
+
                 $normalized = _ToSafeScalar $Value
                 $isPrimitive = $Value -is [ValueType] -or $Value -is [string]
                 if ($isPrimitive -or $normalized -ne $Value) { return $normalized }
 
+                $objId = $null
+                try { $objId = [System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($Value) }
+                catch { $objId = $null }
+                if ($null -ne $objId) {
+                    if ($Visited.ContainsKey($objId)) { return '[CyclicRef]' }
+                    $Visited[$objId] = $true
+                }
+
                 if ($Value -is [System.Collections.IDictionary]) {
                     $dictCopy = @{}
                     foreach ($key in $Value.Keys) {
-                        $dictCopy[$key] = _CloneGeneric -Value $Value[$key] -Level ($Level + 1) -MaxDepth $MaxDepth
+                        $dictCopy[$key] = _CloneGeneric -Value $Value[$key] -Level ($Level + 1) -MaxDepth $MaxDepth -Visited $Visited
                     }
                     return $dictCopy
                 }
@@ -185,7 +196,7 @@ function Export-SafeConfiguration {
                 if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
                     $arrCopy = @()
                     foreach ($item in $Value) {
-                        $arrCopy += _CloneGeneric -Value $item -Level ($Level + 1) -MaxDepth $MaxDepth
+                        $arrCopy += _CloneGeneric -Value $item -Level ($Level + 1) -MaxDepth $MaxDepth -Visited $Visited
                     }
                     return $arrCopy
                 }
@@ -195,7 +206,7 @@ function Export-SafeConfiguration {
                     $props = $Value | Get-Member -MemberType Properties | Select-Object -ExpandProperty Name
                     foreach ($p in $props) {
                         try {
-                            $propCopy[$p] = _CloneGeneric -Value ($Value.$p) -Level ($Level + 1) -MaxDepth $MaxDepth
+                            $propCopy[$p] = _CloneGeneric -Value ($Value.$p) -Level ($Level + 1) -MaxDepth $MaxDepth -Visited $Visited
                         }
                         catch {
                             $propCopy[$p] = $null
@@ -769,6 +780,113 @@ function Export-SafeConfiguration {
         # Prepare a single visited map for cycle detection across the entire traversal
         $visitedMap = @{}
 
+        # Track GitHub token occurrences so we can preserve ghp_/etc. prefixes even for secret keys
+        function _CollectGitHubTokenPaths {
+            param(
+                [Parameter()][AllowNull()]$Data,
+                [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.ArrayList]$Results,
+                [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.ArrayList]$PathStack,
+                [Parameter(Mandatory)][hashtable]$Visited
+            )
+
+            if ($null -eq $Data) { return }
+
+            if ($Data -is [string]) {
+                $maskedCandidate = $Data -replace '(?i)(ghp_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9]{36,}', '$1****************'
+                if ($maskedCandidate -ne $Data -and -not [string]::IsNullOrWhiteSpace($maskedCandidate)) {
+                    $null = $Results.Add([pscustomobject]@{
+                        Path = $PathStack.ToArray()
+                        MaskedValue = $maskedCandidate
+                    })
+                }
+                return
+            }
+
+            $isPrimitive = $Data -is [ValueType]
+            if (-not $isPrimitive) {
+                try { $objId = [System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($Data) }
+                catch { $objId = $null }
+                if ($null -ne $objId) {
+                    if ($Visited.ContainsKey($objId)) { return }
+                    $Visited[$objId] = $true
+                }
+            }
+
+            if ($Data -is [System.Collections.IDictionary]) {
+                foreach ($key in $Data.Keys) {
+                    $PathStack.Add($key) | Out-Null
+                    _CollectGitHubTokenPaths -Data $Data[$key] -Results $Results -PathStack $PathStack -Visited $Visited
+                    $PathStack.RemoveAt($PathStack.Count - 1)
+                }
+                return
+            }
+
+            if ($Data -is [System.Collections.IEnumerable] -and $Data -isnot [string]) {
+                $index = 0
+                foreach ($item in $Data) {
+                    $PathStack.Add($index) | Out-Null
+                    _CollectGitHubTokenPaths -Data $item -Results $Results -PathStack $PathStack -Visited $Visited
+                    $PathStack.RemoveAt($PathStack.Count - 1)
+                    $index++
+                }
+            }
+        }
+
+        function _ApplyGitHubTokenMasks {
+            param(
+                [Parameter()][AllowNull()]$Data,
+                [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.IEnumerable]$Locations
+            )
+
+            if ($null -eq $Data) { return }
+
+            foreach ($location in $Locations) {
+                if ($null -eq $location.Path -or $location.Path.Length -eq 0) { continue }
+
+                $current = $Data
+                $segments = $location.Path
+                for ($i = 0; $i -lt ($segments.Length - 1); $i++) {
+                    $segment = $segments[$i]
+                    if ($current -is [System.Collections.IDictionary]) {
+                        if ($current.Contains($segment)) { $current = $current[$segment] }
+                        elseif ($current.ContainsKey($segment)) { $current = $current[$segment] }
+                        else { $current = $null; break }
+                    }
+                    elseif ($current -is [System.Collections.IList]) {
+                        if ($segment -is [int] -and $segment -ge 0 -and $segment -lt $current.Count) {
+                            $current = $current[$segment]
+                        }
+                        else {
+                            $current = $null; break
+                        }
+                    }
+                    else {
+                        $current = $null; break
+                    }
+                }
+
+                if ($null -eq $current) { continue }
+
+                $lastSegment = $segments[$segments.Length - 1]
+                if ($current -is [System.Collections.IDictionary]) {
+                    $hasKey = $current.Contains($lastSegment) -or $current.ContainsKey($lastSegment)
+                    if (-not $hasKey) { continue }
+                    $candidate = $current[$lastSegment]
+                    if ($candidate -is [string] -and $candidate -eq '********') {
+                        $current[$lastSegment] = $location.MaskedValue
+                    }
+                }
+                elseif ($current -is [System.Collections.IList]) {
+                    if ($lastSegment -isnot [int]) { continue }
+                    if ($lastSegment -lt 0 -or $lastSegment -ge $current.Count) { continue }
+                    $candidate = $current[$lastSegment]
+                    if ($candidate -is [string] -and $candidate -eq '********') {
+                        $current[$lastSegment] = $location.MaskedValue
+                    }
+                }
+            }
+        }
+
         # Sanitizer: masks sensitive keys and token-like strings; preserves structure
         function _Sanitize {
             param(
@@ -921,6 +1039,9 @@ function Export-SafeConfiguration {
         # Build rich snapshot first so generic dictionaries and typed objects are represented as hashtables
         $snapshot = Build-SafeSnapshot -Configuration $Configuration
 
+        $gitHubTokenLocations = New-Object System.Collections.ArrayList
+        _CollectGitHubTokenPaths -Data $snapshot -Results $gitHubTokenLocations -PathStack (New-Object System.Collections.ArrayList) -Visited @{}
+
         # Note: Omit Environment and KeysTest from export to maximize PSD1 import compatibility
 
         # Now sanitize snapshot (will also mask any secrets inside Environment.Modules etc.)
@@ -1067,6 +1188,9 @@ function Export-SafeConfiguration {
 
         # Convert all leaves to trimmed strings for uniform single-quoted serialization
         $stringified = _StringifyValues $sanitized
+        if ($gitHubTokenLocations.Count -gt 0) {
+            _ApplyGitHubTokenMasks -Data $stringified -Locations $gitHubTokenLocations
+        }
 
         if ($originalModules) {
             try {

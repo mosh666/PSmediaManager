@@ -25,7 +25,7 @@
 
         # Token pattern should not contain the original token and ApiKey should be masked
         $content | Should -Not -Match 'ghp_[A-Za-z0-9]{36}'
-        $content | Should -Match "ApiKey = '\*{8}'"
+        $content | Should -Match "ApiKey = '(?:\*{8}|ghp_\*+)'"
 
         # Confirm at least a short star sequence exists for masked passwords
         $content | Should -Match '\*{4,}'
@@ -134,8 +134,8 @@ Describe 'Export-SafeConfiguration' {
         $null = PSmm\Export-SafeConfiguration -Configuration $script:config -Path $exportPath
 
         $content = Get-Content -Path $exportPath -Raw
-        # Token should be masked (shown as '********')
-        $content | Should -Match "TokenLike = '\*\*\*\*\*\*\*\*'"
+        # Token should be masked (shown as '********' or ghp_**************** when preserving prefix)
+        $content | Should -Match "TokenLike = '(?:\*{8}|ghp_\*+)'"
         # Original token should NOT appear
         $content | Should -Not -Match "ghp_abcdefghijklmnopqrstuvwxyz0123456789abcd"
     }

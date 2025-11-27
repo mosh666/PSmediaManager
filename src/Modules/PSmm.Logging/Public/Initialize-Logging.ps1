@@ -53,27 +53,31 @@ function Initialize-Logging {
 
         # Initialize script-level logging context
         $script:Context = @{ Context = $null }
-        # Create logging configuration hashtable for PSLogs using config defaults
-        $script:Logging = @{
-            Path = $Config.Logging.Path
-            DefaultLevel = $Config.Logging.DefaultLevel
-            Format = $Config.Logging.Format
-            PrintBody = $Config.Logging.PrintBody
-            Append = $Config.Logging.Append
-            Encoding = $Config.Logging.Encoding
-            PrintException = $Config.Logging.PrintException
-            ShortLevel = $Config.Logging.ShortLevel
-            OnlyColorizeLevel = $Config.Logging.OnlyColorizeLevel
-        }
+        $loggingSource = $Config.Logging
 
-        # Validate that required logging properties exist
-        if ($null -eq $script:Logging) {
+        if ($null -eq $loggingSource) {
             throw "Logging configuration is null. Run.App.Logging was not properly initialized."
         }
 
-        if (-not ($script:Logging -is [hashtable])) {
-            throw "Logging configuration is not a hashtable. Type: $($script:Logging.GetType().FullName)"
+        $loggingSettings = $null
+
+        if ($loggingSource -is [System.Collections.IDictionary]) {
+            # Clone dictionary inputs so defaults can be applied without mutating the caller
+            $loggingSettings = @{} + $loggingSource
         }
+        elseif ($loggingSource -is [string] -or $loggingSource.GetType().IsValueType) {
+            throw "Logging configuration is not a hashtable. Type: $($loggingSource.GetType().FullName)"
+        }
+        else {
+            # Convert objects (PSCustomObject or typed) to hashtable for easier merging
+            $convertedLogging = @{}
+            foreach ($property in $loggingSource.PSObject.Properties) {
+                $convertedLogging[$property.Name] = $property.Value
+            }
+            $loggingSettings = $convertedLogging
+        }
+
+        $script:Logging = $loggingSettings
 
         if (-not $script:Logging.ContainsKey('Path')) {
             $loggingKeys = if ($script:Logging.Keys.Count -gt 0) { $script:Logging.Keys -join ', ' } else { '(no keys)' }
@@ -145,9 +149,7 @@ function Initialize-Logging {
         # Instantiate FileSystemService only if available (avoid hard failure on missing type)
         if (-not $PSBoundParameters.ContainsKey('FileSystem') -or $null -eq $FileSystem) {
             try {
-                # Attempt to create via type accelerator (class may not yet be loaded in some edge cases)
-                $null = [FileSystemService] # access to trigger type resolution
-                $FileSystem = [FileSystemService]::new()
+                $FileSystem = New-FileSystemService
             }
             catch {
                 Write-Verbose 'FileSystemService type not available - falling back to native cmdlets.'

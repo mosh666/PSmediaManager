@@ -70,6 +70,25 @@ Describe 'Get-PSmmProjectPorts' {
         Should -Invoke Get-Process -ModuleName PSmm.Plugins -Times 1
     }
 
+    It 'marks port as free when include usage finds no listener' {
+        $config.Projects.PortRegistry = @{ 'Epsilon' = 3344 }
+
+        Mock Write-PSmmLog {
+            param($Level, $Message, $Context, $ErrorRecord, [switch]$Console, [switch]$File)
+        } -ModuleName PSmm.Plugins
+        Mock Get-NetTCPConnection { @() } -ModuleName PSmm.Plugins
+        Mock Get-Process { throw 'should not be called when no connection exists' } -ModuleName PSmm.Plugins
+
+        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -IncludeUsage
+
+        $result.Count | Should -Be 1
+        $result[0].InUse | Should -BeFalse
+        $result[0].ProcessId | Should -Be 0
+        $result[0].ProcessName | Should -Be ''
+        Should -Invoke Get-NetTCPConnection -ModuleName PSmm.Plugins -Times 1
+        Should -Invoke Get-Process -ModuleName PSmm.Plugins -Times 0
+    }
+
     It 'sets usage to Unknown when usage determination fails' {
         $config.Projects.PortRegistry = @{ 'Delta' = 3333 }
 

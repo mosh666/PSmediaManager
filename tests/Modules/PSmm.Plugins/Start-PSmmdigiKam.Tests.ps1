@@ -82,6 +82,106 @@ Port=%%DatabasePort%%
         Should -Invoke Initialize-PSmmProjectDigiKamConfig -ModuleName PSmm.Plugins -Times 0
     }
 
+    It 'throws when no current project is defined' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{}
+
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg } | Should -Throw -ExceptionType ([ConfigurationException])
+    }
+
+    It 'logs verbose cancellation when ShouldProcess declines' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{ Current = @{ Name = 'Gamma'; Path = (Join-Path $TestDrive 'GammaProj') } }
+
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Mock Write-PSmmHost {} -ModuleName PSmm.Plugins
+        Mock Initialize-PSmmProjectDigiKamConfig { throw 'Should not execute when ShouldProcess returns false' } -ModuleName PSmm.Plugins
+        Mock Start-Process { throw 'Should not be called' } -ModuleName PSmm.Plugins
+        Mock Write-Verbose {} -ModuleName PSmm.Plugins
+
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -WhatIf } | Should -Not -Throw
+
+        Should -Invoke Write-Verbose -ModuleName PSmm.Plugins -ParameterFilter { $Message -eq 'Start digiKam operation cancelled by user' } -Times 1
+        Should -Invoke Initialize-PSmmProjectDigiKamConfig -ModuleName PSmm.Plugins -Times 0
+        Should -Invoke Start-Process -ModuleName PSmm.Plugins -Times 0
+    }
+
+    It 'throws when digiKam executable cannot be found' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{ Current = @{ Name = 'MissingExe'; Path = (Join-Path $TestDrive 'MissingExeProj') } }
+
+        $pluginsPath = Join-Path $TestDrive 'missing-exe'
+        $rcPath = Join-Path -Path $pluginsPath -ChildPath 'digiKam.rc'
+
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Mock Write-PSmmHost {} -ModuleName PSmm.Plugins
+        Mock Initialize-PSmmProjectDigiKamConfig {
+            [pscustomobject]@{
+                DigiKamRcPath = $rcPath
+                AppDir = 'C:/Projects/MissingExe/AppDir'
+                DatabasePort = 3340
+                DigiKamPluginsPath = $pluginsPath
+                MetadataProfile = 'profile'
+            }
+        } -ModuleName PSmm.Plugins
+        Mock Start-Process { throw 'Should not run when exe missing' } -ModuleName PSmm.Plugins
+
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg } | Should -Throw -ExceptionType ([PluginRequirementException])
+    }
+
+    It 'throws when digiKam configuration file is missing' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{ Current = @{ Name = 'MissingConfig'; Path = (Join-Path $TestDrive 'MissingCfgProj') } }
+
+        $pluginsPath = Join-Path $TestDrive 'missing-config'
+        $null = New-Item -Path $pluginsPath -ItemType Directory -Force
+        $digiKamExe = Join-Path $pluginsPath 'digikam.exe'
+        Set-Content -Path $digiKamExe -Value '' -Encoding UTF8
+        $rcPath = Join-Path -Path $pluginsPath -ChildPath 'digiKam.rc'
+
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Mock Write-PSmmHost {} -ModuleName PSmm.Plugins
+        Mock Initialize-PSmmProjectDigiKamConfig {
+            [pscustomobject]@{
+                DigiKamRcPath = $rcPath
+                AppDir = 'C:/Projects/MissingConfig/AppDir'
+                DatabasePort = 3341
+                DigiKamPluginsPath = $pluginsPath
+                MetadataProfile = 'profile'
+            }
+        } -ModuleName PSmm.Plugins
+        Mock Start-Process { throw 'Should not launch when config missing' } -ModuleName PSmm.Plugins
+
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg } | Should -Throw -ExceptionType ([ConfigurationException])
+    }
+
+    It 'throws a ProcessException when Start-Process returns null' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{ Current = @{ Name = 'ProcFail'; Path = (Join-Path $TestDrive 'ProcFailProj') } }
+
+        $pluginsPath = Join-Path $TestDrive 'proc-fail'
+        $null = New-Item -Path $pluginsPath -ItemType Directory -Force
+        $digiKamExe = Join-Path $pluginsPath 'digikam.exe'
+        $rcPath = Join-Path $pluginsPath 'digiKam.rc'
+        Set-Content -Path $digiKamExe -Value '' -Encoding UTF8
+        Set-Content -Path $rcPath -Value '' -Encoding UTF8
+
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Mock Write-PSmmHost {} -ModuleName PSmm.Plugins
+        Mock Initialize-PSmmProjectDigiKamConfig {
+            [pscustomobject]@{
+                DigiKamRcPath = $rcPath
+                AppDir = 'C:/Projects/ProcFail/AppDir'
+                DatabasePort = 3342
+                DigiKamPluginsPath = $pluginsPath
+                MetadataProfile = 'profile'
+            }
+        } -ModuleName PSmm.Plugins
+        Mock Start-Process { return $null } -ModuleName PSmm.Plugins
+
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg } | Should -Throw -ExceptionType ([ProcessException])
+    }
+
     It 'logs error details when project setup fails' {
         $cfg = [AppConfiguration]::new()
         $cfg.Projects = @{ Current = @{ Name = 'Alpha'; Path = (Join-Path $TestDrive 'Alpha') } }

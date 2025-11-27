@@ -22,6 +22,8 @@ When preparing a release, move the items into a new versioned section and update
 - **Storage Wizard**: Added visual wizard header with decorative borders showing mode (Add/Edit) and group ID.
 - **Storage Wizard**: Added step-by-step progress indicators (Step 1/2/3 of 3) with descriptive guidance text.
 - **Storage Management**: Added numbered menu system with dynamic option mapping based on available storage groups.
+- **Logging**: Added `New-FileSystemService` helper under `PSmm.Logging` so file system operations can be resolved without importing the full PSmm class graph; keeps logging usable in analyzer runs and partial module imports.
+- **Tests**: Added `Initialize-Logging.Tests.ps1` and `Invoke-LogRotation.Tests.ps1` to cover the helper, rotation workflow, and configuration validation scenarios.
 
 ### Changed
 
@@ -84,6 +86,7 @@ When preparing a release, move the items into a new versioned section and update
 - Configuration: Clarified that `DriveLetter` and `Path` are discovered at runtime and should not be persisted in `src/Config/PSmm/PSmm.App.psd1`. Removed now-ignored `StorageType` from examples.
 
 - Documentation: Improved `README.md` Quick Start and Testing sections with optional PSGallery module pre-install guidance, a tip to re-run `Confirm-Plugins` after updates, and a quick Pester run command for fast local validation.
+- Documentation: Updated `README.md`, `docs/development.md`, and `docs/modules.md` with the latest coverage baseline (65.43%), background on `New-FileSystemService`, and references to the new logging-focused tests.
 
 #### Previous edits (2025-11-24)
 
@@ -121,6 +124,7 @@ These are small documentation/metadata updates; move to a versioned release entr
 - **fix(module loading)**: Added `Services\StorageService.ps1` to `ScriptsToProcess` in `PSmm.psd1` so the class loads before public wrapper usage; requires a fresh PowerShell session after update for class definition changes.
 - **fix(detection)**: Ensured USB/removable detection treats disks with `BusType = 'USB'` even when `InterfaceType = 'SCSI'` (common for USB mass‑storage bridges); wizard now lists these devices properly.
 - **docs(storage)**: Updated `README.md` and `docs/storage.md` with troubleshooting guidance for missing drives and clarified detection logic.
+- **fix(logging)**: Routed `Initialize-Logging` and `Invoke-LogRotation` through `New-FileSystemService` and restored a string-based `[OutputType('FileSystemService')]` declaration so `[FileSystemService]` no longer needs to be loaded during attribute parsing, fixing analyzer/test failures in isolated module runs.
 
 #### 2025-11-26
 

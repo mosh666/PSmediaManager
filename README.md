@@ -72,8 +72,8 @@ Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Sco
 This project maintains high code quality standards:
 
 - **98.2%** PSScriptAnalyzer compliance (2/113 issues - both false positives)
-- **61.82%** line coverage with automated baseline enforcement
-- Comprehensive test suite with 162+ passing tests
+- **65.43%** line coverage with automated baseline enforcement
+- Comprehensive test suite with 209+ passing tests
 - Follows PowerShell best practices:
   - Named parameters for all function calls
   - Proper stream usage (`Write-Information` vs `Write-Host`)
@@ -219,6 +219,7 @@ Stop-PSmmdigiKam         # Graceful stop
 - Context enrichment via `Set-LogContext`.
 - `Write-PSmmLog -Level Debug|Info|Warn|Error` unified entrypoint.
 - Rotation logic: `Invoke-LogRotation` (run in maintenance or scheduled).
+- Uses a lightweight `New-FileSystemService` helper so logging continues to work even when classes are not yet loaded (e.g., during isolated tests).
 
 Example:
 
@@ -260,9 +261,10 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-Pester.ps1 
 Key behavior:
 
 - Wraps `Invoke-PSScriptAnalyzer.ps1`, which preloads PSmm types so `TypeNotFound` noise is filtered before enforcing errors.
-- Persists results to `tests/PSScriptAnalyzerResults.json`, `tests/TestResults.xml`, `.coverage-jacoco.xml`, and `.coverage-latest.json` (currently 61.35% line coverage enforced by baseline).
+- Persists results to `tests/PSScriptAnalyzerResults.json`, `tests/TestResults.xml`, `.coverage-jacoco.xml`, and `.coverage-latest.json` (currently 65.43% line coverage enforced by baseline).
 - Supports `-PassThru` for tooling scenarios and sets the exit code the same way GitHub Actions does (Environment.Exit in CI contexts).
 - **Test Isolation**: Automatically sets `MEDIA_MANAGER_TEST_MODE='1'` to ensure runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) are created within test directories rather than on the system drive, preventing test pollution and enabling parallel test execution.
+- Recent additions: dedicated logging specs (`Initialize-Logging.Tests.ps1`, `Invoke-LogRotation.Tests.ps1`) cover new error handling paths and the `New-FileSystemService` helper so regression failures surface quickly.
 
 After legitimate coverage improvements, refresh the baseline to keep CI green:
 

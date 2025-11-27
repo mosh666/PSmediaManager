@@ -187,11 +187,11 @@ function Invoke-StorageWizard {
     if (-not $NonInteractive) {
         Write-PSmmHost "╔═══════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
         if ($Mode -eq 'Edit') {
-            Write-PSmmHost "║           Storage Configuration Wizard - Edit Mode            ║" -ForegroundColor Cyan
+            Write-PSmmHost "║           Storage Configuration Wizard - Edit Mode               ║" -ForegroundColor Cyan
             Write-PSmmHost "║                   Editing Group: $($groupId.PadRight(35))║" -ForegroundColor Cyan
         } else {
-            Write-PSmmHost "║           Storage Configuration Wizard - Add Mode             ║" -ForegroundColor Cyan
-            Write-PSmmHost "║                Creating Group: $($groupId.PadRight(36))║" -ForegroundColor Cyan
+            Write-PSmmHost "║           Storage Configuration Wizard - Add Mode                 ║" -ForegroundColor Cyan
+            Write-PSmmHost "║                Creating Group: $($groupId.PadRight(35))║" -ForegroundColor Cyan
         }
         Write-PSmmHost "╚═══════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
         Write-PSmmHost ""
