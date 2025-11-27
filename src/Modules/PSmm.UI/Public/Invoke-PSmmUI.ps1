@@ -85,7 +85,11 @@ function Invoke-PSmmUI {
             # Retrieve projects once per loop iteration (centralized) and pass downstream
             $loopProjects = $null
             try {
+                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $($Config.Storage.Keys.Count)" -File
                 $loopProjects = Get-PSmmProjects -Config $Config
+                $masterCount = if ($loopProjects.Master) { $loopProjects.Master.Keys.Count } else { 0 }
+                $backupCount = if ($loopProjects.Backup) { $loopProjects.Backup.Keys.Count } else { 0 }
+                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Projects loaded. Master drives: $masterCount, Backup drives: $backupCount" -File
             }
             catch {
                 Write-PSmmLog -Level ERROR -Context 'Invoke-PSmmUI' -Message "Project retrieval failed: $_" -ErrorRecord $_ -File
@@ -212,8 +216,15 @@ function Invoke-PSmmUI {
                         $driveRoot = [System.IO.Path]::GetPathRoot($Config.Paths.Root)
                         if (-not [string]::IsNullOrWhiteSpace($driveRoot)) {
                             if (Get-Command Invoke-ManageStorage -ErrorAction SilentlyContinue) {
+                                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Storage groups before management: $($Config.Storage.Keys.Count)" -File
                                 $null = Invoke-ManageStorage -Config $Config -DriveRoot $driveRoot
-                                # ManageStorage handles its own confirmations and reloads
+                                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Storage groups after management: $($Config.Storage.Keys.Count)" -File
+                                # After storage changes, ensure storage status is refreshed
+                                if (Get-Command Confirm-Storage -ErrorAction SilentlyContinue) {
+                                    Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Refreshing storage status" -File
+                                    Confirm-Storage -Config $Config
+                                    Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Storage status refreshed" -File
+                                }
                             }
                             else {
                                 Write-Warning 'Invoke-ManageStorage not available.'

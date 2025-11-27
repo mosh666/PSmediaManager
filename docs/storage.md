@@ -337,12 +337,24 @@ function Invoke-StorageWizard {
 
 **Workflow**:
 
-1. **Step 1**: Prompt for `DisplayName`
-2. **Step 2**: Select Master drive from available USB/removable drives
-3. **Step 3**: Select Backup drive(s) (can add multiple)
-4. **Duplicate Detection**: Calls `Test-DuplicateSerial` before adding
-5. **Persistence**: Writes to `PSmm.Storage.psd1` via `AppConfigurationBuilder`
-6. **Auto-Renumbering**: Groups are renumbered sequentially (1, 2, 3...) on write
+1. **Drive Scanning**: Automatically detects USB/removable drives with visual feedback
+2. **Drive Filtering**: Excludes drives already assigned to other storage groups (except when editing)
+3. **Step 1 - Display Name**: Prompt for descriptive name with visual step indicator
+4. **Step 2 - Master Drive**: Select primary storage with improved labeling showing current serial
+5. **Step 3 - Backup Drives**: Select optional backup drives with clear multi-selection instructions
+6. **Configuration Summary**: Shows complete group configuration with drive details
+7. **Duplicate Detection**: Calls `Test-DuplicateSerial` before adding
+8. **Persistence**: Writes to `PSmm.Storage.psd1` via `AppConfigurationBuilder`
+9. **Auto-Renumbering**: Groups are renumbered sequentially (1, 2, 3...) on write
+10. **Confirmation**: Visual success message with file location
+
+**User Experience Enhancements**:
+
+- **Visual Wizard Header**: Decorative borders showing mode (Add/Edit) and group ID
+- **Progress Indicators**: Clear step-by-step guidance (Step X of 3) with descriptions
+- **Drive Information**: Shows labels, serial numbers, sizes for informed selection
+- **Contextual Prompts**: Different prompts for Add vs Edit mode showing current values
+- **File-Only Logging**: Reduces console noise during interactive operations
 
 **Test Mode**: Set `$env:MEDIA_MANAGER_TEST_INPUTS` for automated testing
 

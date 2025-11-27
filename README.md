@@ -81,6 +81,24 @@ This project maintains high code quality standards:
   - Type declarations with `[OutputType]` attributes
   - Suppression attributes for documented false positives
 
+## Storage Management
+
+PSmediaManager includes an interactive storage wizard for managing removable drives and backup configurations:
+
+- **USB/Removable Drive Detection**: Automatically scans and identifies portable storage devices
+- **Storage Groups**: Organize drives into logical groups with one Master and multiple Backup drives
+- **Interactive Wizard**: Step-by-step guided configuration with visual feedback
+- **Drive Filtering**: Prevents accidental reassignment of drives already used in other groups
+- **Edit Mode**: Update existing storage group configurations
+- **Detailed Display**: Shows drive labels, serial numbers, and availability status
+
+Access storage management via:
+
+- UI menu option `[R]` - Manage Storage
+- Direct function: `Invoke-ManageStorage -Config $config -DriveRoot 'D:\'`
+
+See `docs/storage.md` for comprehensive storage architecture documentation.
+
 ## Requirements
 
 Minimum PowerShell: 7.5.4 (see `src/Config/PSmm/PSmm.Requirements.psd1`).

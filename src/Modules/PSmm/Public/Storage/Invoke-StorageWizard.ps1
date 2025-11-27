@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Interactive wizard to configure storage groups from USB/removable drives.
 
@@ -55,7 +55,7 @@ function Invoke-StorageWizard {
 
     $logAvail = Get-Command Write-PSmmLog -ErrorAction SilentlyContinue
     function Write-WizardLog([string]$level, [string]$id, [string]$msg) {
-        if ($logAvail) { Write-PSmmLog -Level $level -Context 'StorageWizard' -Message ("$($id): $($msg)") -Console -File }
+        if ($logAvail) { Write-PSmmLog -Level $level -Context 'StorageWizard' -Message ("$($id): $($msg)") -File }
         else { Write-Verbose "$($id): $($msg)" }
     }
 
@@ -84,10 +84,51 @@ function Invoke-StorageWizard {
     }
 
     # Gather drives and filter for USB/removable
+    if (-not $NonInteractive) {
+        Write-PSmmHost "Scanning for available storage drives..." -ForegroundColor Cyan
+    }
+
     $allDrives = @()
     try { $allDrives = Get-StorageDrive } catch { $allDrives = @() }
 
+    if (-not $NonInteractive) {
+        Write-PSmmHost "  Found $($allDrives.Count) total drive(s)" -ForegroundColor Gray
+    }
+
     $candidateDrives = @($allDrives | Where-Object { $_.IsRemovable -or ($_.BusType -eq 'USB') -or ($_.InterfaceType -eq 'USB') })
+
+    # Filter out drives already assigned to other storage groups
+    $usedSerials = @()
+    foreach ($gKey in $Config.Storage.Keys) {
+        # Skip the group being edited (if in Edit mode)
+        if ($Mode -eq 'Edit' -and $gKey -eq $GroupId) { continue }
+
+        $group = $Config.Storage[$gKey]
+        if ($null -ne $group.Master -and -not [string]::IsNullOrWhiteSpace($group.Master.SerialNumber)) {
+            $usedSerials += $group.Master.SerialNumber.Trim()
+        }
+        if ($null -ne $group.Backups) {
+            foreach ($bKey in $group.Backups.Keys) {
+                $backup = $group.Backups[$bKey]
+                if (-not [string]::IsNullOrWhiteSpace($backup.SerialNumber)) {
+                    $usedSerials += $backup.SerialNumber.Trim()
+                }
+            }
+        }
+    }
+
+    # Filter candidate drives to exclude already-used ones
+    if ($usedSerials.Count -gt 0) {
+        $candidateDrives = @($candidateDrives | Where-Object {
+            $serial = if ([string]::IsNullOrWhiteSpace($_.SerialNumber)) { '' } else { $_.SerialNumber.Trim() }
+            -not ($usedSerials -contains $serial)
+        })
+    }
+
+    if (-not $NonInteractive) {
+        Write-PSmmHost "  Detected $($candidateDrives.Count) removable/USB drive(s)" -ForegroundColor $(if($candidateDrives.Count -gt 0){'Green'}else{'Yellow'})
+        Write-PSmmHost ""
+    }
 
     if (-not $candidateDrives -or $candidateDrives.Count -eq 0) {
         # Log excluded fixed/internal drives at VERBOSE level for diagnostics
@@ -142,6 +183,25 @@ function Invoke-StorageWizard {
     $master = $null
     $backups = @()
 
+    # Display wizard header
+    if (-not $NonInteractive) {
+        Write-PSmmHost "╔═══════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+        if ($Mode -eq 'Edit') {
+            Write-PSmmHost "║           Storage Configuration Wizard - Edit Mode            ║" -ForegroundColor Cyan
+            Write-PSmmHost "║                   Editing Group: $($groupId.PadRight(35))║" -ForegroundColor Cyan
+        } else {
+            Write-PSmmHost "║           Storage Configuration Wizard - Add Mode             ║" -ForegroundColor Cyan
+            Write-PSmmHost "║                Creating Group: $($groupId.PadRight(36))║" -ForegroundColor Cyan
+        }
+        Write-PSmmHost "╚═══════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+        Write-PSmmHost ""
+        Write-PSmmHost "This wizard will guide you through 3 steps:" -ForegroundColor Gray
+        Write-PSmmHost "  1. Set a display name for this storage group" -ForegroundColor Gray
+        Write-PSmmHost "  2. Select the Master (primary) drive" -ForegroundColor Gray
+        Write-PSmmHost "  3. Optionally select Backup drive(s)" -ForegroundColor Gray
+        Write-PSmmHost ""
+    }
+
     function Format-DriveRow($d) {
         $sizeGB = [int]([math]::Round([double]$d.TotalSpace, 0))
         $label = if ([string]::IsNullOrWhiteSpace($d.Label)) { '(NoLabel)' } else { $d.Label }
@@ -160,6 +220,16 @@ function Invoke-StorageWizard {
         switch ($step) {
             1 {
                 # DisplayName step
+                if (-not $NonInteractive) {
+                    Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                    Write-PSmmHost "Step 1 of 3: Display Name" -ForegroundColor Cyan
+                    Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                    Write-PSmmHost ""
+                    Write-PSmmHost "Choose a descriptive name for this storage group." -ForegroundColor Gray
+                    Write-PSmmHost "This name will help you identify this group in the system." -ForegroundColor Gray
+                    Write-PSmmHost ""
+                }
+
                 $displayName = $defaultDisplayName
                 if (-not $NonInteractive) {
                     $promptText = if ($Mode -eq 'Edit') {
@@ -177,10 +247,19 @@ function Invoke-StorageWizard {
             2 {
                 # Master selection step
                 if (-not $NonInteractive) {
+                    Write-PSmmHost ""
+                    Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                    Write-PSmmHost "Step 2 of 3: Master Drive Selection" -ForegroundColor Cyan
+                    Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                    Write-PSmmHost ""
+                    Write-PSmmHost "The Master drive is your primary storage location." -ForegroundColor Gray
+                    Write-PSmmHost "Select the main drive where media files will be stored." -ForegroundColor Gray
+                    Write-PSmmHost ""
+
                     $promptPrefix = if ($Mode -eq 'Edit' -and -not [string]::IsNullOrWhiteSpace($existingMasterSerial)) {
-                        "Select Master drive [current serial: $existingMasterSerial]:"
+                        "Available drives [current serial: $existingMasterSerial]:"
                     } else {
-                        "Select Master drive:"
+                        "Available drives:"
                     }
                     Write-PSmmHost $promptPrefix -ForegroundColor Cyan
                     foreach ($row in $indexed) {
@@ -206,10 +285,19 @@ function Invoke-StorageWizard {
                 # Backup selection step
                 $backups = @()
                 if (-not $NonInteractive) {
+                    Write-PSmmHost ""
+                    Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                    Write-PSmmHost "Step 3 of 3: Backup Drive Selection (Optional)" -ForegroundColor Cyan
+                    Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                    Write-PSmmHost ""
+                    Write-PSmmHost "Backup drives provide redundancy for your media files." -ForegroundColor Gray
+                    Write-PSmmHost "You can select multiple drives or press Enter to skip." -ForegroundColor Gray
+                    Write-PSmmHost ""
+
                     $promptPrefix = if ($Mode -eq 'Edit' -and $existingBackupSerials.Count -gt 0) {
-                        "Select Backup drive(s) [current serials: $($existingBackupSerials -join ', ')] (comma-separated), or Enter for none:"
+                        "Available drives [current serials: $($existingBackupSerials -join ', ')]:"
                     } else {
-                        "Select Backup drive(s) (comma-separated), or Enter for none:"
+                        "Available drives (excluding Master):"
                     }
                     Write-PSmmHost $promptPrefix -ForegroundColor Cyan
                     foreach ($row in $indexed) {
@@ -219,7 +307,7 @@ function Invoke-StorageWizard {
                         Write-Information ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker) -InformationAction Continue
                     }
                     Write-Information '' -InformationAction Continue
-                    $multi = Read-WizardInput 'Enter numbers (e.g., 2,3), B=Back, C=Cancel, or press Enter'
+                    $multi = Read-WizardInput 'Enter numbers (e.g., 2,3 for multiple), B=Back, C=Cancel, or Enter for none'
                     if ($multi -match '^(?i)c$') { return $false }
                     if ($multi -match '^(?i)b$') { $step--; continue }
                     if (-not [string]::IsNullOrWhiteSpace($multi)) {
@@ -272,11 +360,16 @@ function Invoke-StorageWizard {
     }
 
     # Summary
-    $summaryMsg = Resolve-StorageWizardMessage -Key 'PSMM-STORAGE-SUMMARY'
+    # Summary message not used directly; removing unused assignment for analyzer compliance
     if (-not $NonInteractive) {
-        Write-Information '' -InformationAction Continue
-        Write-PSmmHost $summaryMsg.Text -ForegroundColor Cyan
-        Write-Information '' -InformationAction Continue
+        Write-PSmmHost ""
+        Write-PSmmHost "═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
+        Write-PSmmHost "Configuration Summary" -ForegroundColor Green
+        Write-PSmmHost "═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
+        Write-PSmmHost ""
+        Write-PSmmHost "Group ID    : $groupId" -ForegroundColor Cyan
+        Write-PSmmHost "Display Name: $displayName" -ForegroundColor Cyan
+        Write-PSmmHost ""
         $mView = (Format-DriveRow $master)
         Write-Information ("Master  : {0,-16} {1,-4} {2,6}GB {3}" -f ($mView.Label.Substring(0, [Math]::Min(16, $mView.Label.Length))), $mView.Letter, $mView.SizeGB, $mView.Serial) -InformationAction Continue
         $idx = 1
@@ -322,6 +415,12 @@ function Invoke-StorageWizard {
         [AppConfigurationBuilder]::WriteStorageFile($storagePath, $storageHashtable)
         $actionVerb = if ($Mode -eq 'Edit') { 'updated' } else { 'written' }
         Write-WizardLog -level 'NOTICE' -id 'PSMM-STORAGE-WRITTEN' -msg "Storage configuration $actionVerb to $storagePath"
+
+        if (-not $NonInteractive) {
+            Write-PSmmHost ""
+            Write-PSmmHost "✓ Storage configuration $actionVerb successfully" -ForegroundColor Green
+            Write-PSmmHost "  Location: $storagePath" -ForegroundColor Gray
+        }
     }
     catch {
         Write-WizardLog -level 'ERROR' -id 'PSMM-STORAGE-WRITE-FAILED' -msg "Failed to write storage file: $_"

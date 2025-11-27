@@ -18,8 +18,24 @@ When preparing a release, move the items into a new versioned section and update
 - **Storage**: Introduced `StorageService` class (`src/Modules/PSmm/Classes/Services/StorageService.ps1`) implementing `IStorageService` interface for testable storage drive operations.
 - **Storage**: Added comprehensive storage documentation (`docs/storage.md`) covering architecture, configuration, usage patterns, and testing strategies.
 - **Interfaces**: Added `IStorageService` interface to `Classes/Interfaces.ps1` for dependency injection and testability.
+- **UI**: Added detailed logging for project loading operations with master/backup drive counts.
+- **Storage Wizard**: Added visual wizard header with decorative borders showing mode (Add/Edit) and group ID.
+- **Storage Wizard**: Added step-by-step progress indicators (Step 1/2/3 of 3) with descriptive guidance text.
+- **Storage Management**: Added numbered menu system with dynamic option mapping based on available storage groups.
 
 ### Changed
+
+#### User Experience Improvements (2025-11-27)
+
+- **feat(Storage Wizard)**: Enhanced wizard UX with informative scanning feedback showing drive counts and detection progress.
+- **feat(Storage Wizard)**: Added drive filtering to prevent re-assigning already-used drives to different storage groups.
+- **feat(Storage Wizard)**: Improved drive selection prompts with clearer labeling ("Available drives" vs generic "Select...").
+- **feat(Storage Management)**: Enhanced menu display with detailed drive information showing labels and serial numbers.
+- **feat(Storage Management)**: Improved menu options with contextual availability (Edit/Remove hidden when no storage configured).
+- **feat(UI)**: Added automatic storage refresh after management operations to ensure UI shows current state.
+- **refactor(Storage Wizard)**: Changed logging from console to file-only to reduce noise during interactive operations.
+- **refactor(Storage Management)**: Changed logging from console to file-only for cleaner user experience.
+- **fix(Storage Wizard)**: Removed unused `$summaryMsg` variable assignment for PSScriptAnalyzer compliance.
 
 #### Code Quality Improvements (2025-11-27)
 
