@@ -65,6 +65,10 @@ function Test-DuplicateSerial {
         [ref]$TestInputIndex
     )
 
+    # Explicitly mark ref parameters as used so ScriptAnalyzer does not flag them.
+    $null = $TestInputs
+    $null = $TestInputIndex
+
     $logAvail = Get-Command Write-PSmmLog -ErrorAction SilentlyContinue
     function Write-DupLog([string]$level, [string]$msg) {
         if ($logAvail) { Write-PSmmLog -Level $level -Context 'DuplicateSerialCheck' -Message $msg -Console -File }

@@ -324,11 +324,12 @@ if ($CodeCoverage) {
     $latestLine = [math]::Round([double]$coverageInfo.line, 2)
     $baselineLine = [math]::Round([double]$baseline.coverage.line, 2)
 
+    $baselineFailed = $false
     if ($latestLine -lt $baselineLine) {
         $VerbosePreference = 'SilentlyContinue'
         Write-Host "Code coverage ${latestLine}% is below the enforced baseline of ${baselineLine}%" -ForegroundColor Red
         [Console]::Error.WriteLine("Exit code: 1")
-        [System.Environment]::Exit(1)
+        $baselineFailed = $true
     }
 
     if ($latestLine -gt $baselineLine) {
@@ -349,8 +350,12 @@ if ($result.FailedCount -gt 0) {
     Write-Host $msg -ForegroundColor Red
     [Console]::Error.WriteLine($msg)
 }
+elseif ($CodeCoverage -and $baselineFailed) {
+    $msg = "Code coverage $latestLine% is below the enforced baseline of $baselineLine%"
+}
 else {
     Write-Host 'All Pester tests passed.' -ForegroundColor Green
+    $msg = ''
 }
 
 $ciContext = [string]::Equals($env:GITHUB_ACTIONS, 'true', [System.StringComparison]::OrdinalIgnoreCase) -or
@@ -359,6 +364,9 @@ $ciContext = [string]::Equals($env:GITHUB_ACTIONS, 'true', [System.StringCompari
 [int]$exitCode = if ($result.FailedCount -gt 0) {
     [Math]::Min([int][Math]::Abs($result.FailedCount), [int]::MaxValue)
 }
+elseif ($CodeCoverage -and $baselineFailed) {
+    1
+}
 else {
     0
 }
@@ -366,9 +374,8 @@ else {
 $global:LASTEXITCODE = $exitCode
 
 if ($PassThru) {
-    if ($exitCode -ne 0) {
-        throw $msg
-    }
+    # In PassThru mode, return the result object regardless of exit code.
+    # Caller can inspect $result.FailedCount and $LASTEXITCODE to decide handling.
     return $result
 }
 

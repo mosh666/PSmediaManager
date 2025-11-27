@@ -186,9 +186,9 @@ function Invoke-StorageWizard {
                     foreach ($row in $indexed) {
                         $view = $row.View
                         $marker = if ($row.Raw.SerialNumber -eq $existingMasterSerial) { ' <-- current' } else { '' }
-                        Write-Host ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
+                        Write-Information ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker) -InformationAction Continue
                     }
-                    Write-Host ''
+                    Write-Information '' -InformationAction Continue
                     $sel = Read-WizardInput 'Enter number, B=Back, C=Cancel'
                     if ($sel -match '^(?i)c$') { return $false }
                     if ($sel -match '^(?i)b$') { $step--; continue }
@@ -216,9 +216,9 @@ function Invoke-StorageWizard {
                         if ($row.Raw.DriveLetter -eq $master.DriveLetter -and $row.Raw.SerialNumber -eq $master.SerialNumber) { continue }
                         $view = $row.View
                         $marker = if ($existingBackupSerials -contains $row.Raw.SerialNumber) { ' <-- current' } else { '' }
-                        Write-Host ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
+                        Write-Information ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker) -InformationAction Continue
                     }
-                    Write-Host ''
+                    Write-Information '' -InformationAction Continue
                     $multi = Read-WizardInput 'Enter numbers (e.g., 2,3), B=Back, C=Cancel, or press Enter'
                     if ($multi -match '^(?i)c$') { return $false }
                     if ($multi -match '^(?i)b$') { $step--; continue }
@@ -274,18 +274,18 @@ function Invoke-StorageWizard {
     # Summary
     $summaryMsg = Resolve-StorageWizardMessage -Key 'PSMM-STORAGE-SUMMARY'
     if (-not $NonInteractive) {
-        Write-Host ''
+        Write-Information '' -InformationAction Continue
         Write-PSmmHost $summaryMsg.Text -ForegroundColor Cyan
-        Write-Host ''
+        Write-Information '' -InformationAction Continue
         $mView = (Format-DriveRow $master)
-        Write-Host ("Master  : {0,-16} {1,-4} {2,6}GB {3}" -f ($mView.Label.Substring(0, [Math]::Min(16, $mView.Label.Length))), $mView.Letter, $mView.SizeGB, $mView.Serial)
+        Write-Information ("Master  : {0,-16} {1,-4} {2,6}GB {3}" -f ($mView.Label.Substring(0, [Math]::Min(16, $mView.Label.Length))), $mView.Letter, $mView.SizeGB, $mView.Serial) -InformationAction Continue
         $idx = 1
         foreach ($b in $backups) {
             $bView = (Format-DriveRow $b)
-            Write-Host ("Backup {0}: {1,-16} {2,-4} {3,6}GB {4}" -f $idx, ($bView.Label.Substring(0, [Math]::Min(16, $bView.Label.Length))), $bView.Letter, $bView.SizeGB, $bView.Serial)
+            Write-Information ("Backup {0}: {1,-16} {2,-4} {3,6}GB {4}" -f $idx, ($bView.Label.Substring(0, [Math]::Min(16, $bView.Label.Length))), $bView.Letter, $bView.SizeGB, $bView.Serial) -InformationAction Continue
             $idx++
         }
-        Write-Host ''
+        Write-Information '' -InformationAction Continue
         $confirmText = if ($Mode -eq 'Edit') { 'Update storage configuration?' } else { 'Write storage configuration?' }
         $confirm = Read-WizardInput "$confirmText (Y/N)"
         if ($confirm -notmatch '^(?i)y$') { return $false }

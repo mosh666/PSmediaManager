@@ -17,6 +17,7 @@ publish/
 # Test results
 .coverage-debug.txt
 TestResults.xml
+PSScriptAnalyzerResults.json
 coverage.xml
 *.coverage
 

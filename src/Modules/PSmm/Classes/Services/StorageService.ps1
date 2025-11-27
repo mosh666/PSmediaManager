@@ -60,14 +60,14 @@ class StorageService : IStorageService {
                 Write-Verbose "StorageService: Windows CIM APIs are unavailable on this platform; returning empty result."
                 return @()
             }
-            
+
             # Additional check: Try to detect platform via environment
-            $isWindows = $true
+            $isWindowsPlatform = $true
             if ([System.Environment]::OSVersion.Platform -ne 'Win32NT') {
-                $isWindows = $false
+                $isWindowsPlatform = $false
             }
-            
-            if (-not $isWindows) {
+
+            if (-not $isWindowsPlatform) {
                 Write-Verbose "StorageService: Non-Windows platform detected; returning empty result."
                 return @()
             }

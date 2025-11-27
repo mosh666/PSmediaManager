@@ -28,6 +28,12 @@ When preparing a release, move the items into a new versioned section and update
 - **refactor**: Added `[OutputType([bool])]` declarations to `Invoke-ManageStorage`, `Invoke-StorageWizard`, and `Test-DuplicateSerial` for better type inference.
 - **refactor**: Removed unused variable assignments (`$gotoBack` in Invoke-StorageWizard, `$result` in Invoke-PSmmUI).
 - **fix**: Renamed parameter `$Args` to `$Arguments` in `Resolve-StorageWizardMessage` to avoid automatic variable collision.
+- **refactor(Get-StorageDrive)**: Enhanced function to support both StorageService delegation and inline enumeration, improving test compatibility with Pester mocks while maintaining production service usage.
+- **refactor(StorageService)**: Renamed internal variable `$isWindows` to `$isWindowsPlatform` for clarity and fixed whitespace formatting.
+- **refactor(Invoke-StorageWizard)**: Converted remaining `Write-Host` calls to `Write-Information` with `-InformationAction Continue` for consistent output stream handling.
+- **fix(Test-DuplicateSerial)**: Added PSScriptAnalyzer suppression attributes for `$TestInputs` and `$TestInputIndex` ref parameters that are accessed via `.Value` property.
+- **fix(Invoke-Pester)**: Corrected coverage baseline enforcement logic to return proper exit codes without premature termination, and improved PassThru mode behavior.
+- **chore**: Added `PSScriptAnalyzerResults.json` to `.gitignore` to exclude linter output files from version control.
 - **fix**: Replaced `$global:IsWindows` with `Test-Path Variable:\IsWindows` check in `StorageService` for proper cross-platform variable scope handling.
 - **feat**: Implemented `SupportsShouldProcess` with `ConfirmImpact='High'` in `Remove-StorageGroup` for safer destructive operations with -WhatIf/-Confirm support.
 - **style**: Removed 59 trailing whitespace violations across 10 files (AppConfigurationBuilder.ps1, StorageService.ps1, Invoke-FirstRunSetup.ps1, Get-StorageDrive.ps1, Invoke-ManageStorage.ps1, Invoke-StorageWizard.ps1, Remove-StorageGroup.ps1, Test-DuplicateSerial.ps1).
