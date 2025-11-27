@@ -48,6 +48,10 @@
         'New-DirectoriesFromHashtable'
         'Confirm-Storage'
         'Get-StorageDrive'
+        'Invoke-StorageWizard'
+        'Invoke-ManageStorage'
+        'Remove-StorageGroup'
+        'Test-DuplicateSerial'
         'Show-StorageInfo'
         'Export-SafeConfiguration'
         # KeePassXC Secret Management Functions

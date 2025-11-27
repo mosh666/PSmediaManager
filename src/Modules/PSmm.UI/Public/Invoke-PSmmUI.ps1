@@ -206,6 +206,29 @@ function Invoke-PSmmUI {
                     }
                 }
 
+                'R' {
+                    # Manage Storage (Edit/Add/Remove)
+                    try {
+                        $driveRoot = [System.IO.Path]::GetPathRoot($Config.Paths.Root)
+                        if (-not [string]::IsNullOrWhiteSpace($driveRoot)) {
+                            if (Get-Command Invoke-ManageStorage -ErrorAction SilentlyContinue) {
+                                $result = Invoke-ManageStorage -Config $Config -DriveRoot $driveRoot
+                                # ManageStorage handles its own confirmations and reloads
+                            }
+                            else {
+                                Write-Warning 'Invoke-ManageStorage not available.'
+                            }
+                        }
+                        else {
+                            Write-Warning 'Unable to determine drive root for storage configuration.'
+                        }
+                    }
+                    catch {
+                        Write-Warning "Failed to manage storage: $_"
+                    }
+                    # No Pause here - ManageStorage handles its own pauses
+                }
+
                 'Q' {
                     # Quit application
                     Write-Verbose 'User selected Quit'
