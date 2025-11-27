@@ -136,8 +136,12 @@ See module manifests for full public function lists.
 ### Recent Fixes
 
 - Exported `Write-PSmmHost` from the `PSmm` module and ensured exit messaging runs before modules are unloaded.
-	- Symptom: `The term 'Write-PSmmHost' is not recognized` could occur during shutdown.
-	- Files: `src/Modules/PSmm/PSmm.psm1`, `src/Modules/PSmm/PSmm.psd1`, `src/PSmediaManager.ps1`.
+  - Symptom: `The term 'Write-PSmmHost' is not recognized` could occur during shutdown.
+  - Files: `src/Modules/PSmm/PSmm.psm1`, `src/Modules/PSmm/PSmm.psd1`, `src/PSmediaManager.ps1`.
+- Fixed storage drive detection returning an empty list due to a class-scope platform probe accessing an undefined `$script:IsWindows` variable inside `StorageService`. Replaced with robust OS + CIM availability checks.
+- Fixed Storage Wizard not listing drives because output used `Write-Information` (hidden by default). Switched to `Write-Host` for interactive listing so Master/Backup selection works reliably.
+- Added `StorageService.ps1` to `ScriptsToProcess` in `PSmm.psd1` to ensure class loads before public wrappers; requires a fresh PowerShell session after update for class changes to take effect.
+- Clarified USB/removable detection logic (drives may present `InterfaceType = 'SCSI'` while `BusType = 'USB'`; wizard now correctly includes these).
 
 ## Configuration System
 

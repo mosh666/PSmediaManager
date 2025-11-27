@@ -92,6 +92,14 @@ These are small documentation/metadata updates; move to a versioned release entr
 
 ### Fixed
 
+#### 2025-11-27
+
+- **fix(storage)**: Corrected drive enumeration returning an empty list due to accessing undefined `$script:IsWindows` inside `StorageService` class scope. Replaced platform probe with explicit CIM availability + OS platform checks.
+- **fix(storage wizard)**: Resolved invisible drive list during `Invoke-StorageWizard` by replacing `Write-Information` with `Write-Host` for interactive selection output (information stream was suppressed in typical sessions).
+- **fix(module loading)**: Added `Services\StorageService.ps1` to `ScriptsToProcess` in `PSmm.psd1` so the class loads before public wrapper usage; requires a fresh PowerShell session after update for class definition changes.
+- **fix(detection)**: Ensured USB/removable detection treats disks with `BusType = 'USB'` even when `InterfaceType = 'SCSI'` (common for USB mass‑storage bridges); wizard now lists these devices properly.
+- **docs(storage)**: Updated `README.md` and `docs/storage.md` with troubleshooting guidance for missing drives and clarified detection logic.
+
 #### 2025-11-26
 
 - Fix (Test Infrastructure): Prevented Pester tests from creating `PSmm.Log`, `PSmm.Plugins`, and `PSmm.Vault` folders on the system drive (C:\) by implementing test mode detection in `AppConfigurationBuilder`. When `MEDIA_MANAGER_TEST_MODE='1'` is set (automatically by `Invoke-Pester.ps1`), runtime folders are created within the test directory instead of at the drive root, ensuring test isolation and preventing system pollution. Production behavior remains unchanged with runtime folders placed at drive root. (commit `97845fc`)

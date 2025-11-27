@@ -985,6 +985,35 @@ function Get-StorageDrive {
 
 ---
 
+### Issue: "No USB/removable drives detected" but devices are connected
+
+**Symptoms**: Storage Wizard shows a warning and skips configuration; `Get-StorageDrive` returns zero drives.
+
+**Root Causes & Fixes**:
+
+1. Prior buggy platform probe inside `StorageService` referenced `$script:IsWindows` (undefined in class scope) causing an early catch block and empty result. Fixed by using `Get-CimInstance` availability + `[System.Environment]::OSVersion.Platform` checks.
+2. USB drives may present `InterfaceType = 'SCSI'` while `BusType = 'USB'`. Detection logic now treats `BusType = 'USB'` as removable regardless of interface string.
+3. Storage Wizard previously rendered drive rows with `Write-Information`; if the information stream was suppressed, no drives appeared. This was replaced with `Write-Host` for interactive visibility.
+4. After updating the class file you must start a fresh PowerShell session—PowerShell cannot redefine an already loaded class.
+
+**Verification Steps**:
+
+```pwsh
+Import-Module ./src/Modules/PSmm/PSmm.psd1 -Force
+Get-StorageDrive | Select-Object DriveLetter, Label, BusType, InterfaceType, IsRemovable
+```
+
+Ensure expected USB disks show `BusType = USB` and `IsRemovable = True`.
+
+**If still empty**:
+
+- Confirm session is fresh (no prior import before file edits)
+- Run `Get-CimInstance Win32_DiskDrive` directly to verify disks enumerate
+- Check execution policy / script blocking
+- Temporarily run with `-Verbose` to inspect skipped partitions/volumes
+
+**Related Fix Date**: 2025-11-27
+
 ### Issue: "Drive letter changed"
 
 **Symptoms**: Projects not loading, paths invalid after reboot.

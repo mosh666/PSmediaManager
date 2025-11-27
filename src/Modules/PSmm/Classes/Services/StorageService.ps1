@@ -54,9 +54,21 @@ class StorageService : IStorageService {
         # Cross-platform guard: On non-Windows platforms (or when CIM cmdlets are unavailable),
         # return an empty result instead of throwing. This keeps callers resilient in WSL/Linux.
         try {
-            $isWindowsPlatform = if (Test-Path Variable:\IsWindows) { $script:IsWindows } else { $true }
-            if (-not $isWindowsPlatform -or -not (Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue)) {
+            # Check if we're on Windows by testing for Get-CimInstance availability
+            # This is more reliable than checking $IsWindows in class scope
+            if (-not (Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue)) {
                 Write-Verbose "StorageService: Windows CIM APIs are unavailable on this platform; returning empty result."
+                return @()
+            }
+            
+            # Additional check: Try to detect platform via environment
+            $isWindows = $true
+            if ([System.Environment]::OSVersion.Platform -ne 'Win32NT') {
+                $isWindows = $false
+            }
+            
+            if (-not $isWindows) {
+                Write-Verbose "StorageService: Non-Windows platform detected; returning empty result."
                 return @()
             }
         }

@@ -55,7 +55,7 @@ function Invoke-StorageWizard {
 
     $logAvail = Get-Command Write-PSmmLog -ErrorAction SilentlyContinue
     function Write-WizardLog([string]$level, [string]$id, [string]$msg) {
-        if ($logAvail) { Write-PSmmLog -Level $level -Context 'StorageWizard' -Message ("$($ id): $($msg)") -Console -File }
+        if ($logAvail) { Write-PSmmLog -Level $level -Context 'StorageWizard' -Message ("$($id): $($msg)") -Console -File }
         else { Write-Verbose "$($id): $($msg)" }
     }
 
@@ -186,9 +186,9 @@ function Invoke-StorageWizard {
                     foreach ($row in $indexed) {
                         $view = $row.View
                         $marker = if ($row.Raw.SerialNumber -eq $existingMasterSerial) { ' <-- current' } else { '' }
-                        Write-Information ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
+                        Write-Host ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
                     }
-                    Write-Information ''
+                    Write-Host ''
                     $sel = Read-WizardInput 'Enter number, B=Back, C=Cancel'
                     if ($sel -match '^(?i)c$') { return $false }
                     if ($sel -match '^(?i)b$') { $step--; continue }
@@ -216,9 +216,9 @@ function Invoke-StorageWizard {
                         if ($row.Raw.DriveLetter -eq $master.DriveLetter -and $row.Raw.SerialNumber -eq $master.SerialNumber) { continue }
                         $view = $row.View
                         $marker = if ($existingBackupSerials -contains $row.Raw.SerialNumber) { ' <-- current' } else { '' }
-                        Write-Information ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
+                        Write-Host ("  [{0}] {1,-16} {2,-4} {3,6}GB {4}{5}" -f $row.Index, ($view.Label.Substring(0, [Math]::Min(16, $view.Label.Length))), $view.Letter, $view.SizeGB, $view.Serial, $marker)
                     }
-                    Write-Information ''
+                    Write-Host ''
                     $multi = Read-WizardInput 'Enter numbers (e.g., 2,3), B=Back, C=Cancel, or press Enter'
                     if ($multi -match '^(?i)c$') { return $false }
                     if ($multi -match '^(?i)b$') { $step--; continue }
@@ -274,18 +274,18 @@ function Invoke-StorageWizard {
     # Summary
     $summaryMsg = Resolve-StorageWizardMessage -Key 'PSMM-STORAGE-SUMMARY'
     if (-not $NonInteractive) {
-        Write-Information ''
+        Write-Host ''
         Write-PSmmHost $summaryMsg.Text -ForegroundColor Cyan
-        Write-Information ''
+        Write-Host ''
         $mView = (Format-DriveRow $master)
-        Write-Information ("Master  : {0,-16} {1,-4} {2,6}GB {3}" -f ($mView.Label.Substring(0, [Math]::Min(16, $mView.Label.Length))), $mView.Letter, $mView.SizeGB, $mView.Serial)
+        Write-Host ("Master  : {0,-16} {1,-4} {2,6}GB {3}" -f ($mView.Label.Substring(0, [Math]::Min(16, $mView.Label.Length))), $mView.Letter, $mView.SizeGB, $mView.Serial)
         $idx = 1
         foreach ($b in $backups) {
             $bView = (Format-DriveRow $b)
-            Write-Information ("Backup {0}: {1,-16} {2,-4} {3,6}GB {4}" -f $idx, ($bView.Label.Substring(0, [Math]::Min(16, $bView.Label.Length))), $bView.Letter, $bView.SizeGB, $bView.Serial)
+            Write-Host ("Backup {0}: {1,-16} {2,-4} {3,6}GB {4}" -f $idx, ($bView.Label.Substring(0, [Math]::Min(16, $bView.Label.Length))), $bView.Letter, $bView.SizeGB, $bView.Serial)
             $idx++
         }
-        Write-Information ''
+        Write-Host ''
         $confirmText = if ($Mode -eq 'Edit') { 'Update storage configuration?' } else { 'Write storage configuration?' }
         $confirm = Read-WizardInput "$confirmText (Y/N)"
         if ($confirm -notmatch '^(?i)y$') { return $false }

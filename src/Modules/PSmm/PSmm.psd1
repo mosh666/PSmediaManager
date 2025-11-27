@@ -37,6 +37,7 @@
         'Classes\Services\GitService.ps1'
         'Classes\Services\ProcessService.ps1'
         'Classes\Services\CryptoService.ps1'
+        'Classes\Services\StorageService.ps1'
         'Classes\AppConfiguration.ps1'
         'Classes\AppConfigurationBuilder.ps1'
     )
