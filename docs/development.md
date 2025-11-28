@@ -77,6 +77,13 @@ Running `./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer` automatically invokes 
 
 - `.github/workflows/ci.yml` (push/PR to `main` and `dev` + manual dispatch) installs PowerShell 7.5.4, trusts PSGallery for dependency installs, runs `tests/Invoke-PSScriptAnalyzer.ps1`, executes `tests/Invoke-Pester.ps1 -CodeCoverage -Quiet`, and uploads analyzer/test/coverage artifacts (`tests/TestResults.xml`, `.coverage-jacoco.xml`, `.coverage-latest.json`, `.coverage-debug.txt`). Failures block merges via required GitHub checks.
 - `.github/workflows/codacy.yml` runs on the same branches plus a weekly cron. It executes Codacy Analysis CLI, emits SARIF, and uploads results via `github/codeql-action/upload-sarif@v4` so findings land in GitHub Advanced Security next to CodeQL alerts.
+- Codacy MCP instructions file (`.github/instructions/codacy.instructions.md`) documents mandatory post-edit analysis triggers. When automated edits touch source or docs, immediately run the Codacy CLI for each changed file.
+- Local Codacy run (WSL wrapper script) to replicate CI:
+
+```pwsh
+pwsh -NoProfile -File .\.codacy\Invoke-CodacyWSL.ps1 -RepositoryPath . -Verbose
+```
+
 - Coverage improvements must be accompanied by an updated `tests/.coverage-baseline.json`. The harness exits non-zero if coverage falls below the baseline (currently 65.43%).
 - Issue/PR templates and CODEOWNERS live under `.github/`; use them so reviewers get adequate context and the right maintainers are auto-assigned.
 

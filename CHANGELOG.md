@@ -15,6 +15,7 @@ When preparing a release, move the items into a new versioned section and update
 ### Added
 
 - CI/Security: Introduced `.github/workflows/codacy.yml` to run Codacy Analysis CLI on pushes, pull requests, and a weekly schedule so fresh findings flow into GitHub code scanning automatically.
+- Docs/Quality: Added Codacy MCP instructions file (`.github/instructions/codacy.instructions.md`) and un-ignored it in `.gitignore` so required local/AI analysis workflow guidance is versioned.
 - **Storage**: Introduced `StorageService` class (`src/Modules/PSmm/Classes/Services/StorageService.ps1`) implementing `IStorageService` interface for testable storage drive operations.
 - **Storage**: Added comprehensive storage documentation (`docs/storage.md`) covering architecture, configuration, usage patterns, and testing strategies.
 - **Interfaces**: Added `IStorageService` interface to `Classes/Interfaces.ps1` for dependency injection and testability.

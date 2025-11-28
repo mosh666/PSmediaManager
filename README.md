@@ -81,6 +81,18 @@ This project maintains high code quality standards:
   - Type declarations with `[OutputType]` attributes
   - Suppression attributes for documented false positives
 
+  ### Codacy Analysis
+
+  PSmediaManager uses the Codacy Analysis CLI (scheduled + on push) to surface security and maintainability findings alongside CodeQL in GitHub Advanced Security. The workflow is defined in `.github/workflows/codacy.yml` and enforced by internal instructions stored at `.github/instructions/codacy.instructions.md`.
+
+  Local run (mirrors CI wrapper):
+
+  ```pwsh
+  pwsh -NoProfile -File .\.codacy\Invoke-CodacyWSL.ps1 -RepositoryPath . -Verbose
+  ```
+
+  After editing repository files programmatically (e.g., via automation/AI), the instructions file mandates triggering Codacy CLI for the touched paths. Keep the instructions file updated if analysis behavior changes.
+
 ## Storage Management
 
 PSmediaManager includes an interactive storage wizard for managing removable drives and backup configurations:
