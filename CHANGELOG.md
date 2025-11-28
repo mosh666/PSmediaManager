@@ -76,6 +76,10 @@ When preparing a release, move the items into a new versioned section and update
 - **Bug Fix**: Fixed AppPaths initialization error in first-run setup Step 5 by passing the fully initialized `AppConfiguration` object instead of creating incomplete temporary configs.
 - **Bug Fix**: Fixed configuration export "property 'Count' cannot be found" errors by ensuring `_GetDictionaryKeys` always returns arrays and using safe count checks (`@($collection.Keys).Count`) for hashtable operations.
 
+#### Branch Merge (2025-11-28)
+
+- **chore**: Merged `dev` branch into `main` branch, consolidating 16 commits containing storage management system, code quality improvements (98.2% PSScriptAnalyzer compliance), test infrastructure enhancements (65.43% coverage), and comprehensive documentation updates. This merge preserves branch history using `--no-ff` strategy and brings all unreleased features into the main branch for the upcoming v1.0.0 release.
+
 #### Current edits (2025-11-26)
 
 - Test infrastructure: Enhanced test environment isolation by detecting `MEDIA_MANAGER_TEST_MODE` environment variable to prevent runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) from being created on system drive during test execution.
