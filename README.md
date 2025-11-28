@@ -60,6 +60,45 @@ pwsh -NoLogo -NoProfile -File .\Start-PSmediaManager.ps1
 
 On first run PSmediaManager will initialize required directories and you can begin confirming plugins or creating projects via UI menus or exported functions.
 
+If you see module import or analyzer warnings, pre-install the recommended PSGallery modules (optional) and re-run:
+
+```pwsh
+Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
+./Start-PSmediaManager.ps1
+```
+
+## Code Quality
+
+This project maintains high code quality standards:
+
+- **98.2%** PSScriptAnalyzer compliance (2/113 issues - both false positives)
+- **65.43%** line coverage with automated baseline enforcement
+- Comprehensive test suite with 209+ passing tests
+- Follows PowerShell best practices:
+  - Named parameters for all function calls
+  - Proper stream usage (`Write-Information` vs `Write-Host`)
+  - ShouldProcess implementation for destructive operations
+  - Type declarations with `[OutputType]` attributes
+  - Suppression attributes for documented false positives
+
+## Storage Management
+
+PSmediaManager includes an interactive storage wizard for managing removable drives and backup configurations:
+
+- **USB/Removable Drive Detection**: Automatically scans and identifies portable storage devices
+- **Storage Groups**: Organize drives into logical groups with one Master and multiple Backup drives
+- **Interactive Wizard**: Step-by-step guided configuration with visual feedback
+- **Drive Filtering**: Prevents accidental reassignment of drives already used in other groups
+- **Edit Mode**: Update existing storage group configurations
+- **Detailed Display**: Shows drive labels, serial numbers, and availability status
+
+Access storage management via:
+
+- UI menu option `[R]` - Manage Storage
+- Direct function: `Invoke-ManageStorage -Config $config -DriveRoot 'D:\'`
+
+See `docs/storage.md` for comprehensive storage architecture documentation.
+
 ## Requirements
 
 Minimum PowerShell: 7.5.4 (see `src/Config/PSmm/PSmm.Requirements.psd1`).
@@ -81,6 +120,8 @@ External Tools Managed via Plugins (examples):
 - digiKam
 
 Each plugin definition includes: source type (GitHub/Url), asset pattern for reliable version resolution, command path, and executable name. See `PSmm.Requirements.psd1` for the authoritative list.
+
+Tip: Run `Confirm-Plugins` after pulling new changes to ensure newly added tools are acquired.
 
 ## Installation & Portability
 
@@ -113,8 +154,12 @@ See module manifests for full public function lists.
 ### Recent Fixes
 
 - Exported `Write-PSmmHost` from the `PSmm` module and ensured exit messaging runs before modules are unloaded.
-	- Symptom: `The term 'Write-PSmmHost' is not recognized` could occur during shutdown.
-	- Files: `src/Modules/PSmm/PSmm.psm1`, `src/Modules/PSmm/PSmm.psd1`, `src/PSmediaManager.ps1`.
+  - Symptom: `The term 'Write-PSmmHost' is not recognized` could occur during shutdown.
+  - Files: `src/Modules/PSmm/PSmm.psm1`, `src/Modules/PSmm/PSmm.psd1`, `src/PSmediaManager.ps1`.
+- Fixed storage drive detection returning an empty list due to a class-scope platform probe accessing an undefined `$script:IsWindows` variable inside `StorageService`. Replaced with robust OS + CIM availability checks.
+- Fixed Storage Wizard not listing drives because output used `Write-Information` (hidden by default). Switched to `Write-Host` for interactive listing so Master/Backup selection works reliably.
+- Added `StorageService.ps1` to `ScriptsToProcess` in `PSmm.psd1` to ensure class loads before public wrappers; requires a fresh PowerShell session after update for class changes to take effect.
+- Clarified USB/removable detection logic (drives may present `InterfaceType = 'SCSI'` while `BusType = 'USB'`; wizard now correctly includes these).
 
 ## Configuration System
 
@@ -123,6 +168,12 @@ Built around `AppConfiguration` and `AppConfigurationBuilder` classes:
 - Allows layered configuration (defaults → environment → user overrides).
 - Redaction & safe serialization via `Export-SafeConfiguration` for sharing.
 - Supports quoting, scalar formatting, cyclic reference detection (see tests).
+
+Recent updates:
+
+- Storage device discovery (Label/SerialNumber) is runtime-derived; `DriveLetter` and `Path` are discovered at startup and should not be stored in `PSmm.App.psd1`.
+- Removed obsolete `StorageType` field from configuration; only disk-backed storage is supported.
+- Test mode: when `$env:MEDIA_MANAGER_TEST_MODE` is set to `1`, runtime folders (logs, plugins, vault) are created within the test workspace to keep system drives clean.
 
 Best Practices:
 
@@ -168,6 +219,7 @@ Stop-PSmmdigiKam         # Graceful stop
 - Context enrichment via `Set-LogContext`.
 - `Write-PSmmLog -Level Debug|Info|Warn|Error` unified entrypoint.
 - Rotation logic: `Invoke-LogRotation` (run in maintenance or scheduled).
+- Uses a lightweight `New-FileSystemService` helper so logging continues to work even when classes are not yet loaded (e.g., during isolated tests).
 
 Example:
 
@@ -209,8 +261,10 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-Pester.ps1 
 Key behavior:
 
 - Wraps `Invoke-PSScriptAnalyzer.ps1`, which preloads PSmm types so `TypeNotFound` noise is filtered before enforcing errors.
-- Persists results to `tests/PSScriptAnalyzerResults.json`, `tests/TestResults.xml`, `.coverage-jacoco.xml`, and `.coverage-latest.json` (currently 61.35% line coverage enforced by baseline).
+- Persists results to `tests/PSScriptAnalyzerResults.json`, `tests/TestResults.xml`, `.coverage-jacoco.xml`, and `.coverage-latest.json` (currently 65.43% line coverage enforced by baseline).
 - Supports `-PassThru` for tooling scenarios and sets the exit code the same way GitHub Actions does (Environment.Exit in CI contexts).
+- **Test Isolation**: Automatically sets `MEDIA_MANAGER_TEST_MODE='1'` to ensure runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) are created within test directories rather than on the system drive, preventing test pollution and enabling parallel test execution.
+- Recent additions: dedicated logging specs (`Initialize-Logging.Tests.ps1`, `Invoke-LogRotation.Tests.ps1`) cover new error handling paths and the `New-FileSystemService` helper so regression failures surface quickly.
 
 After legitimate coverage improvements, refresh the baseline to keep CI green:
 
@@ -224,11 +278,18 @@ Guidelines:
 - Add regression tests when fixing bugs (especially config/serialization edge cases).
 - Keep mocks isolated in `tests/Support` scripts.
 - Use `-PassThru` during local authoring when you need the raw Pester result without exiting your shell.
+- Tests run in isolated environments with automatic cleanup of temporary directories.
 
 Static Analysis (standalone run with repo settings):
 
 ```pwsh
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-PSScriptAnalyzer.ps1 -TargetPath ./src -Verbose
+```
+
+Quick sanity run (no coverage, fastest):
+
+```pwsh
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-Pester.ps1 -Quiet
 ```
 
 ## Development

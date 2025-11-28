@@ -15,10 +15,84 @@ When preparing a release, move the items into a new versioned section and update
 ### Added
 
 - CI/Security: Introduced `.github/workflows/codacy.yml` to run Codacy Analysis CLI on pushes, pull requests, and a weekly schedule so fresh findings flow into GitHub code scanning automatically.
+- **Storage**: Introduced `StorageService` class (`src/Modules/PSmm/Classes/Services/StorageService.ps1`) implementing `IStorageService` interface for testable storage drive operations.
+- **Storage**: Added comprehensive storage documentation (`docs/storage.md`) covering architecture, configuration, usage patterns, and testing strategies.
+- **Interfaces**: Added `IStorageService` interface to `Classes/Interfaces.ps1` for dependency injection and testability.
+- **UI**: Added detailed logging for project loading operations with master/backup drive counts.
+- **Storage Wizard**: Added visual wizard header with decorative borders showing mode (Add/Edit) and group ID.
+- **Storage Wizard**: Added step-by-step progress indicators (Step 1/2/3 of 3) with descriptive guidance text.
+- **Storage Management**: Added numbered menu system with dynamic option mapping based on available storage groups.
+- **Logging**: Added `New-FileSystemService` helper under `PSmm.Logging` so file system operations can be resolved without importing the full PSmm class graph; keeps logging usable in analyzer runs and partial module imports.
+- **Tests**: Added `Initialize-Logging.Tests.ps1` and `Invoke-LogRotation.Tests.ps1` to cover the helper, rotation workflow, and configuration validation scenarios.
 
 ### Changed
 
-#### Current edits (2025-11-24)
+#### User Experience Improvements (2025-11-27)
+
+- **feat(Storage Wizard)**: Enhanced wizard UX with informative scanning feedback showing drive counts and detection progress.
+- **feat(Storage Wizard)**: Added drive filtering to prevent re-assigning already-used drives to different storage groups.
+- **feat(Storage Wizard)**: Improved drive selection prompts with clearer labeling ("Available drives" vs generic "Select...").
+- **feat(Storage Management)**: Enhanced menu display with detailed drive information showing labels and serial numbers.
+- **feat(Storage Management)**: Improved menu options with contextual availability (Edit/Remove hidden when no storage configured).
+- **feat(UI)**: Added automatic storage refresh after management operations to ensure UI shows current state.
+- **refactor(Storage Wizard)**: Changed logging from console to file-only to reduce noise during interactive operations.
+- **refactor(Storage Management)**: Changed logging from console to file-only for cleaner user experience.
+- **fix(Storage Wizard)**: Removed unused `$summaryMsg` variable assignment for PSScriptAnalyzer compliance.
+
+#### Code Quality Improvements (2025-11-27)
+
+- **refactor**: Replaced 28 `Write-Host` calls with `Write-Information` across storage management and wizard functions for proper PowerShell stream handling.
+- **refactor**: Converted 13 positional parameters to named parameters in logging functions (Write-PSmmLog, Write-ManageLog, Write-WizardLog, Write-DupLog) improving code clarity and maintainability.
+- **refactor**: Added `[OutputType([bool])]` declarations to `Invoke-ManageStorage`, `Invoke-StorageWizard`, and `Test-DuplicateSerial` for better type inference.
+- **refactor**: Removed unused variable assignments (`$gotoBack` in Invoke-StorageWizard, `$result` in Invoke-PSmmUI).
+- **fix**: Renamed parameter `$Args` to `$Arguments` in `Resolve-StorageWizardMessage` to avoid automatic variable collision.
+- **refactor(Get-StorageDrive)**: Enhanced function to support both StorageService delegation and inline enumeration, improving test compatibility with Pester mocks while maintaining production service usage.
+- **refactor(StorageService)**: Renamed internal variable `$isWindows` to `$isWindowsPlatform` for clarity and fixed whitespace formatting.
+- **refactor(Invoke-StorageWizard)**: Converted remaining `Write-Host` calls to `Write-Information` with `-InformationAction Continue` for consistent output stream handling.
+- **fix(Test-DuplicateSerial)**: Added PSScriptAnalyzer suppression attributes for `$TestInputs` and `$TestInputIndex` ref parameters that are accessed via `.Value` property.
+- **fix(Invoke-Pester)**: Corrected coverage baseline enforcement logic to return proper exit codes without premature termination, and improved PassThru mode behavior.
+- **chore**: Added `PSScriptAnalyzerResults.json` to `.gitignore` to exclude linter output files from version control.
+- **fix**: Replaced `$global:IsWindows` with `Test-Path Variable:\IsWindows` check in `StorageService` for proper cross-platform variable scope handling.
+- **feat**: Implemented `SupportsShouldProcess` with `ConfirmImpact='High'` in `Remove-StorageGroup` for safer destructive operations with -WhatIf/-Confirm support.
+- **style**: Removed 59 trailing whitespace violations across 10 files (AppConfigurationBuilder.ps1, StorageService.ps1, Invoke-FirstRunSetup.ps1, Get-StorageDrive.ps1, Invoke-ManageStorage.ps1, Invoke-StorageWizard.ps1, Remove-StorageGroup.ps1, Test-DuplicateSerial.ps1).
+- **test**: Added suppression attributes for 2 false-positive PSReviewUnusedParameter warnings in `Test-DuplicateSerial` (TestInputs/TestInputIndex [ref] parameters used via .Value property in nested functions).
+- **chore**: Improved PSScriptAnalyzer compliance from 113 to 2 issues (98.2% reduction) - remaining issues are documented false positives.
+- **test**: Updated code coverage baseline from 61.35% to 61.82% line coverage (+0.47%) reflecting improved code quality.
+
+### Changed (Continued)
+
+#### Storage Refactoring (2025-11-27)
+
+- **BREAKING**: Refactored `Get-StorageDrive` function to delegate to `StorageService` class, maintaining backward compatibility while enabling better testability.
+- **Storage**: `Get-StorageDrive` is now a thin wrapper around `StorageService::GetStorageDrives()` for backward compatibility.
+- **Storage**: Moved drive discovery logic from function to `StorageService` class with methods: `GetStorageDrives()`, `FindDriveBySerial()`, `FindDriveByLabel()`, `GetRemovableDrives()`.
+- **Module Loading**: Updated `PSmm.psm1` to include `Services\StorageService.ps1` in class loading sequence.
+- **Documentation**: Updated `docs/modules.md` to reference new `StorageService` and link to comprehensive storage documentation.
+- **Architecture**: Storage drive operations now follow the service pattern used by other infrastructure components (FileSystemService, CimService, etc.).
+- **Startup**: Enhanced `Start-PSmediaManager.ps1` with working directory validation to ensure script runs from repository root, preventing path resolution issues.
+- **First-Run Setup**: Integrated storage configuration into unified first-run setup flow as Step 5 (final step after vault creation and token storage), providing a seamless onboarding experience.
+- **Bootstrap**: Removed early storage wizard call from `PSmediaManager.ps1` that ran before first-run setup, consolidating all first-run tasks into `Invoke-FirstRunSetup`.
+- **Architecture**: Refactored `Invoke-FirstRunSetup` to accept and use a complete `AppConfiguration` object throughout all setup steps, eliminating temporary object reconstruction and ensuring consistent path access.
+- **Bug Fix**: Fixed AppPaths initialization error in first-run setup Step 5 by passing the fully initialized `AppConfiguration` object instead of creating incomplete temporary configs.
+- **Bug Fix**: Fixed configuration export "property 'Count' cannot be found" errors by ensuring `_GetDictionaryKeys` always returns arrays and using safe count checks (`@($collection.Keys).Count`) for hashtable operations.
+
+#### Branch Merge (2025-11-28)
+
+- **chore**: Merged `dev` branch into `main` branch, consolidating 16 commits containing storage management system, code quality improvements (98.2% PSScriptAnalyzer compliance), test infrastructure enhancements (65.43% coverage), and comprehensive documentation updates. This merge preserves branch history using `--no-ff` strategy and brings all unreleased features into the main branch for the upcoming v1.0.0 release.
+
+#### Current edits (2025-11-26)
+
+- Test infrastructure: Enhanced test environment isolation by detecting `MEDIA_MANAGER_TEST_MODE` environment variable to prevent runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) from being created on system drive during test execution.
+- Test infrastructure: Added automatic working directory validation to `tests/Invoke-Pester.ps1` to ensure tests always run from the repository root, preventing path resolution issues and improving reliability.
+- Test infrastructure: Added `tests/_tmp` to `.gitignore` to exclude temporary test artifacts from version control.
+- Documentation: Added "Test Environment Isolation" section to `docs/development.md` explaining test mode behavior and path resolution strategy.
+- Documentation: Expanded "Data & Storage Layout" section in `docs/architecture.md` to document production vs test mode path resolution differences.
+- Configuration: Clarified that `DriveLetter` and `Path` are discovered at runtime and should not be persisted in `src/Config/PSmm/PSmm.App.psd1`. Removed now-ignored `StorageType` from examples.
+
+- Documentation: Improved `README.md` Quick Start and Testing sections with optional PSGallery module pre-install guidance, a tip to re-run `Confirm-Plugins` after updates, and a quick Pester run command for fast local validation.
+- Documentation: Updated `README.md`, `docs/development.md`, and `docs/modules.md` with the latest coverage baseline (65.43%), background on `New-FileSystemService`, and references to the new logging-focused tests.
+
+#### Previous edits (2025-11-24)
 
 - Documentation: added changelog link to `README.md`.
 - Repository metadata: tidied `.github/CODEOWNERS` comment line.
@@ -46,6 +120,20 @@ These are small documentation/metadata updates; move to a versioned release entr
 - CI: removed `.github/workflows/powershell-tests.yml` because the consolidated `ci.yml` plus the improved `tests/Invoke-Pester.ps1` cover the same validation steps.
 
 ### Fixed
+
+#### 2025-11-27
+
+- **fix(storage)**: Corrected drive enumeration returning an empty list due to accessing undefined `$script:IsWindows` inside `StorageService` class scope. Replaced platform probe with explicit CIM availability + OS platform checks.
+- **fix(storage wizard)**: Resolved invisible drive list during `Invoke-StorageWizard` by replacing `Write-Information` with `Write-Host` for interactive selection output (information stream was suppressed in typical sessions).
+- **fix(module loading)**: Added `Services\StorageService.ps1` to `ScriptsToProcess` in `PSmm.psd1` so the class loads before public wrapper usage; requires a fresh PowerShell session after update for class definition changes.
+- **fix(detection)**: Ensured USB/removable detection treats disks with `BusType = 'USB'` even when `InterfaceType = 'SCSI'` (common for USB mass‑storage bridges); wizard now lists these devices properly.
+- **docs(storage)**: Updated `README.md` and `docs/storage.md` with troubleshooting guidance for missing drives and clarified detection logic.
+- **fix(logging)**: Routed `Initialize-Logging` and `Invoke-LogRotation` through `New-FileSystemService` and restored a string-based `[OutputType('FileSystemService')]` declaration so `[FileSystemService]` no longer needs to be loaded during attribute parsing, fixing analyzer/test failures in isolated module runs.
+
+#### 2025-11-26
+
+- Fix (Test Infrastructure): Prevented Pester tests from creating `PSmm.Log`, `PSmm.Plugins`, and `PSmm.Vault` folders on the system drive (C:\) by implementing test mode detection in `AppConfigurationBuilder`. When `MEDIA_MANAGER_TEST_MODE='1'` is set (automatically by `Invoke-Pester.ps1`), runtime folders are created within the test directory instead of at the drive root, ensuring test isolation and preventing system pollution. Production behavior remains unchanged with runtime folders placed at drive root. (commit `97845fc`)
+- Fix (Configuration Builder): Normalized storage configuration handling to derive `DriveLetter` and `Path` at runtime and ignore obsolete `StorageType` entries, preventing mismatches between persisted and live configuration. Updated `src/Modules/PSmm/Classes/AppConfigurationBuilder.ps1` accordingly.
 
 #### 2025-11-24
 

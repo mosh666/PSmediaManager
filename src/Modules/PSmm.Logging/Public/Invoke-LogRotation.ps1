@@ -65,7 +65,7 @@ function Invoke-LogRotation {
     try {
         # Create FileSystemService if not provided
         if ($null -eq $FileSystem) {
-            $FileSystem = [FileSystemService]::new()
+            $FileSystem = New-FileSystemService
         }
 
         # Validate path using FileSystem service

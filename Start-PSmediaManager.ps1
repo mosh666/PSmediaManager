@@ -62,6 +62,50 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Validate that this script is running from the repository root
+# Expected structure: Start-PSmediaManager.ps1 at root, with src/ subdirectory
+$ExpectedMarkers = @(
+    (Join-Path -Path $PSScriptRoot -ChildPath 'src'),
+    (Join-Path -Path $PSScriptRoot -ChildPath 'README.md'),
+    (Join-Path -Path $PSScriptRoot -ChildPath '.git')
+)
+
+$MissingMarkers = @($ExpectedMarkers | Where-Object { -not (Test-Path $_) })
+if ($MissingMarkers.Count -gt 0) {
+    Write-Error @"
+Start-PSmediaManager.ps1 is not in a valid repository structure.
+
+Script location:  $PSScriptRoot
+
+Expected to find:
+  - src/
+  - README.md
+  - .git/
+
+Please ensure the repository is properly cloned or extracted.
+"@ -ErrorAction Stop
+}
+
+# Validate that the current working directory is the repository root
+$CurrentLocation = (Get-Location).Path
+$RepoRoot = $PSScriptRoot
+
+if ($CurrentLocation -ne $RepoRoot) {
+    Write-Error @"
+This script must be run from the repository root directory.
+
+Current location: $CurrentLocation
+Repository root:  $RepoRoot
+
+Please navigate to the repository root first:
+    cd '$RepoRoot'
+    .\Start-PSmediaManager.ps1
+
+Alternatively, use the full path:
+    & '$RepoRoot\Start-PSmediaManager.ps1'
+"@ -ErrorAction Stop
+}
+
 # Determine the path to the main application script
 $MainScript = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath 'src') -ChildPath 'PSmediaManager.ps1'
 

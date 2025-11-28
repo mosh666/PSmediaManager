@@ -1,7 +1,8 @@
 ﻿#!/usr/bin/env pwsh
 # Invoke-PSScriptAnalyzer.ps1
-# Runs PSScriptAnalyzer against the repository `src` folder using the optional settings
-# and excludes common noisy directories. Writes results to `tests/PSScriptAnalyzerResults.json`.
+# Runs PSScriptAnalyzer against the repository root (default) using optional settings,
+# excluding the `tests` folder and other noisy directories. Writes results to
+# `tests/PSScriptAnalyzerResults.json`.
 
 #Requires -Version 7.5.4
 [CmdletBinding()]

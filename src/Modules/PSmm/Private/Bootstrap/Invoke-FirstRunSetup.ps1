@@ -7,19 +7,21 @@
     - Creating the KeePassXC vault if it doesn't exist
     - Prompting for required secrets (GitHub token)
     - Saving secrets to the vault
+    - Configuring storage drives
 
     This function is called automatically when the vault is missing,
     providing a seamless first-run experience.
 
-.PARAMETER VaultPath
-    Path to the vault directory. Defaults to the application vault path.
+.PARAMETER Config
+    The AppConfiguration object containing application settings and paths.
+    Must be fully initialized with proper path structure.
 
 .PARAMETER NonInteractive
     If specified, skips interactive prompts and returns false if setup is needed.
     Useful for automated/headless scenarios.
 
 .EXAMPLE
-    Invoke-FirstRunSetup -VaultPath 'D:\PSmediaManager\Vault'
+    Invoke-FirstRunSetup -Config $appConfig
 
     Performs first-run setup with prompts for required information.
 
@@ -36,16 +38,17 @@ function Invoke-FirstRunSetup {
     [CmdletBinding()]
     [OutputType([bool],[string])]
     param(
-        [Parameter()]
-        [ValidateNotNullOrEmpty()]
-        [string]$VaultPath = 'd:\PSmm.Vault',
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [AppConfiguration]$Config,
 
         [Parameter()]
         [switch]$NonInteractive
     )
 
     try {
-                # Validate parameters
+                # Extract paths from config
+        $VaultPath = $Config.Paths.App.Vault
         $dbPath = Join-Path $VaultPath 'PSmm_System.kdbx'
         $tokenCachePath = Join-Path $VaultPath '.pending_setup.cache'
 
@@ -127,6 +130,7 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost "  2. Install KeePassXC (if not already installed)" -ForegroundColor Gray
             Write-PSmmHost "  3. Create a secure KeePassXC vault at: $VaultPath" -ForegroundColor Gray
             Write-PSmmHost "  4. Store the token securely in the vault" -ForegroundColor Gray
+            Write-PSmmHost "  5. Configure your storage drives" -ForegroundColor Gray
             Write-PSmmHost ""
 
             $response = Read-Host "Ready to proceed? (Y/n)"
@@ -144,6 +148,7 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost "Next steps:" -ForegroundColor Cyan
             Write-PSmmHost "  • Create a vault master password" -ForegroundColor Gray
             Write-PSmmHost "  • Save your GitHub token to the vault" -ForegroundColor Gray
+            Write-PSmmHost "  • Configure your storage drives" -ForegroundColor Gray
             Write-PSmmHost ""
 
             $response = Read-Host "Continue with vault creation? (Y/n)"
@@ -203,7 +208,7 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
             Write-PSmmHost ""
 
-        $cliResolution = Resolve-KeePassCliCommand -VaultPath $VaultPath
+        $cliResolution = Resolve-KeePassCliCommand -VaultPath $Config.Paths.App.Vault
         $cliCheck = if ($cliResolution -and $cliResolution.Command) { $cliResolution.Command } else { $null }
         if (-not $cliCheck) {
             Write-PSmmHost "❌ KeePassXC not found!" -ForegroundColor Red
@@ -253,7 +258,7 @@ function Invoke-FirstRunSetup {
         Write-PSmmHost ""
 
         # Initialize the vault
-        $vaultCreated = Initialize-SystemVault -VaultPath $VaultPath -ErrorAction Stop
+        $vaultCreated = Initialize-SystemVault -VaultPath $Config.Paths.App.Vault -ErrorAction Stop
 
         if (-not $vaultCreated) {
             Write-PSmmHost "❌ Failed to create vault" -ForegroundColor Red
@@ -279,7 +284,7 @@ function Invoke-FirstRunSetup {
                 Scope = 'repo or public_repo'
             }
 
-            $saved = Save-SystemSecret -SecretType 'GitHub-Token' -SecretValue $token -Metadata $metadata -VaultPath $VaultPath -ErrorAction Stop
+            $saved = Save-SystemSecret -SecretType 'GitHub-Token' -SecretValue $token -Metadata $metadata -VaultPath $Config.Paths.App.Vault -ErrorAction Stop
 
             if ($saved) {
                 Write-PSmmHost "✓ Token saved successfully" -ForegroundColor Green
@@ -297,6 +302,44 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost ""
             Write-PSmmHost "⚠ No GitHub token configured. You can add it later using:" -ForegroundColor Yellow
             Write-PSmmHost "   Save-SystemSecret -SecretType 'GitHub-Token' -SecretValue `$token" -ForegroundColor Gray
+        }
+
+        Write-PSmmHost ""
+        Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+        Write-PSmmHost "Step 5: Storage Configuration" -ForegroundColor Cyan
+        Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+        Write-PSmmHost ""
+        Write-PSmmHost "Finally, let's configure your storage drives." -ForegroundColor Yellow
+        Write-PSmmHost "PSmediaManager needs to know which drives to use for media storage." -ForegroundColor Gray
+        Write-PSmmHost ""
+
+        # Get drive root and check if storage config already exists
+        $driveRoot = [System.IO.Path]::GetPathRoot($Config.Paths.App.Vault)
+        $storagePath = Join-Path -Path $driveRoot -ChildPath 'PSmm.Config\PSmm.Storage.psd1'
+
+        if (-not (Test-Path -Path $storagePath)) {
+            Write-PSmmHost "Starting storage wizard..." -ForegroundColor Cyan
+            Write-PSmmHost ""
+
+            try {
+                $wizardResult = Invoke-StorageWizard -Config $Config -DriveRoot $driveRoot -NonInteractive:$false
+                if (-not $wizardResult) {
+                    Write-PSmmHost ""
+                    Write-PSmmHost "⚠ Storage configuration skipped or cancelled." -ForegroundColor Yellow
+                    Write-PSmmHost "   You can configure storage later using: Invoke-ManageStorage" -ForegroundColor Gray
+                }
+                else {
+                    Write-PSmmHost ""
+                    Write-PSmmHost "✓ Storage configuration saved" -ForegroundColor Green
+                }
+            }
+            catch {
+                Write-Warning "Storage configuration failed: $_"
+                Write-PSmmHost "   You can configure storage later using: Invoke-ManageStorage" -ForegroundColor Gray
+            }
+        }
+        else {
+            Write-PSmmHost "✓ Storage configuration already exists at: $storagePath" -ForegroundColor Green
         }
 
         Write-PSmmHost ""

@@ -92,5 +92,16 @@ Describe 'New-DirectoriesFromHashtable' {
             Test-Path -Path (Join-Path $root 'L1/L2/L3') -PathType Container | Should -BeTrue
             Test-Path -Path (Join-Path $root 'L1/Sibling') -PathType Container | Should -BeTrue
         }
+
+        It 'writes warning when directory creation fails' {
+            Mock Write-Warning { param($Message) } -ModuleName PSmm
+            Mock New-Item { throw 'creation failed' } -ModuleName PSmm
+
+            $path = Join-Path -Path $TestDrive -ChildPath 'WarnOnFailure'
+            $paths = @{ Warn = $path }
+
+            { New-DirectoriesFromHashtable -Structure $paths -Verbose } | Should -Not -Throw
+            Should -Invoke Write-Warning -ModuleName PSmm -ParameterFilter { $Message -like "Failed to create directory*" } -Times 1
+        }
     }
 }

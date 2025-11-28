@@ -38,6 +38,16 @@ This script dot-sources `tests/Invoke-PSScriptAnalyzer.ps1`, preloads PSmm class
 
 Add new test files under the matching `tests/Modules/<ModuleName>` path. Keep one `Describe` block per function family and narrow `Context` blocks for edge cases.
 
+### Test Environment Isolation
+
+Tests run in an isolated environment with the `MEDIA_MANAGER_TEST_MODE` environment variable set to `'1'`. This ensures:
+
+- Runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) are created within the test directory instead of the system drive root
+- Test artifacts remain contained and don't pollute the system
+- Tests can run in parallel without conflicting with production installations
+
+The `AppConfigurationBuilder` detects test mode and adjusts path resolution accordingly, keeping all test data within temporary directories managed by Pester's `TestDrive`.
+
 ## Static Analysis
 
 Always prefer the repository helper so the curated settings and preload script are honored:
@@ -67,7 +77,7 @@ Running `./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer` automatically invokes 
 
 - `.github/workflows/ci.yml` (push/PR to `main` and `dev` + manual dispatch) installs PowerShell 7.5.4, trusts PSGallery for dependency installs, runs `tests/Invoke-PSScriptAnalyzer.ps1`, executes `tests/Invoke-Pester.ps1 -CodeCoverage -Quiet`, and uploads analyzer/test/coverage artifacts (`tests/TestResults.xml`, `.coverage-jacoco.xml`, `.coverage-latest.json`, `.coverage-debug.txt`). Failures block merges via required GitHub checks.
 - `.github/workflows/codacy.yml` runs on the same branches plus a weekly cron. It executes Codacy Analysis CLI, emits SARIF, and uploads results via `github/codeql-action/upload-sarif@v4` so findings land in GitHub Advanced Security next to CodeQL alerts.
-- Coverage improvements must be accompanied by an updated `tests/.coverage-baseline.json`. The harness exits non-zero if coverage falls below the baseline (currently 61.35%).
+- Coverage improvements must be accompanied by an updated `tests/.coverage-baseline.json`. The harness exits non-zero if coverage falls below the baseline (currently 65.43%).
 - Issue/PR templates and CODEOWNERS live under `.github/`; use them so reviewers get adequate context and the right maintainers are auto-assigned.
 
 ## Performance Considerations

@@ -102,4 +102,127 @@ Describe 'Stop-PSmmdigiKam' {
         { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg } | Should -Throw
         $script:StopErrorMessage | Should -Match 'Failed to stop digiKam'
     }
+
+    It 'respects ShouldProcess cancellation and uses Unknown project label' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{}
+
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Mock Write-Verbose {} -ModuleName PSmm.Plugins
+
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -WhatIf } | Should -Not -Throw
+        Should -Invoke Write-Verbose -ModuleName PSmm.Plugins -ParameterFilter { $Message -eq 'Stop digiKam operation cancelled by user' } -Times 1
+    }
+
+    It 'logs verbose message when digiKam process command line cannot be read' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{ Current = @{ Name = 'Gamma'; Path = (Join-Path $TestDrive 'Gamma') } }
+        $null = New-Item -Path (Join-Path $cfg.Projects.Current.Path 'Config') -ItemType Directory -Force
+
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Mock Write-PSmmHost {} -ModuleName PSmm.Plugins
+        Mock Get-NetTCPConnection { @() } -ModuleName PSmm.Plugins
+
+        $script:StopCmdLineErrors = 0
+        $proc = New-Object psobject
+        $proc | Add-Member -NotePropertyName Id -NotePropertyValue 4112 -Force
+        $proc | Add-Member -NotePropertyName ProcessName -NotePropertyValue 'digikam' -Force
+        $proc | Add-Member -MemberType ScriptProperty -Name CommandLine -Value { $script:StopCmdLineErrors++; throw 'Access denied' } -Force
+        $proc | Add-Member -MemberType ScriptMethod -Name Kill -Value { } -Force
+
+        Mock Get-Process { @($proc) } -ModuleName PSmm.Plugins -ParameterFilter { $Name -eq 'digikam' }
+
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        $script:StopCmdLineErrors | Should -Be 1
+    }
+
+    It 'warns when digiKam process Kill fails' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{ Current = @{ Name = 'Delta'; Path = (Join-Path $TestDrive 'Delta') } }
+        $configDir = Join-Path $cfg.Projects.Current.Path 'Config'
+        $null = New-Item -Path $configDir -ItemType Directory -Force
+        $rcPath = Join-Path $configDir 'digiKam-rc'
+        Set-Content -Path $rcPath -Value ''
+
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Mock Write-PSmmHost {} -ModuleName PSmm.Plugins
+        Mock Write-Warning {} -ModuleName PSmm.Plugins
+        Mock Get-NetTCPConnection { @() } -ModuleName PSmm.Plugins
+
+        $proc = [pscustomobject]@{
+            Id = 5120
+            ProcessName = 'digikam'
+            CommandLine = "$rcPath --other"
+        }
+        Add-Member -InputObject $proc -MemberType ScriptMethod -Name Kill -Value { throw 'kill failed' } -Force
+
+        Mock Get-Process { @($proc) } -ModuleName PSmm.Plugins -ParameterFilter { $Name -eq 'digikam' }
+
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        Should -Invoke Write-Warning -ModuleName PSmm.Plugins -ParameterFilter { $Message -like 'Failed to stop digiKam process (PID: 5120)*' } -Times 1
+    }
+
+    It 'handles MariaDB access errors and kill failures gracefully' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{
+            Current = @{ Name = 'Zeta'; Path = (Join-Path $TestDrive 'Zeta') }
+            PortRegistry = @{ Zeta = 4455 }
+        }
+        $null = New-Item -Path (Join-Path $cfg.Projects.Current.Path 'Config') -ItemType Directory -Force
+
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Mock Write-PSmmHost {} -ModuleName PSmm.Plugins
+        Mock Write-Verbose {} -ModuleName PSmm.Plugins
+        Mock Write-Warning {} -ModuleName PSmm.Plugins
+        Mock Get-Process { @() } -ModuleName PSmm.Plugins -ParameterFilter { $Name -eq 'digikam' }
+
+        Mock Get-NetTCPConnection { @(
+            [pscustomobject]@{ LocalPort = 4455; OwningProcess = 9001 },
+            [pscustomobject]@{ LocalPort = 4455; OwningProcess = 9002 }
+        ) } -ModuleName PSmm.Plugins
+
+        Mock Get-Process { throw 'process access denied' } -ModuleName PSmm.Plugins -ParameterFilter { $Id -eq 9001 }
+
+        $dbProc = [pscustomobject]@{ Id = 9002; ProcessName = 'mariadbd' }
+        Add-Member -InputObject $dbProc -MemberType ScriptMethod -Name Kill -Value { throw 'db kill failed' } -Force
+        Mock Get-Process { $dbProc } -ModuleName PSmm.Plugins -ParameterFilter { $Id -eq 9002 }
+
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        Should -Invoke Write-Verbose -ModuleName PSmm.Plugins -ParameterFilter { $Message -eq 'Cannot access process for PID: 9001' } -Times 1
+        Should -Invoke Write-Warning -ModuleName PSmm.Plugins -ParameterFilter { $Message -like 'Failed to stop MariaDB process (PID: 9002)*' } -Times 1
+    }
+
+    It 'logs when no MariaDB processes are found for allocated port' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{
+            Current = @{ Name = 'Eta'; Path = (Join-Path $TestDrive 'Eta') }
+            PortRegistry = @{ Eta = 5551 }
+        }
+        $null = New-Item -Path (Join-Path $cfg.Projects.Current.Path 'Config') -ItemType Directory -Force
+
+        Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
+        Mock Write-PSmmHost {} -ModuleName PSmm.Plugins
+        Mock Write-Verbose {} -ModuleName PSmm.Plugins
+        Mock Get-Process { @() } -ModuleName PSmm.Plugins -ParameterFilter { $Name -eq 'digikam' }
+        Mock Get-NetTCPConnection { @() } -ModuleName PSmm.Plugins
+
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        Should -Invoke Write-Verbose -ModuleName PSmm.Plugins -ParameterFilter { $Message -eq "No MariaDB processes found on port 5551 for project Eta" } -Times 1
+    }
+
+    It 'formats MediaManagerException messages in error log' {
+        $cfg = [AppConfiguration]::new()
+        $cfg.Projects = @{ Current = @{ Name = 'Theta'; Path = (Join-Path $TestDrive 'Theta') } }
+        $null = New-Item -Path (Join-Path $cfg.Projects.Current.Path 'Config') -ItemType Directory -Force
+
+        $script:lastErrorMessage = $null
+        Mock Write-PSmmLog {
+            param($Level, $Message, $Context, $ErrorRecord, [switch]$Console, [switch]$File)
+            if ($Level -eq 'ERROR') { $script:lastErrorMessage = $Message }
+        } -ModuleName PSmm.Plugins
+        Mock Write-PSmmHost { throw ([MediaManagerException]::new('Simulated failure', 'StopDigiKam')) } -ModuleName PSmm.Plugins
+
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg } | Should -Throw
+        $script:lastErrorMessage | Should -Be '[StopDigiKam] Simulated failure'
+    }
 }

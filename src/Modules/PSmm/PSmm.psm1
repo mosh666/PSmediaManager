@@ -49,6 +49,7 @@ try {
             'Services\CimService.ps1', # CIM service (implements ICimService)
             'Services\GitService.ps1', # Git service (implements IGitService)
             'Services\CryptoService.ps1', # Crypto service (implements ICryptoService)
+            'Services\StorageService.ps1', # Storage service (implements IStorageService)
             'AppConfiguration.ps1', # Configuration classes (uses exceptions and interfaces)
             'AppConfigurationBuilder.ps1' # Builder (uses configuration and exceptions)
         )
@@ -154,6 +155,10 @@ Export-ModuleMember -Function @(
     'New-DirectoriesFromHashtable',
     'Confirm-Storage',
     'Get-StorageDrive',
+    'Invoke-StorageWizard',
+    'Invoke-ManageStorage',
+    'Remove-StorageGroup',
+    'Test-DuplicateSerial',
     'Show-StorageInfo',
     'Export-SafeConfiguration',
     # KeePassXC Secret Management Functions

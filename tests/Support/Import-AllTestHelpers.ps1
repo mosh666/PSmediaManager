@@ -22,4 +22,15 @@ if (Test-Path -Path $tc) { . $tc }
 $stub = Join-Path -Path $RepositoryRoot -ChildPath 'tests/Support/Stub-WritePSmmLog.ps1'
 if (Test-Path -Path $stub) { . $stub; Import-TestWritePSmmLogStub -RepositoryRoot $RepositoryRoot }
 
+# Ensure PSmm module is available for tests (functions and private helpers)
+$psmmManifest = Join-Path -Path $RepositoryRoot -ChildPath 'src/Modules/PSmm/PSmm.psd1'
+$psmmRootModule = Join-Path -Path $RepositoryRoot -ChildPath 'src/Modules/PSmm/PSmm.psm1'
+try {
+    if (Test-Path -Path $psmmManifest) { Import-Module $psmmManifest -Force -ErrorAction Stop }
+    elseif (Test-Path -Path $psmmRootModule) { Import-Module $psmmRootModule -Force -ErrorAction Stop }
+}
+catch {
+    Write-Verbose ("[Import-AllTestHelpers] Failed to import PSmm module: " + $_.Exception.Message)
+}
+
 return $true

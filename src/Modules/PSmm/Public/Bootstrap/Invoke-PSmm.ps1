@@ -92,7 +92,7 @@ function Invoke-PSmm {
                 Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' -Message 'KeePass vault not found - starting first-run setup' -Console -File
 
                 if (Get-Command Invoke-FirstRunSetup -ErrorAction SilentlyContinue) {
-                    $setupSuccess = Invoke-FirstRunSetup -VaultPath $vaultPath -NonInteractive:$Config.Parameters.NonInteractive
+                    $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$Config.Parameters.NonInteractive
 
                     if ($setupSuccess -eq 'PendingKeePassXC') {
                         Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' `
@@ -172,7 +172,7 @@ function Invoke-PSmm {
                 # Check if vault was created during plugin installation
                 if (-not (Test-Path $dbPath)) {
                     if (Get-Command Invoke-FirstRunSetup -ErrorAction SilentlyContinue) {
-                        $setupSuccess = Invoke-FirstRunSetup -VaultPath $vaultPath -NonInteractive:$Config.Parameters.NonInteractive
+                        $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$Config.Parameters.NonInteractive
 
                         # Re-check DB existence in case function succeeded but returned non-boolean
                         $dbNowExists = Test-Path $dbPath

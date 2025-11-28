@@ -337,6 +337,12 @@ function Show-MenuMain {
             Width = '50%'
             Alignment = 'l'
             TextColor = $Config.UI.ANSI.FG.Success
+        },
+        @{
+            Text = '[R] Reconfigure Storage'
+            Width = '50%'
+            Alignment = 'r'
+            TextColor = $Config.UI.ANSI.FG.Accent
         }
 
     )

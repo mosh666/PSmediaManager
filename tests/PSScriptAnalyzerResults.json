@@ -1,7 +1,0 @@
-{
-  "FilePath": "Start-PSmediaManager.ps1",
-  "RuleName": "PSAvoidUsingPositionalParameters",
-  "Severity": 0,
-  "Line": 66,
-  "Message": "Cmdlet 'Join-Path' has positional parameter. Please use named parameters instead of positional parameters when calling a command."
-}

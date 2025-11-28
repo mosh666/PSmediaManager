@@ -5,6 +5,7 @@ Vault/
 Plugins/
 *.Run.psd1
 *.log
+tmp-logs/
 
 # PSmediaManager module-level Plugins folders (keep these)
 !src/**/Plugins/
@@ -17,6 +18,7 @@ publish/
 # Test results
 .coverage-debug.txt
 TestResults.xml
+PSScriptAnalyzerResults.json
 coverage.xml
 *.coverage
 
@@ -51,3 +53,4 @@ REFACTORING_ANALYSIS_DETAILED.md
 REFACTORING_SUMMARY.md
 psa_fix_log.txt
 tests/psa_*.ps1
+tests/_tmp
