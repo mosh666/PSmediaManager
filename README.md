@@ -233,6 +233,8 @@ Stop-PSmmdigiKam         # Graceful stop
 - Rotation logic: `Invoke-LogRotation` (run in maintenance or scheduled).
 - Uses a lightweight `New-FileSystemService` helper so logging continues to work even when classes are not yet loaded (e.g., during isolated tests).
 
+Recent tweak: caller column widened (28→29 chars) for better alignment; success messages for vault creation/secrets now file-only to reduce console noise.
+
 Example:
 
 ```pwsh

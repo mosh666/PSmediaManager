@@ -380,7 +380,7 @@ function Invoke-StorageWizard {
         }
         Write-Information '' -InformationAction Continue
         $confirmText = if ($Mode -eq 'Edit') { 'Update storage configuration?' } else { 'Write storage configuration?' }
-        $confirm = Read-WizardInput "$confirmText (Y/N)"
+        $confirm = Read-WizardInput "$confirmText (y/N)"
         if ($confirm -notmatch '^(?i)y$') { return $false }
     }
 

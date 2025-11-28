@@ -101,8 +101,6 @@ Set-StrictMode -Version Latest
                 Source = 'Url'
                 BaseUri = 'https://downloads.mariadb.org'
                 VersionUrl = 'https://downloads.mariadb.org/rest-api/mariadb/'
-                #Path             = ''
-                #processId        = ''
                 CommandPath = 'bin'
                 Command = 'mysql.exe'
                 Name = 'mariadb'
@@ -113,16 +111,6 @@ Set-StrictMode -Version Latest
                 Source = 'Url'
                 BaseUri = 'https://download.kde.org'
                 VersionUrl = 'https://download.kde.org/stable/digikam/'
-                #Config           = @{
-                #    database        = @{
-                #        1 = 'digiKam\digiKam.db'
-                #        2 = 'digiKam\digiKam-rc.db'
-                #    }
-                #    digiKamRC       = 'digiKam\digiKam-rc'
-                #    metadataProfile = 'digiKam\digiKam-metadataProfile.dkamp'
-                #    drmTemplate     = 'digiKam\template.xml'
-                #}
-                processId = ''
                 CommandPath = ''
                 Command = 'digikam.exe'
                 Name = 'digiKam'

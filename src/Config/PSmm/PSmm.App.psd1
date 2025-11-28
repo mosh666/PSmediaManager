@@ -108,7 +108,7 @@ Set-StrictMode -Version Latest
             PrintException = $true
             ShortLevel = $false
             OnlyColorizeLevel = $false
-            Format = '[%{timestamp:+yyyyMMdd HHmmss.fff}] [%{level:-9}] [%{caller:-28}] %{message} %{body}'
+            Format = '[%{timestamp:+yyyyMMdd HHmmss.fff}] [%{level:-9}] [%{caller:-29}] %{message} %{body}'
         }
         # Storage configuration is intentionally empty in the repo.
         # On first start, PSmediaManager detects USB and Removable drives and guides you

@@ -154,7 +154,7 @@ function Initialize-SystemVault {
 
         # Log success if available
         if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
-            Write-PSmmLog -Level SUCCESS -Context 'Initialize-SystemVault' -Message "System vault ready at: $dbPath" -Console -File
+            Write-PSmmLog -Level SUCCESS -Context 'Initialize-SystemVault' -Message "System vault ready at: $dbPath" -File
         }
 
             Write-PSmmHost "`n[OK] System vault initialized" -ForegroundColor Green
@@ -393,7 +393,7 @@ function Save-SystemSecret {
 
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
                 Write-PSmmLog -Level SUCCESS -Context 'Save-SystemSecret' `
-                    -Message "Successfully saved $SecretType to KeePass" -Console -File
+                    -Message "Successfully saved $SecretType to KeePass" -File
             }
         }
 

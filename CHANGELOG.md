@@ -28,6 +28,15 @@ When preparing a release, move the items into a new versioned section and update
 
 ### Changed
 
+#### Logging & UX Tweaks (2025-11-28)
+
+- **fix(logging)**: Expanded caller field width in log format (from 28 → 29) for improved alignment across longer function names.
+- **fix(vault)**: Removed redundant console duplication when reporting successful system vault initialization and secret saves (file logging retained).
+- **refactor(storage wizard)**: Standardized confirmation prompt casing to `y/N` (lowercase affirmative, uppercase default negative) for consistency with common CLI conventions.
+- **chore(requirements)**: Pruned obsolete commented placeholders (`processId`, legacy digiKam config block, unused path comments) from `PSmm.Requirements.psd1` to reduce analyzer noise.
+- **chore(test)**: Refreshed coverage artifacts (`.coverage-jacoco.xml`, `.coverage-latest.json`) with latest execution snapshot.
+
+
 #### User Experience Improvements (2025-11-27)
 
 - **feat(Storage Wizard)**: Enhanced wizard UX with informative scanning feedback showing drive counts and detection progress.
