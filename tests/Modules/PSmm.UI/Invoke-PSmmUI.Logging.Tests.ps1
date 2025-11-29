@@ -5,7 +5,7 @@ Describe 'Invoke-PSmmUI logging' {
 
     BeforeAll {
         $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
-        $script:testHelperPath = Join-Path -Path $script:repoRoot -ChildPath 'tests/Helpers/TestConfig.ps1'
+        $script:testHelperPath = Join-Path -Path $script:repoRoot -ChildPath 'tests/Support/TestConfig.ps1'
         $script:psmmManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm/PSmm.psd1'
         $script:projectsManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Projects/PSmm.Projects.psd1'
         $script:uiManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.UI/PSmm.UI.psd1'

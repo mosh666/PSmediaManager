@@ -102,6 +102,14 @@ When preparing a release, move the items into a new versioned section and update
 - Documentation: Improved `README.md` Quick Start and Testing sections with optional PSGallery module pre-install guidance, a tip to re-run `Confirm-Plugins` after updates, and a quick Pester run command for fast local validation.
 - Documentation: Updated `README.md`, `docs/development.md`, and `docs/modules.md` with the latest coverage baseline (65.43%), background on `New-FileSystemService`, and references to the new logging-focused tests.
 
+#### Code Cleanup & Fixes (2025-11-30)
+
+- **refactor(plugins):** Remove duplicate GitHub helper file `Get-ToolFromGitHub.ps1`; consolidate on `Get-PluginFromGitHub.ps1` (identical implementations of `Get-GitHubLatestRelease`, `Get-LatestUrlFromGitHub`, `Find-MatchingReleaseAsset`).
+- **refactor(tests):** Consolidate test helpers by removing `tests/Helpers/TestConfig.ps1` and migrating `New-TestAppLogsRecorder` and `Register-TestWritePSmmLogMock` into `tests/Support/TestConfig.ps1`. Update UI logging tests to source from Support path.
+- **refactor(ui):** Move internal `Show-InvalidSelection` helper from `PSmm.UI/Public/Invoke-PSmmUI.ps1` into `PSmm.UI/Private/Show-InvalidSelection.ps1` for better encapsulation.
+- **fix(bootstrap):** Restore `Confirm-PowerShell` after accidental removal; function is required by `Invoke-PSmm.ps1` during bootstrap. Reintroduced under `PSmm/Private/Bootstrap/Confirm-PowerShell.ps1`.
+- **chore(psmm manifest):** Remove `Get-SystemSecretMetadata` from `FunctionsToExport` in `PSmm.psd1` (function exists but is not part of the public API).
+
 #### Previous edits (2025-11-24)
 
 - Documentation: added changelog link to `README.md`.

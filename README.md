@@ -93,6 +93,13 @@ This project maintains high code quality standards:
 
   After editing repository files programmatically (e.g., via automation/AI), the instructions file mandates triggering Codacy CLI for the touched paths. Keep the instructions file updated if analysis behavior changes.
 
+### Recent Cleanup Highlights (2025-11-30)
+
+- Duplicate GitHub helper removed; single source of truth in `Get-PluginFromGitHub.ps1`.
+- UI helper `Show-InvalidSelection` moved to `PSmm.UI/Private` for internal use.
+- Test helpers consolidated: source `tests/Support/TestConfig.ps1` in tests.
+- Bootstrap fix: restored `Confirm-PowerShell` used during startup checks.
+
 ## Storage Management
 
 PSmediaManager includes an interactive storage wizard for managing removable drives and backup configurations:

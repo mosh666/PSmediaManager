@@ -57,7 +57,6 @@
         'Export-SafeConfiguration'
         # KeePassXC Secret Management Functions
         'Get-SystemSecret'
-        'Get-SystemSecretMetadata'
         'Initialize-SystemVault'
         'Save-SystemSecret'
         # Drive Root Launcher

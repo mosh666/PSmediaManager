@@ -64,6 +64,9 @@ Running `./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer` automatically invokes 
 - Expand any relevant doc section (`architecture.md`, `modules.md`, `install.md`, etc.).
 - If adding configuration keys, update `configuration.md` and note how to export them safely via `Export-SafeConfiguration`.
 - Mention CI/security workflow impacts (new jobs, prerequisites) so GitHub users know which checks run.
+ - When moving internal helpers, prefer `src/Modules/<Module>/Private/` over `Public/`. Example: `Show-InvalidSelection` moved to `PSmm.UI/Private` and is no longer a public surface.
+ - Tests should source helpers from `tests/Support/TestConfig.ps1` (the consolidated path), not `tests/Helpers/TestConfig.ps1`.
+ - Bootstrap checks rely on `Confirm-PowerShell` during startup; ensure this file remains available under `PSmm/Private/Bootstrap/Confirm-PowerShell.ps1`.
 
 ## Release Process (Proposed)
 
