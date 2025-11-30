@@ -88,6 +88,14 @@ This project maintains high code quality standards:
 - fix(secrets): Added verbose error handling when deriving vault path from `Get-AppConfiguration` (AppSecrets constructor, `Get-SystemSecret`, `Save-SystemSecret`) to aid diagnostics without throwing
 - coverage: Increased executed command coverage (`executedCommands` 1679 / `analyzedCommands` 2445) raising baseline to 68.67%
 
+#### Internal Improvements
+
+- refactor(codacy): Added WSL distribution & tool availability diagnostics, deferred Docker image scan step after CLI analysis.
+- refactor(ui): Strengthened `Invoke-MultiOptionPrompt` with typed `ChoiceDescription` collection and mock-friendly `PromptForChoice` delegation.
+- refactor(secrets): Verbose fallback logging when vault path or GitHub token resolution fails (AppSecrets constructor, `Get-SystemSecret`, `Save-SystemSecret`).
+- refactor(plugins): More explicit try/catch + verbose messages when system vault token retrieval is unavailable.
+- refactor(build): Switched `Build-ScanImage.ps1` to `Write-Information` for non-interactive output stream correctness.
+
 ### Codacy Analysis
 
 PSmediaManager uses the Codacy Analysis CLI (scheduled + on push) to surface security and maintainability findings alongside CodeQL in GitHub Advanced Security. The workflow is defined in `.github/workflows/codacy.yml` and enforced by internal instructions stored at `.github/instructions/codacy.instructions.md`.

@@ -29,6 +29,15 @@ When preparing a release, move the items into a new versioned section and update
 - **Tests (Logging)**: Expanded `Write-PSmmLog.Tests.ps1` to cover Body, ErrorRecord, log level mapping, target clearing, and context initialization paths.
 - **Coverage**: Increased line coverage baseline to **68.67%** (from 65.43%) and updated `.coverage-baseline.json` & `.coverage-latest.json` artifacts.
 
+#### Internal Improvements (2025-11-30)
+
+- **refactor(codacy)**: Enhanced `.codacy/Invoke-CodacyWSL.ps1` with distro/tool availability diagnostics, safer Docker image scan scheduling (post-analysis), and verbose reporting for missing tools.
+- **refactor(ui)**: Improved `Invoke-MultiOptionPrompt` to use a strongly typed `ChoiceDescription` collection, mock-friendly command invocation, and consistent verbose messaging for test reliability.
+- **refactor(secrets)**: Added verbose fallback logging when vault path or GitHub token resolution via `Get-AppConfiguration` / `Get-SystemSecret` / `Save-SystemSecret` fails instead of silently ignoring exceptions.
+- **refactor(plugins)**: Expanded try/catch blocks in plugin GitHub and confirmation helpers to provide diagnostic messages when system vault token retrieval fails.
+- **refactor(build)**: Replaced non-interactive `Write-Host` calls in `Build-ScanImage.ps1` with `Write-Information` for proper stream usage.
+- **chore(coverage)**: Updated coverage baseline JSON to reflect new executed command set (68.67%).
+
 ### Changed
 
 #### Logging & UX Tweaks (2025-11-28)
