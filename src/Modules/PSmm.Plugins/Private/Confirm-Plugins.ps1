@@ -953,7 +953,12 @@ function Install-Plugin {
         }
         elseif (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue) {
             # Fallback to system vault secret if config is not available
-            try { $token = Get-SystemSecret -SecretType 'GitHub-Token' } catch { }
+                try {
+                    $token = Get-SystemSecret -SecretType 'GitHub-Token'
+                }
+                catch {
+                    Write-Verbose "Could not retrieve GitHub token from system vault: $_"
+                }
         }
 
         # Get latest download URL
@@ -1071,7 +1076,12 @@ function Request-PluginUpdate {
         }
         elseif (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue) {
             # Fallback to system vault secret if config is not available
-            try { $token = Get-SystemSecret -SecretType 'GitHub-Token' } catch { }
+                try {
+                    $token = Get-SystemSecret -SecretType 'GitHub-Token'
+                }
+                catch {
+                    Write-Verbose "Could not retrieve GitHub token from system vault: $_"
+                }
         }
 
         # Get latest version information

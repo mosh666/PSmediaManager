@@ -274,7 +274,12 @@ class AppSecrets {
         if ($vaultPath) { $this.VaultPath = $vaultPath }
         elseif ($env:PSMM_VAULT_PATH) { $this.VaultPath = $env:PSMM_VAULT_PATH }
         elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
-            try { $this.VaultPath = (Get-AppConfiguration).Paths.App.Vault } catch { }
+                try {
+                    $this.VaultPath = (Get-AppConfiguration).Paths.App.Vault
+                }
+                catch {
+                    Write-Verbose "Could not retrieve vault path from app configuration: $_"
+                }
         }
     }
 

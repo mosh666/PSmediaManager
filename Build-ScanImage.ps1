@@ -2,14 +2,14 @@ param(
     [string]$Tag = 'psmediamanager:scan'
 )
 
-Write-Host "Building Docker image '$Tag' for vulnerability scanning..." -ForegroundColor Cyan
+Write-Information "Building Docker image '$Tag' for vulnerability scanning..." -InformationAction Continue
 
 # Basic build (no cache busting; adjust if needed)
 docker build -t $Tag .
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "Image '$Tag' built successfully." -ForegroundColor Green
+    Write-Information "Image '$Tag' built successfully." -InformationAction Continue
 } else {
-    Write-Host "Docker build failed (exit $LASTEXITCODE)." -ForegroundColor Red
+    Write-Error "Docker build failed (exit $LASTEXITCODE)."
     exit $LASTEXITCODE
 }

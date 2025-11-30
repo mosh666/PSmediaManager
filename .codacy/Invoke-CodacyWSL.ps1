@@ -57,6 +57,35 @@ if (-not (Test-Path -Path $cliPath -PathType Leaf)) {
     throw "Codacy CLI wrapper not found at $cliPath"
 }
 
+# Resolve a friendly distribution name for diagnostics
+$resolvedDistributionName = $Distribution
+if (-not $resolvedDistributionName) {
+    try {
+        $listVerbose = & wsl.exe --list --verbose 2>$null
+        if ($LASTEXITCODE -eq 0 -and $listVerbose) {
+            # Look for the line starting with '*'
+            $defaultLine = ($listVerbose -split "`r?`n") | Where-Object { $_.TrimStart().StartsWith('*') } | Select-Object -First 1
+            if ($defaultLine) {
+                # Format: "* Ubuntu-22.04           Running         2"
+                $resolvedDistributionName = ($defaultLine.TrimStart('*').Trim() -split '\s+')[0]
+            }
+        }
+        if (-not $resolvedDistributionName) {
+            $list = & wsl.exe --list 2>$null
+            if ($LASTEXITCODE -eq 0 -and $list) {
+                # Older format marks default with "(Default)"
+                $defaultLine = ($list -split "`r?`n") | Where-Object { $_ -match '\(Default\)' } | Select-Object -First 1
+                if ($defaultLine) {
+                    $resolvedDistributionName = ($defaultLine -replace '\s*\(Default\)\s*','').Trim()
+                }
+            }
+        }
+    }
+    catch { }
+}
+if (-not $resolvedDistributionName) { $resolvedDistributionName = '(default)' }
+Write-Verbose "Using WSL distribution: $resolvedDistributionName"
+
 function Invoke-WslCommand {
     param(
         [Parameter(Mandatory)][string]$Command,
@@ -124,12 +153,34 @@ $escapedRepo = ConvertTo-BashLiteral -Value $wslRepoPath
 $commandParts = @("cd $escapedRepo")
 $commandParts += @('export CODACY_CONFIGURATION=.codacy/codacy.yaml')
 
+# Export selection into WSL env for diagnostics
+## No explicit export of distro name into WSL to avoid quoting pitfalls
+
 if (-not $SkipNormalization) {
     $commandParts += @("sed -i 's/\r$//' ./.codacy/cli.sh", "chmod +x ./.codacy/cli.sh")
 }
 
 if (-not $CliArguments -or $CliArguments.Count -eq 0) {
     throw "CliArguments cannot be empty unless -WarmupOnly is specified."
+}
+
+# Emit WSL-side diagnostics in verbose mode to help identify missing tools
+$isVerbose = ($PSBoundParameters.ContainsKey('Verbose') -or $VerbosePreference -eq 'Continue')
+if ($isVerbose) {
+    $commandParts += @(
+        'DISTRO_NAME=$(( . /etc/os-release 2>/dev/null; echo "$PRETTY_NAME" ) || uname -a); printf "[WSL] Distribution: %s\\n" "$DISTRO_NAME"',
+        'printf "[WSL] PATH=%s\\n" "$PATH"',
+        'printf "[WSL] Tool availability:\\n"',
+        'command -v docker >/dev/null 2>&1 && docker --version || echo "docker: not found"',
+        'command -v trivy >/dev/null 2>&1 && trivy --version || echo "trivy: not found"',
+        'command -v semgrep >/dev/null 2>&1 && semgrep --version || echo "semgrep: not found"',
+        'command -v java >/dev/null 2>&1 && java -version || echo "java: not found"',
+        'command -v python3 >/dev/null 2>&1 && python3 --version || echo "python3: not found"',
+        'command -v sed >/dev/null 2>&1 && sed --version | head -n1 || echo "sed: not found"',
+        'command -v curl >/dev/null 2>&1 && curl --version | head -n1 || echo "curl: not found"',
+        'command -v wget >/dev/null 2>&1 && wget --version | head -n1 || echo "wget: not found"',
+        'command -v tar >/dev/null 2>&1 && tar --version | head -n1 || echo "tar: not found"'
+    )
 }
 
 # Handle optional output capture parameters
@@ -166,15 +217,9 @@ if ($OutputFile) {
     $argLine += " --output $outputForCli"
 }
 
-# If Dockerfile exists and we're performing an analyze, build image and attach it to Codacy scan
+# If Dockerfile exists and we're performing an analyze, schedule image scan AFTER Codacy CLI
 $dockerfilePath = Join-Path -Path $RepositoryPath -ChildPath 'Dockerfile'
 $shouldImageScan = (Test-Path -LiteralPath $dockerfilePath) -and ($CliArguments -contains 'analyze') -and ($argLine -notmatch '(?i)--image')
-if ($shouldImageScan) {
-    Write-Verbose 'Dockerfile detected; building psmediamanager:scan image for supplemental Trivy image scan.'
-    $commandParts += 'docker build -t psmediamanager:scan .'
-    # Codacy CLI v2 does not support --image; perform an additional Trivy image scan after Codacy CLI.
-    $commandParts += 'trivy image psmediamanager:scan || true'
-}
 
 # Tool-specific passthrough: allow Semgrep verbosity/output when running only Semgrep
 # Detect Semgrep-only execution and bypass codacy-cli to allow tool-specific flags
@@ -242,6 +287,27 @@ if ($isSemgrepOnly) {
     }
 }
 
+# Append optional Docker image build + Trivy image scan AFTER the CLI, guarded by tool presence
+if ($shouldImageScan -and -not $isSemgrepOnly -and -not $isTrivyOnly) {
+    Write-Verbose 'Dockerfile detected; scheduling image build and Trivy scan after Codacy CLI.'
+    $dockerGuard = @(
+        'if command -v docker >/dev/null 2>&1; then',
+        '  printf "[WSL] Docker available; building psmediamanager:scan image\\n";',
+        '  docker build -t psmediamanager:scan . &&',
+        '  if command -v trivy >/dev/null 2>&1; then',
+        '    printf "[WSL] Running Trivy image scan\\n";',
+        '    trivy image psmediamanager:scan || true;',
+        '  else',
+        '    printf "[WSL] Skipping Trivy image scan: trivy not found\\n";',
+        '  fi;',
+        'else',
+        '  printf "[WSL] Skipping Docker image build: docker not found\\n";',
+        'fi'
+    ) -join ' '
+    $commandParts += $dockerGuard
+}
+
 $finalCommand = $commandParts -join ' && '
+Write-Verbose ("WSL command: " + $finalCommand)
 Invoke-WslCommand -Command $finalCommand -Distribution $Distribution
 Write-Verbose "Codacy CLI completed successfully."

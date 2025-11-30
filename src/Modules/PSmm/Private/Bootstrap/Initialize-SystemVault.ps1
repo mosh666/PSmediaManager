@@ -257,7 +257,12 @@ function Save-SystemSecret {
                 $VaultPath = $env:PSMM_VAULT_PATH
             }
             elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
-                try { $VaultPath = (Get-AppConfiguration).Paths.App.Vault } catch { }
+                    try {
+                        $VaultPath = (Get-AppConfiguration).Paths.App.Vault
+                    }
+                    catch {
+                        Write-Verbose "Could not retrieve vault path from app configuration: $_"
+                    }
             }
             if (-not $VaultPath) { throw 'VaultPath is not set. Provide -VaultPath or set PSMM_VAULT_PATH.' }
         }

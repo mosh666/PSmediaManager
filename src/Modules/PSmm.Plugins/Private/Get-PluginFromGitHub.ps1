@@ -83,7 +83,12 @@ function Get-GitHubLatestRelease {
 
         # Fallback: obtain token securely from system vault when not provided
         if ($null -eq $Token -and (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue)) {
-            try { $Token = Get-SystemSecret -SecretType 'GitHub-Token' -Optional } catch { }
+                try {
+                    $Token = Get-SystemSecret -SecretType 'GitHub-Token' -Optional
+                }
+                catch {
+                    Write-Verbose "Could not retrieve GitHub token from system vault: $_"
+                }
         }
 
         if ($null -ne $Token) {
