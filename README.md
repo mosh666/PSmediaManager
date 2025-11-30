@@ -71,27 +71,34 @@ Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Sco
 
 This project maintains high code quality standards:
 
-- **98.2%** PSScriptAnalyzer compliance (2/113 issues - both false positives)
-- **65.43%** line coverage with automated baseline enforcement
-- Comprehensive test suite with 209+ passing tests
+- **98.2%** PSScriptAnalyzer compliance (2/113 issues – documented false positives)
+- **68.67%** line coverage (baseline enforced, previously 65.43%)
+- Extensive Pester suite (200+ tests, expanded UI & logging coverage)
 - Follows PowerShell best practices:
   - Named parameters for all function calls
-  - Proper stream usage (`Write-Information` vs `Write-Host`)
-  - ShouldProcess implementation for destructive operations
+  - Proper stream usage (`Write-Information` over `Write-Host` in non-interactive paths)
+  - `ShouldProcess` implementation for destructive operations
   - Type declarations with `[OutputType]` attributes
-  - Suppression attributes for documented false positives
+  - Suppression attributes only for vetted false positives
 
-  ### Codacy Analysis
+### Recent Quality Improvements (2025-11-30)
 
-  PSmediaManager uses the Codacy Analysis CLI (scheduled + on push) to surface security and maintainability findings alongside CodeQL in GitHub Advanced Security. The workflow is defined in `.github/workflows/codacy.yml` and enforced by internal instructions stored at `.github/instructions/codacy.instructions.md`.
+- test(ui): Added comprehensive `Invoke-MultiOptionPrompt` test suite
+- test(logging): Expanded `Write-PSmmLog` tests (Body, ErrorRecord, level validation, target clearing)
+- fix(secrets): Added verbose error handling when deriving vault path from `Get-AppConfiguration` (AppSecrets constructor, `Get-SystemSecret`, `Save-SystemSecret`) to aid diagnostics without throwing
+- coverage: Increased executed command coverage (`executedCommands` 1679 / `analyzedCommands` 2445) raising baseline to 68.67%
 
-  Local run (mirrors CI wrapper):
+### Codacy Analysis
 
-  ```pwsh
-  pwsh -NoProfile -File .\.codacy\Invoke-CodacyWSL.ps1 -RepositoryPath . -Verbose
-  ```
+PSmediaManager uses the Codacy Analysis CLI (scheduled + on push) to surface security and maintainability findings alongside CodeQL in GitHub Advanced Security. The workflow is defined in `.github/workflows/codacy.yml` and enforced by internal instructions stored at `.github/instructions/codacy.instructions.md`.
 
-  After editing repository files programmatically (e.g., via automation/AI), the instructions file mandates triggering Codacy CLI for the touched paths. Keep the instructions file updated if analysis behavior changes.
+Local run (mirrors CI wrapper):
+
+```pwsh
+pwsh -NoProfile -File .\.codacy\Invoke-CodacyWSL.ps1 -RepositoryPath . -Verbose
+```
+
+After editing repository files programmatically (e.g., via automation/AI), the instructions file mandates triggering Codacy CLI for the touched paths. Keep the instructions file updated if analysis behavior changes.
 
 ### Recent Cleanup Highlights (2025-11-30)
 

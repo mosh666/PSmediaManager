@@ -25,6 +25,9 @@ When preparing a release, move the items into a new versioned section and update
 - **Storage Management**: Added numbered menu system with dynamic option mapping based on available storage groups.
 - **Logging**: Added `New-FileSystemService` helper under `PSmm.Logging` so file system operations can be resolved without importing the full PSmm class graph; keeps logging usable in analyzer runs and partial module imports.
 - **Tests**: Added `Initialize-Logging.Tests.ps1` and `Invoke-LogRotation.Tests.ps1` to cover the helper, rotation workflow, and configuration validation scenarios.
+- **Tests (UI)**: Added comprehensive `Invoke-MultiOptionPrompt.Tests.ps1` validating parameter handling, option parsing, default index logic, verbose logging, and integration scenarios.
+- **Tests (Logging)**: Expanded `Write-PSmmLog.Tests.ps1` to cover Body, ErrorRecord, log level mapping, target clearing, and context initialization paths.
+- **Coverage**: Increased line coverage baseline to **68.67%** (from 65.43%) and updated `.coverage-baseline.json` & `.coverage-latest.json` artifacts.
 
 ### Changed
 
@@ -109,6 +112,8 @@ When preparing a release, move the items into a new versioned section and update
 - **refactor(ui):** Move internal `Show-InvalidSelection` helper from `PSmm.UI/Public/Invoke-PSmmUI.ps1` into `PSmm.UI/Private/Show-InvalidSelection.ps1` for better encapsulation.
 - **fix(bootstrap):** Restore `Confirm-PowerShell` after accidental removal; function is required by `Invoke-PSmm.ps1` during bootstrap. Reintroduced under `PSmm/Private/Bootstrap/Confirm-PowerShell.ps1`.
 - **chore(psmm manifest):** Remove `Get-SystemSecretMetadata` from `FunctionsToExport` in `PSmm.psd1` (function exists but is not part of the public API).
+- **fix(secrets):** Added verbose error handling when vault path resolution via `Get-AppConfiguration` fails (AppSecrets constructor, `Get-SystemSecret`, `Save-SystemSecret`) instead of silently swallowing exceptions.
+- **docs(quality):** Updated README Code Quality section with new coverage metrics (68.67%) and recent test suite expansions.
 
 #### Previous edits (2025-11-24)
 
