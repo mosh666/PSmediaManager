@@ -1,6 +1,68 @@
 ﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+Describe 'Confirm-Storage and Test-StorageDevice' -Tag 'unit' {
+    BeforeAll {
+        $repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+        $psmmManifest = Join-Path $repoRoot 'src/Modules/PSmm/PSmm.psd1'
+        $psmmLoggingManifest = Join-Path $repoRoot 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
+        . (Join-Path $repoRoot 'tests/Support/Stub-WritePSmmLog.ps1')
+        Enable-TestWritePSmmLogStub
+        if (Get-Module -Name PSmm -ErrorAction SilentlyContinue) { Remove-Module -Name PSmm -Force }
+        if (Get-Module -Name PSmm.Logging -ErrorAction SilentlyContinue) { Remove-Module -Name PSmm.Logging -Force }
+        Import-Module $psmmManifest -Force -ErrorAction Stop
+        Import-Module $psmmLoggingManifest -Force -ErrorAction Stop
+
+        # Ensure module-scoped logging calls resolve during tests by mocking inside PSmm module
+        Mock Write-PSmmLog { param($Level, $Context, $Message) } -ModuleName PSmm
+
+        # Load classes used by AppConfigurationBuilder
+        . (Join-Path $repoRoot 'tests/Preload-PSmmTypes.ps1')
+        # Load test helpers for creating configurations
+        . (Join-Path $repoRoot 'tests/Support/TestConfig.ps1')
+    }
+
+    It 'handles empty backups without error' {
+        $cfg = New-TestAppConfiguration
+        # Create minimal storage group with empty backups using helpers to respect typed dictionary
+        $master = New-TestStorageDrive -Label 'L1' -DriveLetter '' -SerialNumber 'S1'
+        $null = Add-TestStorageGroup -Config $cfg -GroupId '1' -Master $master -Backups @{}
+
+        Mock Get-StorageDrive { @() }
+
+        { Confirm-Storage -Config $cfg -Verbose:$false } | Should -Not -Throw
+    }
+
+    It 'marks unavailable master as not available and clears letter' {
+        $cfg = New-TestAppConfiguration
+        $master = New-TestStorageDrive -Label 'L2' -DriveLetter '' -SerialNumber 'S2'
+        $group = Add-TestStorageGroup -Config $cfg -GroupId '2' -Master $master -Backups @{}
+        # Pre-mark as available with a drive letter to validate clearing behavior
+        $group.Master.DriveLetter = 'X:'
+        $group.Master.IsAvailable = $true
+
+        Mock Get-StorageDrive { @() }
+        Confirm-Storage -Config $cfg -Verbose:$false
+        $cfg.Storage['2'].Master.DriveLetter | Should -Be ''
+    }
+}
+
+Describe 'Get-StorageDrive (inline fallback)' -Tag 'unit' {
+    BeforeAll {
+        $repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+        $psmmManifest = Join-Path $repoRoot 'src/Modules/PSmm/PSmm.psd1'
+        if (Get-Module -Name PSmm -ErrorAction SilentlyContinue) { Remove-Module -Name PSmm -Force }
+        Import-Module $psmmManifest -Force -ErrorAction Stop
+    }
+
+    It 'returns empty when CIM APIs are unavailable' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Get-CimInstance' } -ModuleName PSmm
+        @(Get-StorageDrive).Count | Should -Be 0
+    }
+}
+#Requires -Version 7.5.4
+Set-StrictMode -Version Latest
+
 Describe 'Confirm-Storage' {
     BeforeAll {
         $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path

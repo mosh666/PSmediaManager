@@ -1,6 +1,77 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+Describe 'Initialize-Logging' -Tag 'unit' {
+    BeforeAll {
+        $repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+        $manifest = Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
+        Import-Module $manifest -Force
+
+        # Stub Write-PSmmLog used inside Initialize-Logging
+        . (Join-Path $repoRoot 'tests/Support/Stub-WritePSmmLog.ps1')
+        Enable-TestWritePSmmLogStub
+
+        # Provide PSLogs surface expected by Initialize-Logging
+        function Set-LoggingCallerScope { param([int]$n) }
+        function Set-LoggingDefaultLevel { param([string]$Level) }
+        function Set-LoggingDefaultFormat { param([string]$Format) }
+
+        # Avoid PSLogs installation branch
+        Mock Get-Module { @{ Name = 'PSLogs' } } -ParameterFilter { $Name -eq 'PSLogs' -and $ListAvailable }
+        Mock Import-Module { } -ParameterFilter { $Name -eq 'PSLogs' }
+    }
+
+    It 'creates log directory when missing and clears file in Dev mode' {
+        InModuleScope PSmm.Logging {
+            Mock Get-Module { @{ Name = 'PSLogs' } } -ParameterFilter { $ListAvailable -and $Name -eq 'PSLogs' }
+            Mock Import-Module {}
+            Mock Set-LoggingCallerScope {}
+            Mock Set-LoggingDefaultLevel {}
+            Mock Set-LoggingDefaultFormat {}
+            Mock Write-PSmmLog {}
+
+            $logDir = Join-Path $TestDrive 'logs-first'
+            $logFile = Join-Path $logDir 'app.log'
+
+            # Fake FileSystem with TestPath/NewItem/SetContent
+            # The file should exist before checking to clear it, so we track created items
+            $fs = [pscustomobject]@{ Created = @(); Cleared = @(); Existing = @($logFile) }
+            $fs | Add-Member -MemberType ScriptMethod -Name TestPath -Value {
+                param($p)
+                # Directory doesn't exist initially; file exists (for clearing in Dev mode)
+                if ($p -eq $logFile) { return $this.Existing -contains $p }
+                return $false
+            }
+            $fs | Add-Member -MemberType ScriptMethod -Name NewItem -Value { param($p,$t) $this.Created += $p }
+            $fs | Add-Member -MemberType ScriptMethod -Name SetContent -Value { param($p,$v) $this.Cleared += $p }
+
+            $config = [pscustomobject]@{
+                Parameters = [pscustomobject]@{ Dev = $true; NonInteractive = $true }
+                Paths = [pscustomobject]@{ Log = $logDir }
+                Logging = [pscustomobject]@{
+                    Path = $logFile
+                    DefaultLevel = 'INFO'
+                    Format = '[%{timestamp}] %{message}'
+                    PrintBody = $false
+                    Append = $true
+                    Encoding = 'utf8'
+                    PrintException = $true
+                    ShortLevel = $false
+                    OnlyColorizeLevel = $false
+                }
+            }
+
+            { Initialize-Logging -Config $config -FileSystem $fs } | Should -Not -Throw
+
+            $fs.Created | Should -Contain $logDir
+            $fs.Cleared | Should -Contain $logFile
+            Should -Invoke Write-PSmmLog -Times 1
+        }
+    }
+}
+#Requires -Version 7.5.4
+Set-StrictMode -Version Latest
+
 $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $script:psmmLoggingManifest = Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
 

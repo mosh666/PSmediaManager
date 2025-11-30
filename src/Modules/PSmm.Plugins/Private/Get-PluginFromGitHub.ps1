@@ -81,6 +81,11 @@ function Get-GitHubLatestRelease {
             'Accept'     = 'application/vnd.github.v3+json'
         }
 
+        # Fallback: obtain token securely from system vault when not provided
+        if ($null -eq $Token -and (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue)) {
+            try { $Token = Get-SystemSecret -SecretType 'GitHub-Token' -Optional } catch { }
+        }
+
         if ($null -ne $Token) {
             try {
                 $plainToken = $Crypto.ConvertFromSecureString($Token)

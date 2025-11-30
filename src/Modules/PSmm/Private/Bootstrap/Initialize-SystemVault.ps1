@@ -53,7 +53,7 @@ function Initialize-SystemVault {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Interactive vault setup requires explicit host prompts with color.')]
     param(
         [Parameter()]
-        [string]$VaultPath = 'd:\PSmediaManager\Vault',
+        [string]$VaultPath,
 
         [Parameter()]
         [switch]$Force,
@@ -251,6 +251,17 @@ function Save-SystemSecret {
 
         $entry = $entryMap[$SecretType]
         $url = $urlMap[$SecretType]
+        # Resolve vault path from parameter, environment, or app configuration
+        if (-not $VaultPath -or [string]::IsNullOrWhiteSpace($VaultPath)) {
+            if ($env:PSMM_VAULT_PATH) {
+                $VaultPath = $env:PSMM_VAULT_PATH
+            }
+            elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
+                try { $VaultPath = (Get-AppConfiguration).Paths.App.Vault } catch { }
+            }
+            if (-not $VaultPath) { throw 'VaultPath is not set. Provide -VaultPath or set PSMM_VAULT_PATH.' }
+        }
+
         $dbPath = Join-Path $VaultPath 'PSmm_System.kdbx'
 
         # Ensure vault exists
@@ -289,10 +300,10 @@ function Save-SystemSecret {
                 Write-Verbose "Using cached vault master password for secret save"
             }
             if (-not $resolvedVaultPw) {
-                Write-PSmmHost "To save the secret, please enter your vault master password." -ForegroundColor Cyan
+                Write-PSmmHost "To save the entry, please enter your vault master credential." -ForegroundColor Cyan
                 Write-PSmmHost "(It will not be shown while typing)" -ForegroundColor Yellow
                 Write-PSmmHost ""
-                $resolvedVaultPw = Read-Host "Enter vault master password" -AsSecureString
+                $resolvedVaultPw = Read-Host "Enter vault master credential" -AsSecureString
                 # Offer to cache the password for this session
                 $cacheAns = Read-Host 'Cache this master password for this session? [Y/n]'
                 if ([string]::IsNullOrWhiteSpace($cacheAns) -or $cacheAns.Trim().ToLower() -eq 'y') {

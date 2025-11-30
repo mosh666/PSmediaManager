@@ -29,7 +29,8 @@ Describe 'Invoke-PSmmUI logging' {
     BeforeEach {
         . $script:testHelperPath
         $script:recorder = New-TestAppLogsRecorder
-        Register-TestWritePSmmLogMock -Recorder $script:recorder -ModuleName 'PSmm.UI'
+            # Capture logs originating from both PSmm.UI and PSmm modules
+            Register-TestWritePSmmLogMock -Recorder $script:recorder -ModuleName @('PSmm.UI','PSmm')
 
         $script:config = New-TestAppConfiguration
 
@@ -38,7 +39,9 @@ Describe 'Invoke-PSmmUI logging' {
         Mock Show-InvalidSelection -ModuleName 'PSmm.UI' {}
         Mock Read-Host -ModuleName 'PSmm.UI' { 'Q' }
 
-        Mock Confirm-Storage -ModuleName 'PSmm' { throw 'Simulated storage validation failure' }
+        # Use global mock to ensure invocation from PSmm.UI module is intercepted
+            # Mock inside PSmm.UI module scope so Invoke-PSmmUI sees the failure and logs warning
+            Mock Confirm-Storage -ModuleName 'PSmm.UI' { throw 'Simulated storage validation failure' }
         Mock Get-PSmmProjects -ModuleName 'PSmm.Projects' {
             @{ Master = @{ 'MASTER-DRIVE' = @() }; Backup = @{} }
         }

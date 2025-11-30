@@ -187,7 +187,7 @@ function Initialize-PSmmProjectDigiKamConfig {
             return $configResult
         }
         catch {
-            $errorMessage = if ($_.Exception -is [MediaManagerException]) {
+            $errorMessage = if ($null -ne $_.Exception.PSObject.Properties['Context']) {
                 "[$($_.Exception.Context)] $($_.Exception.Message)"
             }
             else {

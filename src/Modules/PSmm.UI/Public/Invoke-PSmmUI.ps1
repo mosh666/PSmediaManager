@@ -51,7 +51,7 @@ function Invoke-PSmmUI {
         }
         catch {
             Write-PSmmLog -Level WARNING -Context 'Invoke-PSmmUI' `
-                -Message "Storage validation encountered issues: $_" -Console -File
+                -Message 'Storage validation encountered issues' -Console -File
         }
 
         # Track selected storage group (default to Storage Group 1)

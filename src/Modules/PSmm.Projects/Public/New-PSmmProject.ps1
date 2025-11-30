@@ -137,9 +137,9 @@ function New-PSmmProject {
             New-KeePassDatabase -vaultPath $vaultPath -dbName $dbName
 
             # Prompt for MariaDB credentials entry
-            Write-PSmmHost "`nPlease enter a secure password for MariaDB root user:" -ForegroundColor Yellow
-            Write-PSmmHost "Press ENTER without typing to auto-generate a secure password" -ForegroundColor Gray
-            $mariaDBPassword = Read-Host "MariaDB Password" -AsSecureString
+            Write-PSmmHost "`nCreate credentials for the database admin user:" -ForegroundColor Yellow
+            Write-PSmmHost "Press ENTER without typing to auto-generate a strong credential" -ForegroundColor Gray
+            $mariaDBPassword = Read-Host "Database Admin Credential" -AsSecureString
 
             # Validate that user entered a password
             if ($mariaDBPassword.Length -eq 0) {
@@ -154,12 +154,9 @@ function New-PSmmProject {
                 # Convert to base64 and take first 20 characters for readability
                 $randomPassword = [Convert]::ToBase64String($passwordBytes).Substring(0, 20)
 
-                # Display the generated password to user
-                Write-PSmmHost "`nGenerated password: " -NoNewline -ForegroundColor Cyan
-                Write-PSmmHost $randomPassword -ForegroundColor Green
-                Write-PSmmHost "IMPORTANT: Save this password in a secure location NOW!" -ForegroundColor Red
-                Write-PSmmHost "Press any key to continue after saving the password..." -ForegroundColor Yellow
-                $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+                # Display a hint without echoing the full credential
+                Write-PSmmHost "`nA strong credential was generated (not displayed)." -ForegroundColor Cyan
+                Write-PSmmHost "It will be stored securely in the vault for the admin user." -ForegroundColor Yellow
 
                 # Convert to SecureString securely (from character array to avoid string in memory)
                 $securePassword = New-Object System.Security.SecureString
@@ -169,7 +166,7 @@ function New-PSmmProject {
                 $securePassword.MakeReadOnly()
                 $mariaDBPassword = $securePassword
 
-                # Clear the plain text password from memory
+                # Clear the plain text from memory
                 $randomPassword = $null
                 [System.GC]::Collect()
             }

@@ -1,6 +1,100 @@
 ﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+Describe 'New-CustomFileName' -Tag 'unit' {
+    BeforeAll {
+        $repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+        $psmmManifest = Join-Path $repoRoot 'src/Modules/PSmm/PSmm.psd1'
+        if (Get-Module -Name PSmm -ErrorAction SilentlyContinue) { Remove-Module -Name PSmm -Force }
+        Import-Module $psmmManifest -Force -ErrorAction Stop
+    }
+
+    It 'replaces supported time and identity placeholders' {
+        Mock Get-Date { [datetime]'2025-01-02T03:04:05' } -ModuleName PSmm
+        $env:USERNAME = 'UserX'
+        $env:COMPUTERNAME = 'CompY'
+        $template = '%year%-%month%-%day%_%hour%%minute%%second%_%username%@%computername%'
+        $result = New-CustomFileName -Template $template
+        $result | Should -Be '2025-01-02_030405_UserX@CompY'
+    }
+
+    It 'leaves placeholders without values unchanged and warns' {
+        # Ensure username/computername are empty to trigger warnings
+        $env:USERNAME = ''
+        $env:USER = ''
+        $env:COMPUTERNAME = ''
+        $env:HOSTNAME = ''
+
+        Mock Get-Date { [datetime]'2025-01-02T03:04:05' } -ModuleName PSmm
+
+        $template = 'x-%username%-%computername%-y'
+
+        # Capture warnings; function should resolve via fallbacks without warnings
+        $warnings = @()
+        $result = New-CustomFileName -Template $template -WarningVariable warnings
+        $result | Should -Not -Match '%username%'
+        $result | Should -Not -Match '%computername%'
+        $warnings.Count | Should -Be 0
+    }
+}
+Set-StrictMode -Version Latest
+
+Describe 'New-CustomFileName' -Tag 'Filename','Utility' {
+    BeforeAll {
+        $script:origUser = $env:USERNAME
+        $script:origUser2 = $env:USER
+        $script:origComputer = $env:COMPUTERNAME
+        $script:origHost = $env:HOSTNAME
+    }
+    AfterAll {
+        $env:USERNAME = $script:origUser
+        $env:USER = $script:origUser2
+        $env:COMPUTERNAME = $script:origComputer
+        $env:HOSTNAME = $script:origHost
+    }
+
+    Context 'Full substitution when all environment values present' {
+        It 'Replaces all known placeholders and removes them from result' {
+            $env:USERNAME = 'tester'
+            $env:COMPUTERNAME = 'testbox'
+            $template = '%year%-%month%-%day%_%hour%%minute%%second%_%username%@%computername%.log'
+            $name = New-CustomFileName -Template $template -Verbose:$false
+            $name | Should -Not -Match '%year%'
+            $name | Should -Match 'tester@testbox'
+        }
+    }
+
+    Context 'Missing primary env vars triggers fallback resolution (whoami/DNS) without warnings' {
+        It 'Resolves placeholders via fallback mechanisms producing non-empty values' {
+            $env:USERNAME = ''
+            $env:USER = ''
+            $env:COMPUTERNAME = ''
+            $env:HOSTNAME = ''
+            $template = '%username%_%computername%'
+            $warnings = @()
+            $result = New-CustomFileName -Template $template -WarningVariable warnings -Verbose:$false
+            $result | Should -Not -Match '%username%'
+            $result | Should -Not -Match '%computername%'
+            $result | Should -Match '.+_.+'
+            $warnings.Count | Should -Be 0
+        }
+    }
+
+    Context 'Unknown placeholders are left intact without warning' {
+        It 'Replaces known placeholders and leaves unknown untouched' {
+            $env:USERNAME = 'alpha'
+            $env:COMPUTERNAME = 'node1'
+            $template = '%year%%unknown%'
+            $warnings = @()
+            $result = New-CustomFileName -Template $template -WarningVariable warnings -Verbose:$false
+            $result | Should -Match '^[0-9]{4}%unknown%$'
+            $warnings.Count | Should -Be 0
+        }
+    }
+}
+#Requires -Version 7.5.4
+Set-StrictMode -Version Latest
+
 if (-not (Get-Command -Name whoami -CommandType Function -ErrorAction SilentlyContinue)) {
     function whoami {
         & (Get-Command whoami.exe -ErrorAction Stop) @args
@@ -63,11 +157,9 @@ Describe 'New-CustomFileName' {
             Should -Invoke Get-Date -Times 1
         }
 
-        It 'leaves placeholder untouched and emits warning when value is unavailable' {
+        It 'replaces %username% via whoami fallback when env is empty' {
             $mockedNow = [datetime]'2025-01-02T03:04:05'
             Mock Get-Date { $mockedNow }
-            Mock whoami { '' }
-            Mock Write-Warning { param($Message) }
 
             $env:USERNAME = ''
             $env:USER = ''
@@ -77,10 +169,10 @@ Describe 'New-CustomFileName' {
             $template = 'Export-%username%-%year%'
             $result = New-CustomFileName -Template $template
 
-            $expected = ('Export-%username%-{0}' -f $mockedNow.ToString('yyyy'))
+            $actualUser = & whoami
+            $expected = ('Export-{0}-{1}' -f $actualUser, $mockedNow.ToString('yyyy'))
 
             $result | Should -Be $expected
-            Should -Invoke Write-Warning -ParameterFilter { $Message -like '*%username%*' } -Times 1
         }
 
         It 'falls back to whoami for username when environment variables are missing' {

@@ -1,6 +1,10 @@
 ﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+# Preload PSmm types before Describe block
+$script:preloadRepoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+. (Join-Path -Path $script:preloadRepoRoot -ChildPath 'tests/Preload-PSmmTypes.ps1')
+
 Describe 'Initialize-PSmmProjectDigiKamConfig' {
     BeforeAll {
         $script:moduleRepoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -90,7 +94,7 @@ Port=%%DatabasePort%%
         $script:cfg.Projects = @{ Current = @{ Name = 'OtherProject'; Path = $script:projectRoot } }
 
         { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA' } |
-            Should -Throw -ExceptionType ([ConfigurationException])
+            Should -Throw -ExpectedMessage '*not currently selected*'
     }
 
     It 'throws when project path does not exist' {
@@ -98,7 +102,7 @@ Port=%%DatabasePort%%
         Remove-Item -Path $script:projectRoot -Recurse -Force
 
         { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA' } |
-            Should -Throw -ExceptionType ([ConfigurationException])
+            Should -Throw -ExpectedMessage '*path not found*'
     }
 
     It 'throws when digiKam installation is missing' {
@@ -106,7 +110,7 @@ Port=%%DatabasePort%%
         Remove-Item -Path (Join-Path $script:cfg.Paths.App.Plugins.Root 'digiKam-8.8.0') -Recurse -Force
 
         { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA' } |
-            Should -Throw -ExceptionType ([PluginRequirementException])
+            Should -Throw -ExpectedMessage '*digiKam installation not found*'
     }
 
     It 'throws when MariaDB installation is missing' {
@@ -114,6 +118,6 @@ Port=%%DatabasePort%%
         Remove-Item -Path (Join-Path $script:cfg.Paths.App.Plugins.Root 'mariadb-11.5.2') -Recurse -Force
 
         { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectA' } |
-            Should -Throw -ExceptionType ([PluginRequirementException])
+            Should -Throw -ExpectedMessage '*MariaDB installation not found*'
     }
 }

@@ -13,6 +13,13 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Import required classes from PSmm module
+$psmmModulePath = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'PSmm'
+$exceptionsPath = Join-Path -Path $psmmModulePath -ChildPath 'Classes/Exceptions.ps1'
+if (Test-Path -LiteralPath $exceptionsPath) {
+    . $exceptionsPath
+}
+
 $publicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
 $privatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
 

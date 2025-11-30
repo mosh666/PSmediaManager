@@ -63,7 +63,7 @@ function Invoke-FirstRunSetup {
         }
 
         # Check for cached token from previous setup attempt FIRST
-        $token = $null
+        $githubTokenSec = $null
         $hasToken = $false
 
         if (Test-Path $tokenCachePath) {
@@ -72,14 +72,18 @@ function Invoke-FirstRunSetup {
             try {
                 $cacheData = Get-Content -Path $tokenCachePath -Raw | ConvertFrom-Json
                 $encryptedToken = $cacheData.Token
-                $token = $encryptedToken | ConvertTo-SecureString
+                $githubTokenSec = $encryptedToken | ConvertTo-SecureString
 
                 # Verify the token
-                $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
-                $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-                [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-
-                $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
+                $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($githubTokenSec)
+                try {
+                    $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+                    $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
+                }
+                finally {
+                    if ($bstr -ne [IntPtr]::Zero) { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+                    Set-Variable -Name plainToken -Value $null -Scope Local -Force
+                }
 
                 if ($hasToken) {
                     Write-PSmmHost "✓ Cached token loaded successfully" -ForegroundColor Green
@@ -161,18 +165,18 @@ function Invoke-FirstRunSetup {
 
             Write-PSmmHost ""
             Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-            Write-PSmmHost "Step 1: GitHub Personal Access Token" -ForegroundColor Cyan
+            Write-PSmmHost "Step 1: Configure GitHub access" -ForegroundColor Cyan
             Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
             Write-PSmmHost ""
 
         # Only prompt for token if we don't already have one cached
         if (-not $hasToken) {
-            Write-PSmmHost "The GitHub token is used for:" -ForegroundColor Yellow
+            Write-PSmmHost "A GitHub access credential is used for:" -ForegroundColor Yellow
             Write-PSmmHost "  • Downloading plugins and updates from GitHub releases" -ForegroundColor Gray
             Write-PSmmHost "  • Avoiding API rate limits" -ForegroundColor Gray
             Write-PSmmHost "  • Accessing private repositories (if configured)" -ForegroundColor Gray
             Write-PSmmHost ""
-            Write-PSmmHost "To create a token:" -ForegroundColor Cyan
+            Write-PSmmHost "To create a credential:" -ForegroundColor Cyan
             Write-PSmmHost "  1. Go to: https://github.com/settings/tokens" -ForegroundColor Gray
             Write-PSmmHost "  2. Click 'Generate new token (classic)'" -ForegroundColor Gray
             Write-PSmmHost "  3. Give it a name (e.g., 'PSmm')" -ForegroundColor Gray
@@ -182,15 +186,19 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost "Note: You can press Enter to skip and add it later." -ForegroundColor DarkYellow
             Write-PSmmHost ""
 
-            # Prompt for GitHub token
-            $token = Read-Host "Enter your GitHub Personal Access Token" -AsSecureString
+            # Prompt for GitHub credential (secure input)
+            $githubTokenSec = Read-Host "Enter a GitHub Personal Access credential" -AsSecureString
 
             # Check if token was provided
-            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
-            $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-
-            $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($githubTokenSec)
+            try {
+                $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+                $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
+            }
+            finally {
+                if ($bstr -ne [IntPtr]::Zero) { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+                Set-Variable -Name plainToken -Value $null -Scope Local -Force
+            }
 
             if (-not $hasToken) {
                 Write-PSmmHost ""
@@ -200,6 +208,11 @@ function Invoke-FirstRunSetup {
         else {
             Write-PSmmHost "✓ Using cached token from previous setup attempt" -ForegroundColor Green
         }
+
+        # Ensure $token variable is initialized for strict mode usage downstream.
+        # Use the secure string gathered (may be $null if user skipped); downstream logic
+        # always checks $hasToken before attempting to process or persist the token.
+        $token = $githubTokenSec
 
         # Check if KeePassXC is available
             Write-PSmmHost ""

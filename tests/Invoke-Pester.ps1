@@ -62,6 +62,7 @@ function Complete-PesterRun {
 
     if ($CiContext) {
         Write-Verbose "CI context detected. Ending process with exit code $ExitCode"
+        [void](Read-Host 'Press Enter to exit the test session')
         [System.Environment]::Exit($ExitCode)
     }
 
@@ -69,6 +70,7 @@ function Complete-PesterRun {
         $Host.SetShouldExit($ExitCode)
     }
 
+    [void](Read-Host 'Press Enter to exit the test session')
     [System.Environment]::Exit($ExitCode)
 }
 
@@ -151,11 +153,12 @@ if ($WithPSScriptAnalyzer) {
     }
     Write-Host "Running PSScriptAnalyzer..."
     try {
-        & $analyzeScript -TargetPath (Join-Path -Path $repoRoot -ChildPath 'src') -SettingsFile (Join-Path -Path $scriptDirectory -ChildPath 'PSScriptAnalyzer.Settings.psd1')
+        & $analyzeScript -TargetPath (Join-Path -Path $repoRoot -ChildPath '') -SettingsFile (Join-Path -Path $scriptDirectory -ChildPath 'PSScriptAnalyzer.Settings.psd1')
     }
     catch {
         Write-Host 'PSScriptAnalyzer reported issues.' -ForegroundColor Red
         [Console]::Error.WriteLine($_.Exception.Message)
+        [void](Read-Host 'Press Enter to exit the test session')
         [System.Environment]::Exit(1)
     }
 }

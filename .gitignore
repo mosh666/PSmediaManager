@@ -6,6 +6,8 @@ Plugins/
 *.Run.psd1
 *.log
 tmp-logs/
+*.sarif
+*.json
 
 # PSmediaManager module-level Plugins folders (keep these)
 !src/**/Plugins/

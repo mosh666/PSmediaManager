@@ -1,9 +1,13 @@
-﻿#Requires -Version 7.5.4
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 
 Describe 'Initialize-PSmmProjectDigiKamConfig (additional cases)' {
         BeforeAll {
-                $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+Set-StrictMode -Version Latest
+
+$script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+
+# Preload PSmm types
+. (Join-Path -Path $script:repoRoot -ChildPath 'tests/Preload-PSmmTypes.ps1')
                 $script:pluginsManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Plugins/PSmm.Plugins.psd1'
                 $script:psmmManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm/PSmm.psd1'
                 $script:loggingManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'

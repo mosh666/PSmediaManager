@@ -1,4 +1,44 @@
-﻿Describe 'Export-SafeConfiguration' {
+﻿#Requires -Version 7.5.4
+Set-StrictMode -Version Latest
+
+Describe 'Export-SafeConfiguration' -Tag 'unit' {
+    BeforeAll {
+        $repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+        $psmmManifest = Join-Path $repoRoot 'src/Modules/PSmm/PSmm.psd1'
+        if (Get-Module -Name PSmm -ErrorAction SilentlyContinue) { Remove-Module -Name PSmm -Force }
+        Import-Module $psmmManifest -Force -ErrorAction Stop
+        $TestOut = Join-Path $TestDrive 'safe.psd1'
+    }
+
+    It 'writes a PSD1 including PSModules and masks sensitive tokens' {
+        $cfg = @{
+            Requirements = @{
+                PSModules = @('Pester','PSScriptAnalyzer')
+                PowerShell = @{ Modules = @(@{ Name='ThreadJob' }, @{ Name='PSReadLine' }) }
+            }
+            ErrorMessages = @{ GitHubToken = 'ghp_abc123' }
+            AppVersion = '1.2.3'
+        }
+
+        $path = Export-SafeConfiguration -Configuration $cfg -Path $TestOut -Verbose:$false
+        Test-Path $path | Should -BeTrue
+        $content = Get-Content $path -Raw
+        $content | Should -Match 'Pester'
+        $content | Should -Match 'PSScriptAnalyzer'
+        $content | Should -Match 'ThreadJob'
+        $content | Should -Match 'PSReadLine'
+        $content | Should -Not -Match 'ghp_abc123'
+    }
+
+    It 'stringifies DateTime and returns written path' {
+        $cfg = @{ Timestamp = [datetime]'2025-02-03T04:05:06Z' }
+        $path = Export-SafeConfiguration -Configuration $cfg -Path $TestOut -Verbose:$false
+        $path | Should -Be $TestOut
+        # Allow timezone/localization differences; assert date portion appears
+        (Get-Content $path -Raw) | Should -Match '2025-02-03'
+    }
+}
+Describe 'Export-SafeConfiguration' {
     BeforeAll {
         # Dot-source the implementation so the exported function is available
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm/Public/Export-SafeConfiguration.ps1'

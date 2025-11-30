@@ -1,8 +1,10 @@
-﻿#Requires -Version 7.5.4
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 
 # Compute repo/test paths; Test support will be dot-sourced inside Describe to ensure availability in Pester scopes
 $localRepoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+
+# Preload PSmm types (AppConfigurationBuilder, etc.)
+. (Join-Path -Path $localRepoRoot -ChildPath 'tests/Preload-PSmmTypes.ps1')
 $manifestPath = Join-Path -Path $localRepoRoot -ChildPath 'src/Modules/PSmm.Projects/PSmm.Projects.psd1'
 $testConfigPath = Join-Path -Path $localRepoRoot -ChildPath 'tests/Support/TestConfig.ps1'
 

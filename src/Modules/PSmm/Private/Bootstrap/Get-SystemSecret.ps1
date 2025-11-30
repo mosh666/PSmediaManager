@@ -181,10 +181,29 @@ function Get-SystemSecret {
         [switch]$AsPlainText,
 
         [Parameter()]
-        [string]$VaultPath = 'd:\PSmm.Vault'
+        [string]$VaultPath,
+
+        [Parameter()]
+        [switch]$Optional
     )
 
     try {
+        # Resolve vault path from parameter, environment, or app configuration to avoid hardcoded literals
+        if (-not $VaultPath -or [string]::IsNullOrWhiteSpace($VaultPath)) {
+            if ($env:PSMM_VAULT_PATH) {
+                $VaultPath = $env:PSMM_VAULT_PATH
+            }
+            elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
+                try { $VaultPath = (Get-AppConfiguration).Paths.App.Vault } catch { }
+            }
+            if (-not $VaultPath) {
+                if ($Optional) {
+                    Write-Verbose 'VaultPath not set; optional secret retrieval returning null.'
+                    return $null
+                }
+                throw 'VaultPath is not set. Provide -VaultPath or set PSMM_VAULT_PATH.'
+            }
+        }
         Write-Verbose "Retrieving system secret: $SecretType"
 
         # Define KeePass entry mapping
@@ -200,8 +219,11 @@ function Get-SystemSecret {
         # Check if KeePass database exists
         if (-not (Test-Path $dbPath)) {
             $errorMsg = "KeePass database not found: $dbPath. Use Initialize-SystemVault to create it."
-            Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' `
-                -Message $errorMsg -Console -File
+            if ($Optional) {
+                Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
+                return $null
+            }
+            Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
             throw $errorMsg
         }
 
@@ -213,6 +235,10 @@ function Get-SystemSecret {
         if (-not $cli) {
             $searched = if ($cliResolution.CandidatePaths) { $cliResolution.CandidatePaths -join ', ' } else { 'No candidate directories discovered' }
             $errorMsg = "keepassxc-cli.exe not found. Install KeePassXC or place the portable plugins folder so the CLI can be auto-resolved. Searched: $searched"
+            if ($Optional) {
+                Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
+                return $null
+            }
             Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
             throw $errorMsg
         }
@@ -268,15 +294,21 @@ function Get-SystemSecret {
         else {
             $exit = if ($null -ne $proc) { $proc.ExitCode } else { $LASTEXITCODE }
             $errorMsg = "Failed to retrieve from KeePassXC (exit code: $exit). Entry may not exist: $entry"
-            Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' `
-                -Message $errorMsg -Console -File
+            if ($Optional) {
+                Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
+                return $null
+            }
+            Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
             throw $errorMsg
         }
     }
     catch {
         $errorMessage = "Failed to retrieve system secret '$SecretType': $_"
-        Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' `
-            -Message $errorMessage -ErrorRecord $_ -Console -File
+        if ($Optional) {
+            Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMessage -Console -File
+            return $null
+        }
+        Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' -Message $errorMessage -ErrorRecord $_ -Console -File
         throw $errorMessage
     }
 }

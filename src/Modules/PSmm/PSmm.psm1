@@ -162,6 +162,7 @@ Export-ModuleMember -Function @(
     'Show-StorageInfo',
     'Export-SafeConfiguration',
     # KeePassXC Secret Management Functions
+    'Get-KeePassCli',
     'Get-SystemSecret',
     'Get-SystemSecretMetadata',
     'Initialize-SystemVault',

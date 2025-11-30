@@ -271,23 +271,33 @@ class AppSecrets {
     AppSecrets() {}
 
     AppSecrets([string]$vaultPath) {
-        $this.VaultPath = $vaultPath
+        if ($vaultPath) { $this.VaultPath = $vaultPath }
+        elseif ($env:PSMM_VAULT_PATH) { $this.VaultPath = $env:PSMM_VAULT_PATH }
+        elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
+            try { $this.VaultPath = (Get-AppConfiguration).Paths.App.Vault } catch { }
+        }
     }
 
     [void] LoadSecrets() {
         try {
             # Use Get-SystemSecret to load from KeePassXC
             if (Get-Command Get-SystemSecret -ErrorAction SilentlyContinue) {
-                Write-Verbose "Loading GitHub token from KeePassXC vault"
-                $this.GitHubToken = Get-SystemSecret -SecretType 'GitHub-Token' -VaultPath $this.VaultPath -ErrorAction Stop
-                Write-Verbose "GitHub token loaded successfully from KeePassXC"
+                Write-Verbose "Loading GitHub credential from KeePassXC vault (optional)"
+                # Retrieve token as optional: absence should not raise an ERROR log or throw
+                $this.GitHubToken = Get-SystemSecret -SecretType 'GitHub-Token' -VaultPath $this.VaultPath -Optional -ErrorAction SilentlyContinue
+                if ($this.GitHubToken) {
+                    Write-Verbose "GitHub credential loaded successfully from KeePassXC"
+                }
+                else {
+                    Write-Verbose "No GitHub credential found; continuing without token (rate-limited operations may occur)."
+                }
             }
             else {
                 Write-Warning "Get-SystemSecret not available. Ensure PSmm module is properly loaded."
             }
         }
         catch {
-            Write-Warning "Failed to load GitHub token from KeePassXC: $_"
+            Write-Warning "Failed to load GitHub credential from KeePassXC: $_"
             Write-Warning "Ensure the KeePass database exists and contains the GitHub-Token entry."
             Write-Warning "Use 'Initialize-SystemVault' and 'Save-SystemSecret' to set up secrets."
         }

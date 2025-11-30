@@ -951,6 +951,10 @@ function Install-Plugin {
                 }
             }
         }
+        elseif (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue) {
+            # Fallback to system vault secret if config is not available
+            try { $token = Get-SystemSecret -SecretType 'GitHub-Token' } catch { }
+        }
 
         # Get latest download URL
         $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
@@ -1064,6 +1068,10 @@ function Request-PluginUpdate {
                     $token = $secure
                 }
             }
+        }
+        elseif (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue) {
+            # Fallback to system vault secret if config is not available
+            try { $token = Get-SystemSecret -SecretType 'GitHub-Token' } catch { }
         }
 
         # Get latest version information
