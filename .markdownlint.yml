@@ -1,0 +1,10 @@
+# markdownlint configuration for Codacy
+# Ignore non-Markdown files used by scanners
+MD013: false  # line-length
+MD022: false  # blanks-around-headings
+MD032: false  # blanks-around-lists
+MD026: false  # no-trailing-punctuation
+MD025: false  # single-title
+# Exclude non-Markdown files explicitly via glob rules
+globs:
+  - "**/*.md"

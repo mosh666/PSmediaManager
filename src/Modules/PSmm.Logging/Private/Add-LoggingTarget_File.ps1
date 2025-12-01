@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Adds a file logging target to the PSLogs configuration.
 

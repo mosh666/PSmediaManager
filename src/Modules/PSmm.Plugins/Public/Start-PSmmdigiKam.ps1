@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 <#
@@ -59,6 +59,15 @@ function Start-PSmmdigiKam {
         [ValidateNotNull()]
         $Config,
 
+        [Parameter(Mandatory)]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        $Process,
+
         [Parameter()]
         [switch]$Force
     )
@@ -99,7 +108,7 @@ function Start-PSmmdigiKam {
 
             # Initialize project-specific digiKam configuration
             Write-Verbose "Initializing project-specific digiKam configuration..."
-            $projectConfig = Initialize-PSmmProjectDigiKamConfig -Config $Config -ProjectName $projectName -Force:$Force
+            $projectConfig = Initialize-PSmmProjectDigiKamConfig -Config $Config -ProjectName $projectName -FileSystem $FileSystem -PathProvider $PathProvider -Force:$Force
 
             # Get project-specific paths from configuration
             $digiKamRcPath = $projectConfig.DigiKamRcPath
@@ -107,14 +116,14 @@ function Start-PSmmdigiKam {
             $databasePort = $projectConfig.DatabasePort
 
             # Get digiKam executable path
-            $digiKamExe = Join-Path -Path $projectConfig.DigiKamPluginsPath -ChildPath 'digikam.exe'
+            $digiKamExe = $PathProvider.CombinePath($projectConfig.DigiKamPluginsPath, 'digikam.exe')
 
-            if (-not (Test-Path -Path $digiKamExe)) {
+            if (-not ($FileSystem.TestPath($digiKamExe))) {
                 throw [PluginRequirementException]::new("digiKam executable not found: $digiKamExe", 'digiKam')
             }
 
             # Verify digiKam RC file exists
-            if (-not (Test-Path -Path $digiKamRcPath)) {
+            if (-not ($FileSystem.TestPath($digiKamRcPath))) {
                 throw [ConfigurationException]::new("digiKam configuration file not found: $digiKamRcPath", 'digiKamRC')
             }
 
@@ -129,13 +138,7 @@ function Start-PSmmdigiKam {
             # Set environment variable for digiKam APPDIR (isolates configuration and data)
             $env:DIGIKAM_APPDIR = $appDir
 
-            $processParams = @{
-                FilePath = $digiKamExe
-                ArgumentList = "--config `"$digiKamRcPath`""
-                PassThru = $true
-            }
-
-            $digiKamProcess = Start-Process @processParams
+            $digiKamProcess = $Process.StartProcess($digiKamExe, @('--config', $digiKamRcPath))
 
             if ($null -eq $digiKamProcess) {
                 throw [ProcessException]::new('Failed to start digiKam process', 'digiKam')

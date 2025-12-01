@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 $localRepoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -83,7 +83,7 @@ Describe 'Write-PSmmLog' {
             Mock Set-LogContext -ModuleName 'PSmm.Logging' { }
             Mock Write-Log -ModuleName 'PSmm.Logging' {
                 param($Level, $Message, $Body, $ExceptionInfo)
-                $script:__writeCalls += [pscustomobject]@{ 
+                $script:__writeCalls += [pscustomobject]@{
                     Level = $Level
                     Message = $Message
                     HasException = ($null -ne $ExceptionInfo)

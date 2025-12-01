@@ -1,13 +1,19 @@
 # Minimal Dockerfile for PSmediaManager vulnerability scanning
 # Built for Trivy/Codacy CLI to have a container context.
 
-FROM mcr.microsoft.com/powershell:latest
+FROM mcr.microsoft.com/powershell:7.4-ubuntu-22.04
 LABEL org.opencontainers.image.source="https://github.com/mosh666/PSmediaManager"
 LABEL org.opencontainers.image.title="PSmediaManager"
 LABEL org.opencontainers.image.description="Minimal container image for security scanning of PSmediaManager"
 
 # Set working directory
 WORKDIR /app
+
+# Apply latest security updates to base packages
+RUN apt-get update \
+	&& apt-get dist-upgrade -y \
+	&& apt-get autoremove -y \
+	&& rm -rf /var/lib/apt/lists/*
 
 # Copy only what is needed for bootstrap (adjust if more needed later)
 COPY src/ ./src/

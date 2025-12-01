@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 <#
@@ -54,7 +54,10 @@ function Get-PSmmProjectPorts {
         $Config,
 
         [Parameter()]
-        [switch]$IncludeUsage
+        [switch]$IncludeUsage,
+
+        [Parameter(Mandatory)]
+        $Process
     )
 
     begin {
@@ -92,9 +95,16 @@ function Get-PSmmProjectPorts {
                         $connection = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -First 1
                         if ($connection) {
                             $process = Get-Process -Id $connection.OwningProcess -ErrorAction SilentlyContinue
-                            $result | Add-Member -MemberType NoteProperty -Name 'InUse' -Value $true
-                            $result | Add-Member -MemberType NoteProperty -Name 'ProcessName' -Value $process.ProcessName
-                            $result | Add-Member -MemberType NoteProperty -Name 'ProcessId' -Value $process.Id
+                            if ($process) {
+                                $result | Add-Member -MemberType NoteProperty -Name 'InUse' -Value $true
+                                $result | Add-Member -MemberType NoteProperty -Name 'ProcessName' -Value $process.ProcessName
+                                $result | Add-Member -MemberType NoteProperty -Name 'ProcessId' -Value $process.Id
+                            }
+                            else {
+                                $result | Add-Member -MemberType NoteProperty -Name 'InUse' -Value $false
+                                $result | Add-Member -MemberType NoteProperty -Name 'ProcessName' -Value ''
+                                $result | Add-Member -MemberType NoteProperty -Name 'ProcessId' -Value 0
+                            }
                         }
                         else {
                             $result | Add-Member -MemberType NoteProperty -Name 'InUse' -Value $false

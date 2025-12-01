@@ -1,4 +1,4 @@
-﻿Describe 'Export-SafeConfiguration (deep branches)' {
+Describe 'Export-SafeConfiguration (deep branches)' {
     BeforeAll {
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm/Public/Export-SafeConfiguration.ps1'
         $scriptPath = [System.IO.Path]::GetFullPath($scriptPath)

@@ -1,4 +1,4 @@
-﻿Describe 'Export-SafeConfiguration - _ToSafeScalar formatting' {
+Describe 'Export-SafeConfiguration - _ToSafeScalar formatting' {
     BeforeAll {
         $repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
         & (Join-Path $repoRoot 'tests/Support/Import-PSmmClasses.ps1') -RepositoryRoot $repoRoot

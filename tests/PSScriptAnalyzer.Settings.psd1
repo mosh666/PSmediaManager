@@ -1,4 +1,4 @@
-﻿@{
+@{
     # PSScriptAnalyzer settings tailored for PSmediaManager development.
     # Supported top-level keys: Rules, ExcludeRules, IncludeRules, IncludeDefaultRules, CustomRulePath, Severity
     IncludeDefaultRules = $true

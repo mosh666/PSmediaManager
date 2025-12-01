@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Clears the project registry cache, forcing a full rescan on next access.
 

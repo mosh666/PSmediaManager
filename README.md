@@ -44,6 +44,11 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 - Pester test suite & coverage baseline scripts.
 - PowerShell 7.5.4+ only (Core, cross-platform focus).
 
+### New in 0.9.0
+
+- Health overview: `Get-PSmmHealth` summarizes environment status (PowerShell version, modules, plugins, storage, vault). Use `-Format` for readable output.
+- Early bootstrap services (`src/Core/BootstrapServices.ps1`) provide path, filesystem, environment, and process helpers before module import.
+
 ## Quick Start
 
 ```pwsh
@@ -66,6 +71,17 @@ If you see module import or analyzer warnings, pre-install the recommended PSGal
 Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
 ./Start-PSmediaManager.ps1
 ```
+
+## Health Check
+
+Validate runtime readiness with the health command:
+
+```pwsh
+Import-Module ./src/Modules/PSmm/PSmm.psd1
+Get-PSmmHealth -Format
+```
+
+Outputs PowerShell version compliance, required modules availability, plugin state (installed vs. latest), storage group summary, and vault/token presence.
 
 ## Code Quality
 
@@ -353,6 +369,11 @@ Continuous integration:
 - `.github/workflows/ci.yml` installs PowerShell 7.5.4, the required PSGallery modules, runs `tests/Invoke-PSScriptAnalyzer.ps1`, then `tests/Invoke-Pester.ps1 -CodeCoverage -Quiet`, and uploads analyzer/test/coverage artifacts.
 - `.github/workflows/codacy.yml` runs Codacy Analysis CLI and uploads SARIF results via `github/codeql-action/upload-sarif@v4` so findings appear in GitHub code scanning alongside CodeQL results.
 - Coverage baselines are enforced via `tests/.coverage-baseline.json`; commits that lower coverage fail CI until baseline is updated intentionally.
+
+### Static Analysis & Linting
+- Codacy CLI configured via `.codacy.yml` (runs in CI and locally via `.\.codacy\Invoke-CodacyWSL.ps1`).
+- Markdown lint rules defined in `.markdownlint.yml` with relaxed formatting for project docs.
+- `.trivyignore` tracks suppressed upstream WSL/Ubuntu base image CVEs; see `SECURITY.md` for rationale and review cadence.
 
 ## Security
 

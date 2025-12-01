@@ -8,6 +8,8 @@ function Get-KeePassCli {
         [Parameter(Mandatory)]$Http,
         [Parameter(Mandatory)]$Crypto,
         [Parameter(Mandatory)]$FileSystem,
+        [Parameter(Mandatory)]$Environment,
+        [Parameter(Mandatory)]$PathProvider,
         [Parameter(Mandatory)]$Process
     )
 
@@ -46,7 +48,7 @@ function Get-KeePassCli {
     }
 
     # First resolution attempt
-    $resolution = Resolve-KeePassCliCommand -VaultPath $vaultPath
+    $resolution = Resolve-KeePassCliCommand -VaultPath $vaultPath -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
     if ($resolution.Command) {
         return $resolution.Command
     }
@@ -60,7 +62,8 @@ function Get-KeePassCli {
     }
 
     try {
-        $null = Install-KeePassXC -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+        $null = Install-KeePassXC -Config $Config -Http $Http -Crypto $Crypto `
+            -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
     }
     catch {
         # Swallow installer errors; final resolution will determine outcome
@@ -68,7 +71,7 @@ function Get-KeePassCli {
     }
 
     # Second resolution attempt
-    $postResolution = Resolve-KeePassCliCommand -VaultPath $vaultPath
+    $postResolution = Resolve-KeePassCliCommand -VaultPath $vaultPath -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
     if ($postResolution.Command) {
         Write-PSmmLog -Level INFO -Context 'Get-KeePassCli' -Message 'KeePassXC CLI resolved after installation.'
         return $postResolution.Command

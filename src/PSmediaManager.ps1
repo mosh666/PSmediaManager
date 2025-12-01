@@ -92,6 +92,41 @@ if ($MyInvocation.InvocationName -eq '.') {
 # Provide a concise startup banner (avoid Write-Host in analysis-critical paths)
 Write-Verbose ('Starting PSmediaManager (PID {0}) in {1} mode' -f $PID, ($(if ($Dev) { 'Dev' } else { 'Normal' })))
 
+#region ===== Early Service Initialization =====
+
+<#
+    Load core service/interface definitions before module imports so we can use
+    dependency-injected services for path and file operations during module loading.
+    (Option B refactor)
+#>
+try {
+    $coreServicesPath = Join-Path -Path $script:ModuleRoot -ChildPath 'Core/BootstrapServices.ps1'
+    if (-not (Test-Path -Path $coreServicesPath)) {
+        throw "Core services file not found: $coreServicesPath"
+    }
+    . $coreServicesPath
+    Write-Verbose "Loaded core bootstrap services definitions"
+}
+catch {
+    Write-Error "Failed to load core bootstrap services: $_" -ErrorAction Stop
+}
+
+try {
+    Write-Verbose "Instantiating early services for module loading..."
+    $script:Services = @{
+        FileSystem   = [FileSystemService]::new()
+        Environment  = [EnvironmentService]::new()
+        PathProvider = [PathProvider]::new()
+        Process      = [ProcessService]::new()
+    }
+    Write-Verbose "Early services instantiated"
+}
+catch {
+    Write-Error "Failed to instantiate early services: $_" -ErrorAction Stop
+}
+
+#endregion ===== Early Service Initialization =====
+
 #region ===== Module Imports =====
 
 <#
@@ -101,8 +136,8 @@ Write-Verbose ('Starting PSmediaManager (PID {0}) in {1} mode' -f $PID, ($(if ($
     needed for configuration and other modules.
 #>
 try {
-    # Calculate modules path from ModuleRoot
-    $modulesPath = Join-Path -Path $script:ModuleRoot -ChildPath 'Modules'
+    # Calculate modules path using PathProvider
+    $modulesPath = $script:Services.PathProvider.CombinePath(@($script:ModuleRoot, 'Modules'))
     Write-Verbose "Importing modules from: $modulesPath"
 
     # Define module load order (dependencies first)
@@ -116,10 +151,10 @@ try {
 
     $loadedModules = 0
     foreach ($moduleName in $moduleLoadOrder) {
-        $moduleFolder = Join-Path -Path $modulesPath -ChildPath $moduleName
-        $manifestPath = Join-Path -Path $moduleFolder -ChildPath "$moduleName.psd1"
+        $moduleFolder = $script:Services.PathProvider.CombinePath(@($modulesPath, $moduleName))
+        $manifestPath = $script:Services.PathProvider.CombinePath(@($moduleFolder, "$moduleName.psd1"))
 
-        if (Test-Path -Path $manifestPath) {
+        if ($script:Services.FileSystem.TestPath($manifestPath)) {
             try {
                 Write-Verbose "Importing module: $moduleName"
                 # Removed -Global flag for proper module scoping
@@ -157,6 +192,29 @@ catch {
 #endregion ===== Module Imports =====
 
 
+#region ===== Service Instantiation (Full Set) =====
+
+<#
+    Instantiate service implementations for dependency injection.
+    These services provide testable abstractions over system operations.
+#>
+try {
+    Write-Verbose "Extending early services with remaining implementations..."
+    $script:Services.Http    = [HttpService]::new()
+    $script:Services.Crypto  = [CryptoService]::new()
+    $script:Services.Cim     = [CimService]::new()
+    $script:Services.Storage = [StorageService]::new()
+    $script:Services.Git     = [GitService]::new()
+    Write-Verbose "Full service layer available"
+}
+catch {
+    Write-Error "Failed to extend service layer: $_"
+    exit 1
+}
+
+#endregion ===== Service Instantiation =====
+
+
 #region ===== Runtime Configuration Initialization =====
 
 <#
@@ -190,6 +248,7 @@ try {
     $configBuilder = [AppConfigurationBuilder]::new($repositoryRoot).
     WithParameters($runtimeParams).
     WithVersion([version]'1.0.0').
+    WithServices($script:Services.FileSystem, $script:Services.Environment, $script:Services.PathProvider, $script:Services.Process).
     InitializeDirectories()
 
     Write-Verbose "Runtime configuration initialized successfully"
@@ -218,7 +277,7 @@ try {
     if ($repositoryRoot) {
         $launcherCmd = Get-Command -Name 'New-DriveRootLauncher' -ErrorAction SilentlyContinue
         if ($launcherCmd) {
-            New-DriveRootLauncher -RepositoryRoot $repositoryRoot
+            New-DriveRootLauncher -RepositoryRoot $repositoryRoot -FileSystem $script:Services.FileSystem -PathProvider $script:Services.PathProvider
         }
         else {
             $missingMsg = 'New-DriveRootLauncher is unavailable. Ensure the PSmm module exported the function (Import-Module src/Modules/PSmm/PSmm.psd1) before re-running.'
@@ -251,7 +310,7 @@ try {
     $requirementsPath = $tempConfig.GetConfigPath('Requirements')
 
     # Load configuration files using the builder (before Build() is called)
-    if (Test-Path -Path $defaultConfigPath) {
+    if ($script:Services.FileSystem.TestPath($defaultConfigPath)) {
         $null = $configBuilder.LoadConfigurationFile($defaultConfigPath)
         Write-Verbose "Loaded configuration: $defaultConfigPath"
     }
@@ -259,7 +318,7 @@ try {
         Write-Warning "Default configuration file not found: $defaultConfigPath"
     }
 
-    if (Test-Path -Path $requirementsPath) {
+    if ($script:Services.FileSystem.TestPath($requirementsPath)) {
         $null = $configBuilder.LoadRequirementsFile($requirementsPath)
         Write-Verbose "Loaded requirements: $requirementsPath"
     }
@@ -272,9 +331,9 @@ try {
     # to provide a unified setup experience
     $driveRoot = [System.IO.Path]::GetPathRoot($script:ModuleRoot)
     if (-not [string]::IsNullOrWhiteSpace($driveRoot)) {
-        $storagePath = Join-Path -Path $driveRoot -ChildPath 'PSmm.Config\PSmm.Storage.psd1'
+        $storagePath = $script:Services.PathProvider.CombinePath(@($driveRoot, 'PSmm.Config', 'PSmm.Storage.psd1'))
 
-        if (Test-Path -Path $storagePath) {
+        if ($script:Services.FileSystem.TestPath($storagePath)) {
             $null = $configBuilder.LoadStorageFile($storagePath)
             Write-Verbose "Loaded on-drive storage configuration: $storagePath"
         }
@@ -339,7 +398,7 @@ try {
             Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=$cfgType, UI=$uiExists, Width=$uiWidth, FGColors=$ansiFgCount)" -ForegroundColor Cyan
         }
         catch { Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=UNKNOWN, error collecting UI details: $($_.Exception.Message))" -ForegroundColor Cyan }
-        Invoke-PSmmUI -Config $appConfig
+        Invoke-PSmmUI -Config $appConfig -Process $script:Services.Process -FileSystem $script:Services.FileSystem -PathProvider $script:Services.PathProvider
         Write-Verbose 'UI session completed'
     }
     #endregion User Interface Launch
@@ -380,7 +439,7 @@ finally {
         $runConfigPath = Join-Path -Path $appConfig.Paths.Log -ChildPath "$($appConfig.InternalName)Run.psd1"
         Write-Verbose "Saving configuration to: $runConfigPath"
         try {
-            Export-SafeConfiguration -Configuration $appConfig -Path $runConfigPath -ErrorAction Stop
+            Export-SafeConfiguration -Configuration $appConfig -Path $runConfigPath -FileSystem $script:Services.FileSystem -ErrorAction Stop
         }
         catch {
             Write-Warning "Failed to save configuration: $_"
@@ -391,7 +450,8 @@ finally {
                     Paths = @{ Root = $appConfig.Paths.Root; Log = $appConfig.Paths.Log }
                     Timestamp = (Get-Date).ToString('o')
                 }
-                $miniContent = "@{`n    App = @{ Name = '$($mini.App.Name)'; Version = '$($mini.App.Version)' }`n    Paths = @{ Root = '$($mini.Paths.Root)'; Log = '$($mini.Paths.Log)' }`n    Timestamp = '$($mini.Timestamp)'`n}"; Set-Content -Path $runConfigPath -Value $miniContent -Force -Encoding UTF8
+                $miniContent = "@{`n    App = @{ Name = '$($mini.App.Name)'; Version = '$($mini.App.Version)' }`n    Paths = @{ Root = '$($mini.Paths.Root)'; Log = '$($mini.Paths.Log)' }`n    Timestamp = '$($mini.Timestamp)'`n}"
+                $script:Services.FileSystem.SetContent($runConfigPath, $miniContent)
                 Write-Warning "Fallback minimal configuration written to $runConfigPath"
             }
             catch {
@@ -405,6 +465,23 @@ finally {
         try {
             $exitStatus = if ($exitCode -eq 0) { 'Success' } else { 'Error' }
             Write-PSmmLog -Level NOTICE -Context "Stop $($appConfig.DisplayName)" -Message "########## Stopping $($appConfig.DisplayName) [$exitStatus] ##########" -File
+
+            # Persist health summary (with baseline diff if available)
+            if (Get-Command -Name Get-PSmmHealth -ErrorAction SilentlyContinue) {
+                try {
+                    $prev = if (Get-Variable -Name PSmm_PluginBaseline -Scope Script -ErrorAction SilentlyContinue) { $script:PSmm_PluginBaseline } else { $null }
+                    $health = Get-PSmmHealth -Config $appConfig -Run $Run -PreviousPlugins $prev
+                    if ($health) {
+                        $pluginChanges = @($health.Plugins | Where-Object { $_.Changed }).Count
+                        $upgrades = @($health.Plugins | Where-Object { $_.Upgraded }).Count
+                        $summaryLine = "Health: PS=$($health.PowerShell.Current) (Req $($health.PowerShell.Required), OK=$($health.PowerShell.VersionOk)); Modules=$(@($health.Modules).Count); Plugins=$(@($health.Plugins).Count); Changed=$pluginChanges; Upgraded=$upgrades; Storage=$(@($health.Storage).Count); GitHubToken=$($health.Vault.GitHubTokenPresent)"
+                        Write-PSmmLog -Level NOTICE -Context 'Health Summary' -Message $summaryLine -File
+                    }
+                }
+                catch {
+                    Write-PSmmLog -Level WARNING -Context 'Health Summary' -Message "Failed to generate health summary: $($_.Exception.Message)" -File
+                }
+            }
         }
         catch {
             Write-Warning "Failed to log exit: $_"

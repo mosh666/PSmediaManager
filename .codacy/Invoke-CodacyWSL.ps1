@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 
 <#!
 .SYNOPSIS
@@ -81,7 +81,9 @@ if (-not $resolvedDistributionName) {
             }
         }
     }
-    catch { }
+    catch {
+        Write-Verbose "Failed to parse WSL distribution list: $_"
+    }
 }
 if (-not $resolvedDistributionName) { $resolvedDistributionName = '(default)' }
 Write-Verbose "Using WSL distribution: $resolvedDistributionName"

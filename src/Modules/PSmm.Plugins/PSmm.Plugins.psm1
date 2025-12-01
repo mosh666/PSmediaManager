@@ -1,4 +1,4 @@
-﻿<#!
+<#!
 .SYNOPSIS
     PSmediaManager external plugin orchestration module.
 
@@ -13,18 +13,25 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Service-aware path helpers (optional - check variable existence first to avoid StrictMode errors)
+$servicesVar = Get-Variable -Name 'Services' -Scope Script -ErrorAction SilentlyContinue
+$hasServices = ($null -ne $servicesVar) -and ($null -ne $servicesVar.Value)
+$pathProvider = if ($hasServices -and $servicesVar.Value.PathProvider) { $servicesVar.Value.PathProvider } else { $null }
+$fileSystem   = if ($hasServices -and $servicesVar.Value.FileSystem) { $servicesVar.Value.FileSystem } else { $null }
+$parentRoot = Split-Path -Parent $PSScriptRoot
+
 # Import required classes from PSmm module
-$psmmModulePath = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'PSmm'
-$exceptionsPath = Join-Path -Path $psmmModulePath -ChildPath 'Classes/Exceptions.ps1'
-if (Test-Path -LiteralPath $exceptionsPath) {
+$psmmModulePath = if ($pathProvider) { $pathProvider.CombinePath(@($parentRoot,'PSmm')) } else { Join-Path -Path $parentRoot -ChildPath 'PSmm' }
+$exceptionsPath = if ($pathProvider) { $pathProvider.CombinePath(@($psmmModulePath,'Classes','Exceptions.ps1')) } else { Join-Path -Path $psmmModulePath -ChildPath 'Classes/Exceptions.ps1' }
+if ((($fileSystem) -and $fileSystem.TestPath($exceptionsPath)) -or (-not $fileSystem -and (Test-Path -LiteralPath $exceptionsPath))) {
     . $exceptionsPath
 }
 
-$publicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
-$privatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
+$publicPath  = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Public')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Public' }
+$privatePath = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Private')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Private' }
 
 foreach ($scriptPath in @($publicPath, $privatePath)) {
-    if (-not (Test-Path -LiteralPath $scriptPath)) {
+    if (-not ((($fileSystem) -and $fileSystem.TestPath($scriptPath)) -or (-not $fileSystem -and (Test-Path -LiteralPath $scriptPath)))) {
         continue
     }
 

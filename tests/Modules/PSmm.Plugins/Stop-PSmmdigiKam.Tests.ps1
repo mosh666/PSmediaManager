@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 Describe 'Stop-PSmmdigiKam' {
@@ -20,6 +20,29 @@ Describe 'Stop-PSmmdigiKam' {
         }
     }
 
+    BeforeEach {
+        # Mock FileSystemService
+        $script:mockFS = [PSCustomObject]@{
+            PSTypeName = 'FileSystemService'
+        }
+        $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'TestPath' -Value { param($path) Test-Path $path }
+
+        # Mock PathProvider
+        $script:mockPath = [PSCustomObject]@{
+            PSTypeName = 'PathProvider'
+        }
+        $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'Join' -Value { param([string[]]$parts) $parts -join [IO.Path]::DirectorySeparatorChar }
+        $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'CombinePath' -Value { param([string[]]$parts) $parts -join [IO.Path]::DirectorySeparatorChar }
+
+        # Mock Process
+        $script:mockProcess = [PSCustomObject]@{
+            PSTypeName = 'ProcessService'
+        }
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'Stop' -Value { param($id, $force) }
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'GetProcess' -Value { param($name) @() }
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'GetProcessById' -Value { param($id) $null }
+    }
+
     It 'does nothing when no processes match and does not throw' {
         $cfg = [AppConfiguration]::new()
         $cfg.Projects = @{ Current = @{ Name = 'Demo'; Path = (Join-Path $TestDrive 'Demo') } }
@@ -29,7 +52,7 @@ Describe 'Stop-PSmmdigiKam' {
         Mock Get-Process { @() } -ParameterFilter { $Name -eq 'digikam' }
         Mock Get-NetTCPConnection { @() }
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -Verbose } | Should -Not -Throw
     }
 
     It 'kills processes found by command line and port' {
@@ -53,9 +76,10 @@ Describe 'Stop-PSmmdigiKam' {
         Add-Member -InputObject $fakeProc -MemberType ScriptMethod -Name Kill -Value { $this.Killed = $true } -Force
         $global:PSmmStopTestFakeProc = $fakeProc
         InModuleScope PSmm.Plugins {
-            Mock Get-Process { @($global:PSmmStopTestFakeProc) } -ParameterFilter { $Name -eq 'digikam' }
             Mock Get-NetTCPConnection { @([pscustomobject]@{ LocalPort = 3330; OwningProcess = 2002 }) }
         }
+        # Provide processes via Process service mock
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'GetProcess' -Force -Value { param($name) @($global:PSmmStopTestFakeProc) }
         $dbProc = [pscustomobject]@{
             Id = 2002
             ProcessName = 'mariadbd'
@@ -63,11 +87,10 @@ Describe 'Stop-PSmmdigiKam' {
         }
         Add-Member -InputObject $dbProc -MemberType ScriptMethod -Name Kill -Value { $this.Killed = $true } -Force
         $global:PSmmStopTestDbProc = $dbProc
-        InModuleScope PSmm.Plugins {
-            Mock Get-Process { $global:PSmmStopTestDbProc } -ParameterFilter { $Id -eq 2002 }
-        }
+        # Return DB proc by Id through service
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'GetProcessById' -Force -Value { param($id) if ($id -eq 2002) { $global:PSmmStopTestDbProc } else { $null } }
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -Verbose } | Should -Not -Throw
         $fakeProc.Killed | Should -BeTrue
         $dbProc.Killed | Should -BeTrue
 
@@ -82,7 +105,7 @@ Describe 'Stop-PSmmdigiKam' {
         Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
         Mock Write-Warning {} -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -Verbose } | Should -Not -Throw
         Should -Invoke Write-Warning -ModuleName PSmm.Plugins -ParameterFilter { $Message -like "Project 'Demo' is not currently selected*" } -Times 1
     }
 
@@ -96,10 +119,11 @@ Describe 'Stop-PSmmdigiKam' {
             param($Level, $Message, $Context, $ErrorRecord, [switch]$Console, [switch]$File)
             if ($Level -eq 'ERROR') { $script:StopErrorMessage = $Message }
         } -ModuleName PSmm.Plugins
-        Mock Get-Process { throw 'process query failed' } -ModuleName PSmm.Plugins -ParameterFilter { $Name -eq 'digikam' }
+        # Simulate failure via Process service
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'GetProcess' -Force -Value { param($name) throw 'process query failed' }
         Mock Get-NetTCPConnection { @() } -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg } | Should -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess } | Should -Throw
         $script:StopErrorMessage | Should -Match 'Failed to stop digiKam'
     }
 
@@ -110,7 +134,7 @@ Describe 'Stop-PSmmdigiKam' {
         Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
         Mock Write-Verbose {} -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -WhatIf } | Should -Not -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -WhatIf } | Should -Not -Throw
         Should -Invoke Write-Verbose -ModuleName PSmm.Plugins -ParameterFilter { $Message -eq 'Stop digiKam operation cancelled by user' } -Times 1
     }
 
@@ -130,9 +154,10 @@ Describe 'Stop-PSmmdigiKam' {
         $proc | Add-Member -MemberType ScriptProperty -Name CommandLine -Value { $script:StopCmdLineErrors++; throw 'Access denied' } -Force
         $proc | Add-Member -MemberType ScriptMethod -Name Kill -Value { } -Force
 
-        Mock Get-Process { @($proc) } -ModuleName PSmm.Plugins -ParameterFilter { $Name -eq 'digikam' }
+        # Provide process list via service
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'GetProcess' -Force -Value { param($name) @($proc) }
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -Verbose } | Should -Not -Throw
         $script:StopCmdLineErrors | Should -Be 1
     }
 
@@ -156,9 +181,10 @@ Describe 'Stop-PSmmdigiKam' {
         }
         Add-Member -InputObject $proc -MemberType ScriptMethod -Name Kill -Value { throw 'kill failed' } -Force
 
-        Mock Get-Process { @($proc) } -ModuleName PSmm.Plugins -ParameterFilter { $Name -eq 'digikam' }
+        # Provide process via service
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'GetProcess' -Force -Value { param($name) @($proc) }
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -Verbose } | Should -Not -Throw
         Should -Invoke Write-Warning -ModuleName PSmm.Plugins -ParameterFilter { $Message -like 'Failed to stop digiKam process (PID: 5120)*' } -Times 1
     }
 
@@ -181,13 +207,12 @@ Describe 'Stop-PSmmdigiKam' {
             [pscustomobject]@{ LocalPort = 4455; OwningProcess = 9002 }
         ) } -ModuleName PSmm.Plugins
 
-        Mock Get-Process { throw 'process access denied' } -ModuleName PSmm.Plugins -ParameterFilter { $Id -eq 9001 }
-
         $dbProc = [pscustomobject]@{ Id = 9002; ProcessName = 'mariadbd' }
         Add-Member -InputObject $dbProc -MemberType ScriptMethod -Name Kill -Value { throw 'db kill failed' } -Force
-        Mock Get-Process { $dbProc } -ModuleName PSmm.Plugins -ParameterFilter { $Id -eq 9002 }
+        # Service-based behavior for by-id lookups
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'GetProcessById' -Force -Value { param($id) if ($id -eq 9001) { throw 'process access denied' } elseif ($id -eq 9002) { $dbProc } else { $null } }
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -Verbose } | Should -Not -Throw
         Should -Invoke Write-Verbose -ModuleName PSmm.Plugins -ParameterFilter { $Message -eq 'Cannot access process for PID: 9001' } -Times 1
         Should -Invoke Write-Warning -ModuleName PSmm.Plugins -ParameterFilter { $Message -like 'Failed to stop MariaDB process (PID: 9002)*' } -Times 1
     }
@@ -206,7 +231,7 @@ Describe 'Stop-PSmmdigiKam' {
         Mock Get-Process { @() } -ModuleName PSmm.Plugins -ParameterFilter { $Name -eq 'digikam' }
         Mock Get-NetTCPConnection { @() } -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -Verbose } | Should -Not -Throw
         Should -Invoke Write-Verbose -ModuleName PSmm.Plugins -ParameterFilter { $Message -eq "No MariaDB processes found on port 5551 for project Eta" } -Times 1
     }
 
@@ -222,7 +247,7 @@ Describe 'Stop-PSmmdigiKam' {
         } -ModuleName PSmm.Plugins
         Mock Write-PSmmHost { throw ([MediaManagerException]::new('Simulated failure', 'StopDigiKam')) } -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg } | Should -Throw
+        { PSmm.Plugins\Stop-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess } | Should -Throw
         $script:lastErrorMessage | Should -Be '[StopDigiKam] Simulated failure'
     }
 }

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Validates and manages PowerShell environment requirements for PSmediaManager.
 
@@ -412,8 +412,15 @@ function Invoke-ModuleRollback {
 
         Install-Module -Name $ModuleName -RequiredVersion $Version -Force -ErrorAction Stop
 
-        Write-PSmmLog -Level EMERGENCY -Context 'Install PS Modules' `
-            -Message "Rolled back $ModuleName to version $Version" -Console -File
+        try {
+            Import-Module -Name $ModuleName -Force -ErrorAction Stop
+            Write-PSmmLog -Level SUCCESS -Context 'Install PS Modules' `
+                -Message "Rollback successful: $ModuleName restored to $Version" -Console -File
+        }
+        catch {
+            Write-PSmmLog -Level EMERGENCY -Context 'Install PS Modules' `
+                -Message "Rollback import failed for $ModuleName $Version" -ErrorRecord $_ -Console -File
+        }
     }
     catch {
         Write-PSmmLog -Level ERROR -Context 'Install PS Modules' `

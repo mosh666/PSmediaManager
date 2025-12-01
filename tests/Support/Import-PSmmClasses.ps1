@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 param(
     [string]$RepositoryRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..')).Path
 )

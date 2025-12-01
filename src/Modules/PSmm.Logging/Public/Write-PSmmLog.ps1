@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Writes a log message to configured targets (file and/or console).
 
@@ -77,6 +77,13 @@ function Write-PSmmLog {
     )
 
     try {
+        # Validate logging configuration before manipulating targets
+        $loggingOk = ($null -ne $script:Logging) -and ($script:Logging -is [System.Collections.IDictionary])
+
+        if (-not $loggingOk) {
+            Write-Verbose "Write-PSmmLog: Logging config not ready (type: $($script:Logging?.GetType().FullName)). Skipping target setup."
+        }
+
         # Ensure logging context exists to avoid uninitialized variable warnings
         if ($null -eq $script:Context -or -not ($script:Context -is [hashtable])) {
             # Provide a safe structure with expected keys to avoid downstream property access errors
@@ -84,15 +91,18 @@ function Write-PSmmLog {
         }
 
         # Clear existing targets
-        if (Get-Command Get-LoggingTarget -ErrorAction SilentlyContinue) {
-            (Get-LoggingTarget).Clear()
+        if ($loggingOk -and (Get-Command Get-LoggingTarget -ErrorAction SilentlyContinue)) {
+            $targets = Get-LoggingTarget
+            if ($targets -and ($targets | Get-Member -Name 'Clear' -ErrorAction SilentlyContinue)) {
+                $targets.Clear()
+            }
         }
 
         # Add requested targets
-        if ($File -and (Get-Command Add-LoggingTarget_File -ErrorAction SilentlyContinue)) {
+        if ($loggingOk -and $File -and (Get-Command Add-LoggingTarget_File -ErrorAction SilentlyContinue)) {
             Add-LoggingTarget_File
         }
-        if ($Console -and (Get-Command Add-LoggingTarget_Console -ErrorAction SilentlyContinue)) {
+        if ($loggingOk -and $Console -and (Get-Command Add-LoggingTarget_Console -ErrorAction SilentlyContinue)) {
             Add-LoggingTarget_Console
         }
 
@@ -107,7 +117,8 @@ function Write-PSmmLog {
 
         # Write the log entry (PSLogs is a required dependency)
         if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
-            throw 'PSLogs dependency is missing. Ensure PSmm.Logging is initialized and PSLogs is available.'
+            Write-Verbose 'PSLogs dependency is missing. Ensure PSmm.Logging is initialized and PSLogs is available.'
+            return
         }
         Write-Log -Level $Level -Message $logMessage -Body $Body -ExceptionInfo $ErrorRecord
 

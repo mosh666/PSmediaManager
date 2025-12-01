@@ -32,14 +32,14 @@ Describe 'Invoke-MultiOptionPrompt' {
                 Options = @('&Yes:Confirm', '&No:Cancel')
                 Default = 0
             }
-            
+
             { Invoke-MultiOptionPrompt @params } | Should -Not -Throw
         }
 
         It 'Should use default values when parameters are not provided' {
             Mock -CommandName Write-Verbose { }
             $script:PromptForChoice_Return = 0
-            
+
             { Invoke-MultiOptionPrompt } | Should -Not -Throw
         }
     }
@@ -66,7 +66,7 @@ Describe 'Invoke-MultiOptionPrompt' {
         It 'Should throw when no valid options are provided' {
             Mock -CommandName Write-Verbose { }
             Mock -CommandName Write-Warning { }
-            
+
             { Invoke-MultiOptionPrompt -Options @('InvalidFormat1', 'InvalidFormat2') } | Should -Throw 'No valid options provided*'
         }
     }
@@ -135,7 +135,7 @@ Describe 'Invoke-MultiOptionPrompt' {
                 '&A:Alpha option'
                 '&Z:Zulu option'
             )
-            
+
             { Invoke-MultiOptionPrompt -Options $options } | Should -Not -Throw
         }
     }

@@ -1,4 +1,4 @@
-﻿Describe 'Export-SafeConfiguration (serialization branches)' {
+Describe 'Export-SafeConfiguration (serialization branches)' {
     BeforeAll {
         # Dot-source the implementation so the exported function is available
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm/Public/Export-SafeConfiguration.ps1'

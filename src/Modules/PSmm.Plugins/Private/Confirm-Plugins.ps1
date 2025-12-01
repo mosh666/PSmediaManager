@@ -1,4 +1,4 @@
-﻿<#
+<#
  .SYNOPSIS
     Plugin management and validation functions for PSmediaManager.
 <#$
@@ -248,6 +248,12 @@ function Confirm-Plugins {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
@@ -289,6 +295,25 @@ function Confirm-Plugins {
         # Iterate through plugin groups (a_GitEnv, b_ExifTool, etc.)
         $pluginGroups = $Run.App.Requirements.Plugins.GetEnumerator() | Sort-Object -Property Name
 
+        # Capture baseline plugin versions once before processing (for later health diff)
+        if (-not (Get-Variable -Name PSmm_PluginBaseline -Scope Script -ErrorAction SilentlyContinue)) {
+            $script:PSmm_PluginBaseline = @()
+            foreach ($baselineGroup in $pluginGroups) {
+                foreach ($baselinePlugin in $baselineGroup.Value.GetEnumerator()) {
+                    $state = $null
+                    if ($baselinePlugin.Value -and ($baselinePlugin.Value.PSObject.Properties.Name -contains 'State')) {
+                        $state = $baselinePlugin.Value.State
+                    }
+                    $script:PSmm_PluginBaseline += [pscustomobject]@{
+                        Name = $baselinePlugin.Value.Name
+                        Scope = $baselineGroup.Name
+                        InstalledVersion = if ($state) { $state.CurrentVersion } else { $null }
+                    }
+                }
+            }
+            Write-Verbose "Captured plugin baseline for health summary ($($script:PSmm_PluginBaseline.Count) plugins)"
+        }
+
         foreach ($pluginGroup in $pluginGroups) {
             $scopeName = $pluginGroup.Name.Substring(2)  # Remove prefix (e.g., "a_")
             Write-PSmmLog -Level NOTICE -Context "Confirm $scopeName" `
@@ -303,7 +328,8 @@ function Confirm-Plugins {
                     Config = $pluginEntry.Value
                 }
 
-                Invoke-PluginConfirmation -Config $Config -Plugin $plugin -Paths $paths -Run $Run -ScopeName $scopeName -UpdateMode $updateMode -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+                Invoke-PluginConfirmation -Config $Config -Plugin $plugin -Paths $paths -Run $Run -ScopeName $scopeName -UpdateMode $updateMode `
+                    -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
             }
         }
 
@@ -399,6 +425,12 @@ function Invoke-PluginConfirmation {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
@@ -427,14 +459,16 @@ function Invoke-PluginConfirmation {
     if ([string]::IsNullOrEmpty($state.CurrentVersion)) {
         Write-PSmmLog -Level WARNING -Context "Check $pluginName" `
             -Message "$pluginName is not installed" -Console -File
-        Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+        Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto `
+            -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
     }
     else {
         Write-PSmmLog -Level SUCCESS -Context "Check $pluginName" `
             -Message "$pluginName is installed: $($state.CurrentVersion)" -Console -File
 
         if ($UpdateMode) {
-            $updateAvailable = Request-PluginUpdate -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+            $updateAvailable = Request-PluginUpdate -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto `
+                -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
 
             if ($updateAvailable) {
                 Write-PSmmLog -Level INFO -Context "Check $pluginName" `
@@ -607,14 +641,17 @@ function Get-LatestDownloadUrl {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
     try {
         $pluginName = $Plugin.Config.Name
-        # Mark injected but unused parameters as intentionally unused for static analysis
-        $null = $FileSystem
-        $null = $Process
         $source = $Plugin.Config.Source
 
         # Ensure State bucket exists to store version metadata
@@ -631,7 +668,8 @@ function Get-LatestDownloadUrl {
                 if ($null -eq $Token) {
                     Write-Verbose 'GitHub token not provided; proceeding unauthenticated'
                 }
-                $url = Get-LatestUrlFromGitHub -Plugin $Plugin -Token $Token -Http $Http -Crypto $Crypto
+                $url = Get-LatestUrlFromGitHub -Plugin $Plugin -Token $Token -Http $Http -Crypto $Crypto `
+                    -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
             }
             'Url' {
                 $urlFunctionName = "Get-LatestUrlFromUrl-$pluginName"
@@ -926,6 +964,12 @@ function Install-Plugin {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
@@ -941,28 +985,22 @@ function Install-Plugin {
                 $Config.Secrets.GitHubToken -is [System.Security.SecureString]) {
                 $token = $Config.Secrets.GitHubToken
             }
-            else {
-                $tokenString = $Config.Secrets.GetGitHubToken()
-                if ($tokenString) {
-                    $secure = New-Object System.Security.SecureString
-                    foreach ($ch in $tokenString.ToCharArray()) { $secure.AppendChar($ch) }
-                    $secure.MakeReadOnly()
-                    $token = $secure
-                }
-            }
         }
-        elseif (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue) {
-            # Fallback to system vault secret if config is not available
-                try {
-                    $token = Get-SystemSecret -SecretType 'GitHub-Token'
-                }
-                catch {
-                    Write-Verbose "Could not retrieve GitHub token from system vault: $_"
-                }
+
+        # If token not available from config, fallback to system vault
+        if ($null -eq $token -and (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue)) {
+            try {
+                $token = Get-SystemSecret -SecretType 'GitHub-Token' `
+                    -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process -Optional
+            }
+            catch {
+                Write-Verbose "Could not retrieve GitHub token from system vault: $_"
+            }
         }
 
         # Get latest download URL
-        $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+        $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto `
+            -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
 
         if (-not $url) {
             Write-Warning "Could not determine download URL for: $pluginName"
@@ -1050,6 +1088,12 @@ function Request-PluginUpdate {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
@@ -1064,28 +1108,22 @@ function Request-PluginUpdate {
                 $Config.Secrets.GitHubToken -is [System.Security.SecureString]) {
                 $token = $Config.Secrets.GitHubToken
             }
-            else {
-                $tokenString = $Config.Secrets.GetGitHubToken()
-                if ($tokenString) {
-                    $secure = New-Object System.Security.SecureString
-                    foreach ($ch in $tokenString.ToCharArray()) { $secure.AppendChar($ch) }
-                    $secure.MakeReadOnly()
-                    $token = $secure
-                }
-            }
         }
-        elseif (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue) {
-            # Fallback to system vault secret if config is not available
-                try {
-                    $token = Get-SystemSecret -SecretType 'GitHub-Token'
-                }
-                catch {
-                    Write-Verbose "Could not retrieve GitHub token from system vault: $_"
-                }
+
+        # If token not available from config, fallback to system vault
+        if ($null -eq $token -and (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue)) {
+            try {
+                $token = Get-SystemSecret -SecretType 'GitHub-Token' `
+                    -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process -Optional
+            }
+            catch {
+                Write-Verbose "Could not retrieve GitHub token from system vault: $_"
+            }
         }
 
         # Get latest version information
-        Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process | Out-Null
+        Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto `
+            -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process | Out-Null
 
         $currentVersion = $Plugin.Config.State.CurrentVersion
         $latestVersion = $Plugin.Config.State.LatestVersion
@@ -1187,7 +1225,8 @@ function Update-Plugin {
             }
 
             # Install new version
-            Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+            Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto `
+                -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
         }
         else {
             Write-PSmmLog -Level INFO -Context "Update $pluginName" `

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     GitHub plugin management functions for PSmediaManager.
 
@@ -10,6 +10,11 @@
 
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
+
+# Script-level GitHub release cache (repo -> @{ Release; ExpiresAt })
+if (-not (Get-Variable -Name GitHubReleaseCache -Scope Script -ErrorAction SilentlyContinue)) {
+    $script:GitHubReleaseCache = @{}
+}
 
 #region ########## PRIVATE ##########
 
@@ -51,6 +56,7 @@ Set-StrictMode -Version Latest
     - Returns $null on failure with error logged
 #>
 function Get-GitHubLatestRelease {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Crypto', Justification = 'Parameter reserved for future cryptographic operations')]
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
     param(
@@ -63,10 +69,28 @@ function Get-GitHubLatestRelease {
         [SecureString]$Token = $null,
 
         [Parameter()]
+        [int]$CacheSeconds = 300,
+
+        [Parameter()]
+        [switch]$ForceRefresh,
+
+        [Parameter()]
         $Http,
 
         [Parameter()]
-        $Crypto
+        $Crypto,
+
+        [Parameter()]
+        $FileSystem,
+
+        [Parameter()]
+        $Environment,
+
+        [Parameter()]
+        $PathProvider,
+
+        [Parameter()]
+        $Process
     )
 
     # Lazy instantiation to avoid parse-time type resolution
@@ -75,16 +99,33 @@ function Get-GitHubLatestRelease {
     try {
         Write-Verbose "Fetching latest release for: $Repo"
 
-        # Build request headers (optionally authenticated)
+        # Serve from cache when valid and not forced
+        if (-not $ForceRefresh -and $script:GitHubReleaseCache.ContainsKey($Repo)) {
+            $cached = $script:GitHubReleaseCache[$Repo]
+            if ($cached -and $cached.ExpiresAt -gt (Get-Date)) {
+                Write-Verbose "Using cached release for $Repo (expires $($cached.ExpiresAt))"
+                return $cached.Release
+            }
+        }
+
+        # Build request headers (optionally authenticated) and support ETag cache validation
         $headers = @{
             'User-Agent' = 'PSmediaManager-PSmm.Plugins'
             'Accept'     = 'application/vnd.github.v3+json'
         }
 
+        $cachedEntry = $script:GitHubReleaseCache[$Repo]
+        if (-not $ForceRefresh -and $cachedEntry -and $cachedEntry.ETag) {
+            $headers['If-None-Match'] = $cachedEntry.ETag
+            Write-Verbose "Sending If-None-Match with cached ETag: $($cachedEntry.ETag)"
+        }
+
         # Fallback: obtain token securely from system vault when not provided
         if ($null -eq $Token -and (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue)) {
                 try {
-                    $Token = Get-SystemSecret -SecretType 'GitHub-Token' -Optional
+                    if ($null -ne $FileSystem -and $null -ne $Environment -and $null -ne $PathProvider -and $null -ne $Process) {
+                        $Token = Get-SystemSecret -SecretType 'GitHub-Token' -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process -Optional
+                    }
                 }
                 catch {
                     Write-Verbose "Could not retrieve GitHub token from system vault: $_"
@@ -93,20 +134,54 @@ function Get-GitHubLatestRelease {
 
         if ($null -ne $Token) {
             try {
-                $plainToken = $Crypto.ConvertFromSecureString($Token)
-                if ($plainToken) {
+                $plainToken = $null
+                if ($Token -is [System.Security.SecureString]) {
+                    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Token)
+                    try { $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr) } finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+                }
+                elseif ($Token -is [string]) {
+                    $plainToken = $Token
+                }
+
+                if ([string]::IsNullOrWhiteSpace($plainToken)) {
+                    Write-Verbose 'GitHub token resolved empty; using unauthenticated request'
+                }
+                else {
                     $headers.Authorization = "token $plainToken"
                     Write-Verbose 'Using authenticated GitHub request'
                 }
             }
             catch {
-                Write-Verbose "Failed to use provided GitHub token, falling back to unauthenticated request: $_"
+                Write-Verbose "Failed to process GitHub token, falling back to unauthenticated request: $_"
             }
         }
 
-        $response = $Http.InvokeRestMethod($apiUrl, 'GET', $headers, $null)
+        # Prefer Invoke-WebRequest for header (ETag) access; fallback to service on errors
+        try {
+            $raw = Invoke-WebRequest -Uri $apiUrl -Headers $headers -Method GET -ErrorAction Stop
+            if ($raw.StatusCode -eq 304 -and $cachedEntry) {
+                Write-Verbose "GitHub responded 304 Not Modified; extending cache TTL"
+                $cachedEntry.ExpiresAt = (Get-Date).AddSeconds($CacheSeconds)
+                return $cachedEntry.Release
+            }
+            elseif ($raw.StatusCode -eq 200) {
+                $release = $raw.Content | ConvertFrom-Json
+                $etag = $raw.Headers['ETag']
+                $script:GitHubReleaseCache[$Repo] = @{ Release = $release; ExpiresAt = (Get-Date).AddSeconds($CacheSeconds); ETag = $etag }
+                Write-Verbose "Successfully retrieved release: $($release.tag_name); Cached with ETag: $etag"
+                return $release
+            }
+            else {
+                Write-Verbose "Unexpected status code $($raw.StatusCode); falling back to HTTP service"
+            }
+        }
+        catch {
+            Write-Verbose "Invoke-WebRequest path failed: $($_.Exception.Message); attempting HttpService"
+        }
 
-        Write-Verbose "Successfully retrieved release: $($response.tag_name)"
+        $response = $Http.InvokeRestMethod($apiUrl, 'GET', $headers, $null)
+        $script:GitHubReleaseCache[$Repo] = @{ Release = $response; ExpiresAt = (Get-Date).AddSeconds($CacheSeconds); ETag = $null }
+        Write-Verbose "Successfully retrieved release (no ETag capture): $($response.tag_name)"
         return $response
     }
     catch {
@@ -122,6 +197,20 @@ function Get-GitHubLatestRelease {
             catch {
                 Write-Verbose "Unable to read HTTP status code from GitHub response: $_"
             }
+        }
+
+        # Treat 304 in catch as soft success when cached entry exists
+        try {
+            $statusCodeCatch = $null
+            if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $statusCodeCatch = [int]$_.Exception.Response.StatusCode }
+            if ($statusCodeCatch -eq 304 -and $cachedEntry) {
+                Write-Verbose "GitHub 304 Not Modified (exception path); using cached release and extending TTL"
+                $cachedEntry.ExpiresAt = (Get-Date).AddSeconds($CacheSeconds)
+                return $cachedEntry.Release
+            }
+        }
+        catch {
+            Write-Verbose "Failed to parse 304 status code: $_"
         }
 
         Write-PSmmLog -Level ERROR -Context 'Get GitHub Release' `
@@ -193,7 +282,19 @@ function Get-LatestUrlFromGitHub {
         $Http,
 
         [Parameter()]
-        $Crypto
+        $Crypto,
+
+        [Parameter()]
+        $FileSystem,
+
+        [Parameter()]
+        $Environment,
+
+        [Parameter()]
+        $PathProvider,
+
+        [Parameter()]
+        $Process
     )
 
     # Lazy instantiation to avoid parse-time type resolution
@@ -217,7 +318,7 @@ function Get-LatestUrlFromGitHub {
         Write-Verbose "Getting latest release URL for: $pluginName from $repo"
 
         # Get latest release information
-        $release = Get-GitHubLatestRelease -Repo $repo -Token $Token -Http $Http -Crypto $Crypto
+        $release = Get-GitHubLatestRelease -Repo $repo -Token $Token -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
 
         if (-not $release) {
             Write-Warning "Could not retrieve release information for: $pluginName"

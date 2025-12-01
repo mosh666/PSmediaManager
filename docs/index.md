@@ -10,6 +10,12 @@ Welcome to the PSmediaManager documentation portal. This site expands on the hig
 - [Development](development.md)
 - [Architecture](architecture.md)
 
+## What’s New (0.9.0)
+
+- Added `Get-PSmmHealth` for quick environment diagnostics (PowerShell version, modules, plugins, storage, vault). Supports `-Format` output.
+- Introduced early bootstrap services (`src/Core/BootstrapServices.ps1`) so core path/filesystem/environment/process helpers are available before module import.
+- Added Codacy and markdown lint configuration files (`.codacy.yml`, `.markdownlint.yml`) and documented upstream base image CVE suppressions in `.trivyignore`.
+
 ## Design Goals
 
 - Portable: zero mandatory global installs; side-by-side versioning.

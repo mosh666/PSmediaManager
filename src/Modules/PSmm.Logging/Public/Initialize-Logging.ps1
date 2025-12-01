@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Initializes the logging system for the PSmediaManager application.
 
@@ -36,11 +36,17 @@ function Initialize-Logging {
         [object]$Config,
 
         [Parameter()]
-        [object]$FileSystem
+        [object]$FileSystem,
+
+        [Parameter()]
+        [object]$PathProvider,
+
+        [Parameter()]
+        [switch]$SkipPsLogsInit
     )
 
     try {
-
+        Write-Verbose 'ENTER Initialize-Logging'
         Write-Verbose 'Initializing logging system...'
 
         # Basic structure validation to avoid hard dependency on specific class types
@@ -66,7 +72,8 @@ function Initialize-Logging {
             $loggingSettings = @{} + $loggingSource
         }
         elseif ($loggingSource -is [string] -or $loggingSource.GetType().IsValueType) {
-            throw "Logging configuration is not a hashtable. Type: $($loggingSource.GetType().FullName)"
+            $sourceTypeName = $loggingSource.GetType().FullName
+            throw "Logging configuration is not a hashtable. Type: $sourceTypeName"
         }
         else {
             # Convert objects (PSCustomObject or typed) to hashtable for easier merging
@@ -74,13 +81,71 @@ function Initialize-Logging {
             foreach ($property in $loggingSource.PSObject.Properties) {
                 $convertedLogging[$property.Name] = $property.Value
             }
+            # Use Keys count to avoid relying on .Count property availability across types
+            $keyCount = @($convertedLogging.Keys).Count
+            $convertedKeys = $convertedLogging.Keys -join ', '
+            Write-Verbose "Converted LoggingConfiguration to hashtable with $keyCount keys: $convertedKeys"
             $loggingSettings = $convertedLogging
         }
 
-        $script:Logging = $loggingSettings
+        if ($null -eq $loggingSettings) {
+            $sourceTypeName = $loggingSource.GetType().FullName
+            throw "Failed to convert logging configuration to hashtable. Source type: $sourceTypeName"
+        }
 
-        if (-not $script:Logging.ContainsKey('Path')) {
-            $loggingKeys = if ($script:Logging.Keys.Count -gt 0) { $script:Logging.Keys -join ', ' } else { '(no keys)' }
+            $loggingSettingsType = $loggingSettings.GetType().FullName
+            Write-Verbose "loggingSettings type after conversion: $loggingSettingsType"
+            $preAssignKeys = @($loggingSettings.Keys)
+            $preAssignCount = $preAssignKeys.Count
+            Write-Verbose "loggingSettings Keys count (pre-assign): $preAssignCount"
+
+        try {
+            Write-Verbose 'DEBUG: Assigning logging settings to script:Logging'
+            $script:Logging = $loggingSettings
+            Write-Verbose 'DEBUG: Assigned logging settings to script:Logging'
+        }
+        catch {
+            throw "Failed assigning logging settings to script:Logging: $_"
+        }
+
+            $scriptLoggingType = $script:Logging.GetType().FullName
+            Write-Verbose "script:Logging type after assignment: $scriptLoggingType"
+            $postAssignKeys = @($script:Logging.Keys)
+            $postAssignCount = $postAssignKeys.Count
+            Write-Verbose "script:Logging Keys count (post-assign): $postAssignCount"
+
+        # Guard: ensure Keys is enumerable and Logging is a standard Hashtable
+        try {
+            $null = foreach ($k in $script:Logging.Keys) { $k }  # force enumeration
+        }
+        catch {
+            Write-Verbose "DEBUG: Logging.Keys enumeration failed: $_. Converting to standard Hashtable."
+            $fixed = @{}
+            foreach ($kv in $loggingSettings.GetEnumerator()) {
+                $fixed[$kv.Key] = $kv.Value
+            }
+            $script:Logging = $fixed
+            Write-Verbose "DEBUG: Replaced script:Logging with standard Hashtable. Keys: $($script:Logging.Keys -join ', ')"
+        }
+
+        if ($null -eq $script:Logging) {
+            throw "Logging configuration could not be initialized - settings are null after processing."
+        }
+
+            if ($script:Logging -isnot [System.Collections.IDictionary]) {
+                $scriptLoggingType = $script:Logging.GetType().FullName
+                throw "Logging configuration is not a hashtable after conversion. Type: $scriptLoggingType"
+            }
+
+        try {
+            $containsPath = $script:Logging.ContainsKey('Path')
+        }
+        catch {
+            throw "Failed checking Logging.ContainsKey('Path'): $_"
+        }
+        if (-not $containsPath) {
+            $keysCount = @($script:Logging.Keys).Count
+            $loggingKeys = if ($script:Logging.Keys -and $keysCount -gt 0) { $script:Logging.Keys -join ', ' } else { '(no keys)' }
             throw "Logging configuration is missing required 'Path' property. Available keys: $loggingKeys."
         }
 
@@ -99,7 +164,7 @@ function Initialize-Logging {
         }
 
         # Ensure PSLogs module is available
-        if (-not (Get-Module -ListAvailable -Name PSLogs)) {
+        if (-not $SkipPsLogsInit -and -not (Get-Module -ListAvailable -Name PSLogs)) {
             Write-Verbose 'PSLogs module not found, installing...'
             try {
                 $nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
@@ -140,13 +205,25 @@ function Initialize-Logging {
             }
         }
 
-        Import-Module -Name PSLogs -Force -ErrorAction Stop
-        Write-Verbose 'PSLogs module loaded'
+        if (-not $SkipPsLogsInit) {
+            try {
+                Write-Verbose 'DEBUG: Importing PSLogs module...'
+                Import-Module -Name PSLogs -Force -ErrorAction Stop
+                Write-Verbose 'PSLogs module loaded'
+            }
+            catch {
+                throw "Failed to import PSLogs module: $_"
+            }
+        }
+        else {
+            Write-Verbose 'DEBUG: Skipping PSLogs import per -SkipPsLogsInit flag'
+        }
 
         # Note: Format-Pattern is an internal PSLogs function and not needed in PSLogs 5.5.2+
         # PSLogs handles format string parsing internally via Add-LoggingTarget
 
         # Instantiate FileSystemService only if available (avoid hard failure on missing type)
+            Write-Verbose 'DEBUG: Checking FileSystemService parameter...'
         if (-not $PSBoundParameters.ContainsKey('FileSystem') -or $null -eq $FileSystem) {
             try {
                 $FileSystem = New-FileSystemService
@@ -156,32 +233,83 @@ function Initialize-Logging {
                 $FileSystem = $null
             }
         }
+            Write-Verbose 'DEBUG: FileSystemService check complete'
 
         # Ensure log directory exists (use service if available, else native cmdlets)
-        $logDir = Split-Path -Path $script:Logging.Path -Parent
-        $logDirExists = if ($FileSystem -and ($FileSystem | Get-Member -Name 'TestPath' -ErrorAction SilentlyContinue)) {
-            $FileSystem.TestPath($logDir)
-        } else { Test-Path -Path $logDir }
-        if (-not $logDirExists) {
-            Write-Verbose "Creating log directory: $logDir"
-            try {
-                if ($FileSystem -and ($FileSystem | Get-Member -Name 'NewItem' -ErrorAction SilentlyContinue)) {
-                    $FileSystem.NewItem($logDir, 'Directory')
+    $scriptLoggingType = $script:Logging.GetType().FullName
+    $scriptLoggingKeysCount = @($script:Logging.Keys).Count
+    $scriptLoggingKeysJoined = $script:Logging.Keys -join ', '
+    Write-Verbose "DEBUG: About to check log directory. script:Logging type: $scriptLoggingType, KeysCount: $scriptLoggingKeysCount, Keys: $scriptLoggingKeysJoined"
+        $logDir = if ($PathProvider -and ($PathProvider | Get-Member -Name 'CombinePath' -ErrorAction SilentlyContinue)) {
+            # Derive parent directory using path provider logic
+            $parent = Split-Path -Path $script:Logging.Path -Parent
+            $PathProvider.CombinePath(@($parent))
+        } else {
+            Split-Path -Path $script:Logging.Path -Parent
+        }
+        try {
+            Write-Verbose "DEBUG: Checking log directory exists: $logDir"
+            $logDirExists = if ($FileSystem -and ($FileSystem | Get-Member -Name 'TestPath' -ErrorAction SilentlyContinue)) {
+                $FileSystem.TestPath($logDir)
+            } else { Test-Path -Path $logDir }
+            if (-not $logDirExists) {
+                Write-Verbose "Creating log directory: $logDir"
+                try {
+                    if ($FileSystem -and ($FileSystem | Get-Member -Name 'NewItem' -ErrorAction SilentlyContinue)) {
+                        $FileSystem.NewItem($logDir, 'Directory')
+                    }
+                    else {
+                        # Fall back to native cmdlet
+                        Write-Verbose 'FileSystem service not available, using native New-Item cmdlet'
+                        $null = New-Item -Path $logDir -ItemType Directory -Force -ErrorAction Stop
+                    }
                 }
-                else {
-                    $null = New-Item -Path $logDir -ItemType Directory -Force -ErrorAction Stop
+                catch {
+                    throw "Failed to create log directory '$logDir': $_"
                 }
-            }
-            catch {
-                throw "Failed to create log directory '$logDir': $_"
             }
         }
+        catch {
+            throw "Log directory check failed: $_"
+        }
+            Write-Verbose 'DEBUG: Log directory check complete'
 
-        # Configure PSLogs module settings
-        Set-LoggingCallerScope 2
-        Set-LoggingDefaultLevel -Level $script:Logging.DefaultLevel
-        Set-LoggingDefaultFormat -Format $script:Logging.Format
-        Write-Verbose "Logging configured with default level: $($script:Logging.DefaultLevel)"
+        # Configure PSLogs module settings with detailed instrumentation
+        if (-not $SkipPsLogsInit) {
+            Write-Verbose 'DEBUG: About to configure PSLogs defaults...'
+            try {
+                Write-Verbose 'DEBUG: Set-LoggingCallerScope(2)'
+                Set-LoggingCallerScope 2
+                Write-Verbose 'DEBUG: Set-LoggingCallerScope OK'
+            }
+            catch {
+                throw "PSLogs default setup failed at Set-LoggingCallerScope: $_"
+            }
+
+            try {
+                Write-Verbose "DEBUG: Set-LoggingDefaultLevel(Level=$($script:Logging.DefaultLevel))"
+                Set-LoggingDefaultLevel -Level $script:Logging.DefaultLevel
+                Write-Verbose 'DEBUG: Set-LoggingDefaultLevel OK'
+            }
+            catch {
+                throw "PSLogs default setup failed at Set-LoggingDefaultLevel: $_"
+            }
+
+            try {
+                Write-Verbose "DEBUG: Set-LoggingDefaultFormat(Format=$($script:Logging.Format))"
+                Set-LoggingDefaultFormat -Format $script:Logging.Format
+                Write-Verbose 'DEBUG: Set-LoggingDefaultFormat OK'
+            }
+            catch {
+                throw "PSLogs default setup failed at Set-LoggingDefaultFormat: $_"
+            }
+
+            Write-Verbose 'DEBUG: PSLogs defaults configured'
+            Write-Verbose "Logging configured with default level: $($script:Logging.DefaultLevel)"
+        }
+        else {
+            Write-Verbose 'DEBUG: Skipping PSLogs defaults configuration per -SkipPsLogsInit flag'
+        }
 
         # Clear log file in Dev mode
         if ($Config.Parameters.Dev) {
@@ -196,7 +324,7 @@ function Initialize-Logging {
                         $FileSystem.SetContent($logFilePath, '')
                     }
                     else {
-                        Set-Content -Path $logFilePath -Value '' -Force -ErrorAction Stop
+                        throw "FileSystem service is required to clear log file: $logFilePath"
                     }
                 }
                 catch {
@@ -207,10 +335,14 @@ function Initialize-Logging {
             Write-PSmmLog -Level 'INFO' -Message 'Log file cleared' -Context '-Dev: Clear logfile' -Console -File
         }
 
+        Write-Verbose 'EXIT Initialize-Logging (success)'
         Write-Verbose 'Logging initialization complete'
     }
     catch {
         # At this early stage Write-PSmmLog might not be functional; use Write-Error/Warn directly
+        Write-Verbose 'EXIT Initialize-Logging (failure)'
+        Write-Verbose "EXCEPTION AT: $($_.InvocationInfo.ScriptLineNumber):$($_.InvocationInfo.OffsetInLine) in $($_.InvocationInfo.ScriptName)"
+        Write-Verbose "EXCEPTION: $($_.Exception.Message)"
         Write-Error "Failed to initialize logging: $_"
         throw
     }

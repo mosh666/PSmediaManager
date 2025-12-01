@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 function Install-KeePassXC {
@@ -20,6 +20,14 @@ function Install-KeePassXC {
         [Parameter(Mandatory)]
         [ValidateNotNull()]
         $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
 
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -49,14 +57,15 @@ function Install-KeePassXC {
     }
 
     Write-PSmmLog -Level NOTICE -Context 'Install-KeePassXC' -Message 'Installing KeePassXC to satisfy secret loading requirements' -Console -File
-    Install-Plugin -Plugin $plugin -Paths $paths -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+    Install-Plugin -Plugin $plugin -Paths $paths -Config $Config -Http $Http -Crypto $Crypto `
+        -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
 
     $state = Get-InstallState -Plugin $plugin -Paths $paths -FileSystem $FileSystem -Process $Process
     if ([string]::IsNullOrEmpty($state.CurrentVersion)) {
         throw 'KeePassXC installation did not produce a usable CLI.'
     }
 
-    $cliResolution = Resolve-KeePassCliCommand -VaultPath $Config.Paths.App.Vault
+    $cliResolution = Resolve-KeePassCliCommand -VaultPath $Config.Paths.App.Vault -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
     if (-not $cliResolution.Command) {
         $checked = if ($cliResolution.CandidatePaths) { $cliResolution.CandidatePaths -join ', ' } else { 'No candidate locations were discovered' }
         Write-PSmmLog -Level ERROR -Context 'Install-KeePassXC' `

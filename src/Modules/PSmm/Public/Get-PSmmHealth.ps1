@@ -1,0 +1,139 @@
+<#
+.SYNOPSIS
+    Returns a health summary for PSmediaManager runtime.
+.DESCRIPTION
+    Aggregates PowerShell version compliance, required module presence, plugin states,
+    storage validation, vault / secret availability, and basic configuration integrity
+    into a single structured object (and optionally formatted output).
+.PARAMETER Config
+    (Optional) The AppConfiguration object; if omitted will attempt Get-AppConfiguration.
+.PARAMETER Run
+    (Optional) Run/session state object containing Requirements/Plugins status.
+.PARAMETER RequirementsPath
+    Path to requirements PSD1 file; defaults to PSmm.Requirements.psd1 relative to module root.
+.PARAMETER Format
+    When set, outputs a human readable table instead of raw object.
+.EXAMPLE
+    Get-PSmmHealth -Format
+.EXAMPLE
+    $health = Get-PSmmHealth; if (-not $health.PowerShell.VersionOk) { Write-Warning 'Upgrade PowerShell.' }
+.NOTES
+    Designed to be lightweight: single pass, no network calls. Plugin latest version checks are
+    not performed here; this surfaces cached state only.
+#>
+#Requires -Version 7.5.4
+Set-StrictMode -Version Latest
+function Get-PSmmHealth {
+    [CmdletBinding()] Param(
+        [Parameter()] [object] $Config,
+        [Parameter()] [object] $Run,
+        [Parameter()] [string] $RequirementsPath,
+        [Parameter()] [object[]] $PreviousPlugins,
+        [Parameter()] [switch] $Format
+    )
+    try {
+        # Resolve configuration if not provided
+        if (-not $Config -and (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue)) {
+            try { $Config = Get-AppConfiguration } catch { $Config = $null }
+        }
+        # Determine requirements file path
+        if (-not $RequirementsPath) {
+            $moduleRoot = Split-Path -Parent $PSScriptRoot
+            $repoRoot   = Split-Path -Parent $moduleRoot
+            $candidate  = Join-Path -Path $repoRoot -ChildPath 'src/Config/PSmm/PSmm.Requirements.psd1'
+            if (Test-Path $candidate) { $RequirementsPath = $candidate }
+        }
+        $requirements = $null
+        if ($RequirementsPath -and (Test-Path $RequirementsPath)) {
+            try { $requirements = (Import-PowerShellDataFile -Path $RequirementsPath) } catch { $requirements = $null }
+        }
+        # PowerShell version compliance
+        $currentPs = $PSVersionTable.PSVersion
+        $requiredPs = [version]((($requirements.PowerShell.VersionMinimum) -as [string]) ?? '7.5.4')
+        $psOk = $currentPs -ge $requiredPs
+        # Module checks
+        $modules = @()
+        if ($requirements.PowerShell.Modules) {
+            foreach ($m in $requirements.PowerShell.Modules) {
+                $name = $m.Name
+                $loaded = Get-Module -Name $name -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+                $modules += [pscustomobject]@{
+                    Name = $name
+                    Present = [bool]$loaded
+                    Version = if ($loaded) { $loaded.Version.ToString() } else { $null }
+                }
+            }
+        }
+        # Plugin state (cached)
+        $plugins = @()
+        if ($Run -and $Run.App -and $Run.App.Requirements -and $Run.App.Requirements.Plugins) {
+            foreach ($scope in $Run.App.Requirements.Plugins.GetEnumerator()) {
+                foreach ($pl in $scope.Value.GetEnumerator()) {
+                    $state = $pl.Value.State
+                    $prevMatch = $null
+                    if ($PreviousPlugins) {
+                        $prevMatch = $PreviousPlugins | Where-Object { $_.Name -eq $pl.Value.Name } | Select-Object -First 1
+                    }
+                    $plugins += [pscustomobject]@{
+                        Name = $pl.Value.Name
+                        Scope = $scope.Name
+                        InstalledVersion = $state.CurrentVersion
+                        LatestVersion = $state.LatestVersion
+                        UpdateAvailable = if ($state.LatestVersion -and $state.CurrentVersion -and $state.LatestVersion -gt $state.CurrentVersion) { $true } else { $false }
+                        PreviousVersion = if ($prevMatch) { $prevMatch.InstalledVersion } else { $null }
+                        Changed = if ($prevMatch -and $prevMatch.InstalledVersion -ne $state.CurrentVersion) { $true } else { $false }
+                        Upgraded = if ($prevMatch -and $prevMatch.InstalledVersion -and $state.CurrentVersion -and ([version]$state.CurrentVersion -gt [version]$prevMatch.InstalledVersion)) { $true } else { $false }
+                    }
+                }
+            }
+        }
+        # Storage status (using Config when possible)
+        $storage = @()
+        if ($Config -and $Config.Storage) {
+            foreach ($sg in $Config.Storage.Keys) {
+                $group = $Config.Storage[$sg]
+                $master = $group.Master
+                $backups = $group.Backup
+                $storage += [pscustomobject]@{
+                    Group = $sg
+                    MasterDrives = if ($master) { $master.Keys.Count } else { 0 }
+                    BackupDrives = if ($backups) { $backups.Keys.Count } else { 0 }
+                }
+            }
+        }
+        # Secrets / Vault status
+        $vaultStatus = [pscustomobject]@{
+            GitHubTokenPresent = ($Config -and $Config.Secrets -and $Config.Secrets.GitHubToken)
+            VaultPath = if ($Config -and $Config.Secrets) { $Config.Secrets.VaultPath } else { $null }
+        }
+        $result = [pscustomobject]@{
+            PowerShell = [pscustomobject]@{ Current = $currentPs.ToString(); Required = $requiredPs.ToString(); VersionOk = $psOk }
+            Modules    = $modules
+            Plugins    = $plugins
+            Storage    = $storage
+            Vault      = $vaultStatus
+            Timestamp  = (Get-Date).ToString('s')
+        }
+        if ($Format) {
+            Write-Output '== PowerShell =='
+            Write-Output "Current: $($result.PowerShell.Current) / Required: $($result.PowerShell.Required) / OK: $($result.PowerShell.VersionOk)"
+            Write-Output "== Modules =="
+            $result.Modules | Format-Table Name, Version, Present | Out-String | Write-Output
+            Write-Output "== Plugins =="
+            if ($result.Plugins.Count -gt 0) {
+                $result.Plugins | Sort-Object Name | Format-Table Name, PreviousVersion, InstalledVersion, LatestVersion, Changed, Upgraded, UpdateAvailable | Out-String | Write-Output
+            } else { Write-Output 'No plugin state available.' }
+            Write-Output '== Storage =='
+            if ($result.Storage.Count -gt 0) {
+                $result.Storage | Format-Table Group, MasterDrives, BackupDrives | Out-String | Write-Output
+            } else { Write-Output 'No storage configuration loaded.' }
+            Write-Output '== Vault =='
+            Write-Output "Vault: $($result.Vault.VaultPath) / GitHubToken: $($result.Vault.GitHubTokenPresent)"
+            return
+        }
+        return $result
+    }
+    catch {
+        Write-Error "Failed to build health summary: $($_.Exception.Message)"
+    }
+}

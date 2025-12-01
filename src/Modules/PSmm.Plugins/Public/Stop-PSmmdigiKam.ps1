@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 <#
@@ -37,11 +37,21 @@ Set-StrictMode -Version Latest
 #>
 
 function Stop-PSmmdigiKam {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'FileSystem', Justification = 'Parameter required by service injection pattern but not used in current implementation')]
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateNotNull()]
-        $Config
+        $Config,
+
+        [Parameter(Mandatory)]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        $Process
     )
 
     begin {
@@ -83,8 +93,8 @@ function Stop-PSmmdigiKam {
                 return
             }
 
-            $configPath = Join-Path -Path $projectPath -ChildPath 'Config'
-            $appDir = Join-Path -Path $configPath -ChildPath 'digiKam'
+            $configPath = $PathProvider.CombinePath($projectPath, 'Config')
+            $appDir = $PathProvider.CombinePath($configPath, 'digiKam')
 
             # Get project's allocated database port
             $databasePort = $null
@@ -100,13 +110,13 @@ function Stop-PSmmdigiKam {
             Write-Verbose "Looking for digiKam processes with APPDIR: $appDir"
 
             # Get all digiKam processes and check their environment variables
-            $digiKamProcesses = Get-Process -Name 'digikam' -ErrorAction SilentlyContinue
+            $digiKamProcesses = $Process.GetProcess('digikam')
             $projectDigiKamProcesses = @()
 
             foreach ($proc in $digiKamProcesses) {
                 try {
                     # Check if process command line contains our config file
-                    $digiKamRcPath = Join-Path -Path $configPath -ChildPath 'digiKam-rc'
+                    $digiKamRcPath = $PathProvider.CombinePath($configPath, 'digiKam-rc')
                     if ($proc.CommandLine -like "*$digiKamRcPath*") {
                         $projectDigiKamProcesses += $proc
                     }
@@ -143,7 +153,7 @@ function Stop-PSmmdigiKam {
 
                 foreach ($connection in $portConnections) {
                     try {
-                        $proc = Get-Process -Id $connection.OwningProcess -ErrorAction SilentlyContinue
+                        $proc = $Process.GetProcessById($connection.OwningProcess)
                         if ($proc -and ($proc.ProcessName -eq 'mariadbd' -or $proc.ProcessName -eq 'mysqld')) {
                             $mariaDbProcesses += $proc
                         }

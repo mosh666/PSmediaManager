@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Creates directory structures from a hashtable definition.
 
@@ -76,10 +76,12 @@ function New-DirectoriesFromHashtable {
                         if ($PSCmdlet.ShouldProcess($value, 'Create directory')) {
                             Write-Verbose "Creating directory: $value"
                             try {
+                                # Prefer native cmdlets for creation to keep behavior predictable in tests
                                 $null = New-Item -Path $value -ItemType Directory -Force -ErrorAction Stop
                             }
                             catch {
                                 Write-Warning "Failed to create directory '$value': $_"
+                                Write-Verbose "Failed to create directory '$value': $_"
                             }
                         }
                     }

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Interface definitions for PSmediaManager application.
 

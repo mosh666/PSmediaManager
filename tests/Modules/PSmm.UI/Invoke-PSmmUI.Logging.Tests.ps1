@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 Describe 'Invoke-PSmmUI logging' {
@@ -48,15 +48,20 @@ Describe 'Invoke-PSmmUI logging' {
         Mock Show-Header -ModuleName 'PSmm.UI' { param($Config,$ShowProject,$StorageGroupFilter) }
         Mock Show-MenuMain -ModuleName 'PSmm.UI' { param($Config,$StorageGroup,$Projects) }
         Mock Show-Footer -ModuleName 'PSmm.UI' { param($Config) }
+
+        # Mock services
+        $script:mockProcess = [PSCustomObject]@{ PSTypeName = 'ProcessService' }
+        $script:mockFS = [PSCustomObject]@{ PSTypeName = 'FileSystemService' }
+        $script:mockPath = [PSCustomObject]@{ PSTypeName = 'PathProvider' }
     }
 
     It 'records a warning when storage validation fails' {
-        { Invoke-PSmmUI -Config $script:config } | Should -Not -Throw
+        { Invoke-PSmmUI -Config $script:config -Process $script:mockProcess -FileSystem $script:mockFS -PathProvider $script:mockPath } | Should -Not -Throw
         $script:recorder.'Assert-Warning'('Storage validation encountered issues')
     }
 
     It 'records the UI startup notice' {
-        { Invoke-PSmmUI -Config $script:config } | Should -Not -Throw
+        { Invoke-PSmmUI -Config $script:config -Process $script:mockProcess -FileSystem $script:mockFS -PathProvider $script:mockPath } | Should -Not -Throw
         $script:recorder.'Assert-LogLevel'('NOTICE', 'UI interactive session starting')
     }
 }

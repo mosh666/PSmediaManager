@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     ImageMagick
 #>
@@ -32,7 +32,7 @@ function Get-LatestUrlFromUrl-ImageMagick {
     catch {
         throw "Failed to retrieve version information from $($Plugin.Config.VersionUrl): $($_.Exception.Message)"
     }
-    $Response.Content | Format-List
+    # Do not format output; we need raw string parsing
     $ZipMatches = [System.Text.RegularExpressions.Regex]::Matches($Response.Content, $Plugin.Config.AssetPattern, 'IgnoreCase')
 
     if ($ZipMatches.Count -eq 0) {
@@ -73,9 +73,9 @@ function Get-LatestUrlFromUrl-ImageMagick {
     $LatestInstaller = $Latest.FileName
     $Plugin.Config.State.LatestVersion = $LatestVersion
     $Plugin.Config.State.LatestInstaller = $LatestInstaller
-    $Url = ''
-    #Write-Host $Url
-    return $Url
+    # Compose direct download URL as plain string
+    $Url = "$($Plugin.Config.BaseUri)/$($LatestInstaller)"
+    return [string]$Url
 }
 
 function Get-Installer-ImageMagick {

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Displays and manages the main interactive menu for PSmediaManager.
 
@@ -31,10 +31,48 @@ function Invoke-PSmmUI {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [object]$Config
+        [object]$Config,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider
     )
 
     # PS 7.5.4+ baseline and entrypoint import order guarantee core types are available
+    # Defensive: ensure AppConfiguration class is loaded (runtime resilience against import order issues)
+    try {
+        $appConfigTypeLoaded = [System.AppDomain]::CurrentDomain.GetAssemblies().GetTypes() | Where-Object { $_.Name -eq 'AppConfiguration' } | Select-Object -First 1
+    }
+    catch {
+        $appConfigTypeLoaded = $null
+    }
+    if (-not $appConfigTypeLoaded) {
+        try {
+            $uiPublicDir = $PSScriptRoot
+            $uiModuleRoot = Split-Path -Path $uiPublicDir -Parent  # PSmm.UI module root
+            $modulesRoot  = Split-Path -Path $uiModuleRoot -Parent # Modules root containing PSmm
+            $classesPath  = Join-Path -Path $modulesRoot -ChildPath 'PSmm\Classes\AppConfiguration.ps1'
+            if (Test-Path -Path $classesPath -PathType Leaf) {
+                . $classesPath
+                if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
+                    Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message 'AppConfiguration class dynamically loaded (fallback)' -File
+                }
+            }
+        }
+        catch {
+            if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
+                Write-PSmmLog -Level WARNING -Context 'Invoke-PSmmUI' -Message "Failed dynamic AppConfiguration load: $_" -File -Console
+            }
+        }
+    }
 
     try {
         Write-Verbose 'Starting PSmediaManager UI...'
@@ -86,7 +124,7 @@ function Invoke-PSmmUI {
             $loopProjects = $null
             try {
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $($Config.Storage.Keys.Count)" -File
-                $loopProjects = Get-PSmmProjects -Config $Config
+                $loopProjects = Get-PSmmProjects -Config $Config -FileSystem $FileSystem
                 $masterCount = if ($loopProjects.Master) { $loopProjects.Master.Keys.Count } else { 0 }
                 $backupCount = if ($loopProjects.Backup) { $loopProjects.Backup.Keys.Count } else { 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Projects loaded. Master drives: $masterCount, Backup drives: $backupCount" -File
@@ -202,7 +240,7 @@ function Invoke-PSmmUI {
                     # Launch KeePassXC
                     try {
                         Write-Verbose 'Launching KeePassXC...'
-                        Start-Process KeePassXC.exe -ErrorAction Stop
+                        $Process.StartProcess('KeePassXC.exe', @())
                     }
                     catch {
                         Write-Warning "Failed to start KeePassXC: $_"
@@ -349,7 +387,7 @@ function Invoke-PSmmUI {
 
                             if ($SelectedProject) {
                                 # Select the project, passing the SerialNumber to ensure correct disk selection
-                                Select-PSmmProject -Config $Config -pName $SelectedProject.Name -SerialNumber $SelectedProject.SerialNumber
+                                Select-PSmmProject -Config $Config -pName $SelectedProject.Name -SerialNumber $SelectedProject.SerialNumber -FileSystem $FileSystem -PathProvider $PathProvider
 
                                 # Display the project menu
                                 $projectMenuResult = Invoke-ProjectMenu -Config $Config
@@ -426,9 +464,12 @@ function Invoke-SystemInfoMenu {
                 # Show Runtime Config
                 Write-Output ''
                 try {
-                    $tempPath = Join-Path $env:TEMP "PSmm-RuntimeConfig-$(Get-Date -Format 'yyyyMMdd-HHmmss').psd1"
-                    Export-SafeConfiguration -Configuration $Config -Path $tempPath
-                    Get-Content $tempPath | Write-Output
+                    # Use injected services for path/content operations
+                    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+                    $tempPath = $PathProvider.CombinePath(@($env:TEMP, "PSmm-RuntimeConfig-$timestamp.psd1"))
+                    Export-SafeConfiguration -Configuration $Config -Path $tempPath -FileSystem $FileSystem
+                    $configContent = $FileSystem.GetContent($tempPath)
+                    $configContent | Write-Output
                     Write-Output ""
                     Write-Output "Configuration exported to: $tempPath"
                 }
@@ -486,7 +527,7 @@ function Invoke-ProjectMenu {
         }
 
         try {
-            Show-Menu_Project -Config $Config
+            Show-Menu_Project -Config $Config -Process $Process
         }
         catch {
             Write-Warning "Project menu display failed: $_"
@@ -504,13 +545,17 @@ function Invoke-ProjectMenu {
 
         if ($null -ne $Config.Projects -and $Config.Projects.ContainsKey('Current')) {
             if ($Config.Projects.Current.ContainsKey('Databases')) {
-                $ProcMariaDB = Get-Process -Name mariadbd -ErrorAction SilentlyContinue |
-                    Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+                $allMariaDB = $Process.GetProcess('mariadbd')
+                if ($null -ne $allMariaDB) {
+                    $ProcMariaDB = $allMariaDB | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+                }
             }
 
             if ($Config.Projects.Current.ContainsKey('Config')) {
-                $ProcDigiKam = Get-Process -Name digikam -ErrorAction SilentlyContinue |
-                    Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+                $allDigiKam = $Process.GetProcess('digikam')
+                if ($null -ne $allDigiKam) {
+                    $ProcDigiKam = $allDigiKam | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+                }
             }
         }
 
@@ -521,7 +566,7 @@ function Invoke-ProjectMenu {
                 # Start digiKam
                 try {
                     if (Get-Command -Name Start-PSmmdigiKam -ErrorAction SilentlyContinue) {
-                        Start-PSmmdigiKam -Config $Config
+                        Start-PSmmdigiKam -Config $Config -FileSystem $FileSystem -PathProvider $PathProvider -Process $Process
                     }
                     else {
                         Write-Output ''
@@ -540,7 +585,7 @@ function Invoke-ProjectMenu {
                 if ($ProcessesRunning) {
                     try {
                         if (Get-Command -Name Stop-PSmmdigiKam -ErrorAction SilentlyContinue) {
-                            Stop-PSmmdigiKam -Config $Config
+                            Stop-PSmmdigiKam -Config $Config -FileSystem $FileSystem -PathProvider $PathProvider -Process $Process
                         }
                         else {
                             Write-Output ''

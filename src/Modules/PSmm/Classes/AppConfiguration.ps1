@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Type-safe classes for PSmediaManager application configuration.
 
@@ -95,7 +95,11 @@ class AppPaths : IPathProvider {
             Write-Warning "Path calculations may be invalid. Verify installation layout."
         }
 
-        $this.Root = $resolvedRuntimeRoot
+        # Enforce runtime directories in the drive root, not the repository root
+        # Compute the drive root based on the provided runtime root path
+        $driveRoot = [Path]::GetPathRoot($resolvedRuntimeRoot)
+
+        $this.Root = $driveRoot
         $this.RepositoryRoot = $resolvedRepositoryRoot
 
         # Validate that .git exists in repository root when available
@@ -126,9 +130,9 @@ class AppPaths : IPathProvider {
         )
 
         foreach ($path in $paths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
-            if (-not (Test-Path -Path $path -PathType Container)) {
+            if (-not ([FileSystemService]::new().TestPath($path))) {
                 try {
-                    $null = New-Item -Path $path -ItemType Directory -Force -ErrorAction Stop
+                    $null = ([FileSystemService]::new()).NewItem($path, 'Directory')
                 }
                 catch {
                     throw [StorageException]::new("Failed to create directory: $path", $path)
@@ -190,8 +194,9 @@ class AppPaths : IPathProvider {
             # Test write access
             $testFile = [Path]::Combine($this.Root, ".write_test_$(Get-Random)")
             try {
-                [void](New-Item -Path $testFile -ItemType File -Force)
-                Remove-Item -Path $testFile -Force
+                $fs = [FileSystemService]::new()
+                [void]($fs.NewItem($testFile, 'File'))
+                $fs.RemoveItem($testFile)
                 return $true
             }
             catch {
@@ -268,6 +273,12 @@ class AppSecrets {
     [SecureString]$GitHubToken
     [string]$VaultPath
 
+    # Service dependencies
+    hidden [object]$FileSystem
+    hidden [object]$Environment
+    hidden [object]$PathProvider
+    hidden [object]$Process
+
     AppSecrets() {}
 
     AppSecrets([string]$vaultPath) {
@@ -289,7 +300,13 @@ class AppSecrets {
             if (Get-Command Get-SystemSecret -ErrorAction SilentlyContinue) {
                 Write-Verbose "Loading GitHub credential from KeePassXC vault (optional)"
                 # Retrieve token as optional: absence should not raise an ERROR log or throw
-                $this.GitHubToken = Get-SystemSecret -SecretType 'GitHub-Token' -VaultPath $this.VaultPath -Optional -ErrorAction SilentlyContinue
+                if ($null -ne $this.FileSystem -and $null -ne $this.Environment -and $null -ne $this.PathProvider -and $null -ne $this.Process) {
+                    $this.GitHubToken = Get-SystemSecret -SecretType 'GitHub-Token' -VaultPath $this.VaultPath -FileSystem $this.FileSystem -Environment $this.Environment -PathProvider $this.PathProvider -Process $this.Process -Optional -ErrorAction SilentlyContinue
+                }
+                else {
+                    Write-Verbose "Services not injected; skipping secret loading"
+                    return
+                }
                 if ($this.GitHubToken) {
                     Write-Verbose "GitHub credential loaded successfully from KeePassXC"
                 }
@@ -501,6 +518,12 @@ class AppConfiguration {
     [hashtable]$Projects
     # Internal, structured error tracking persisted with configuration
     [hashtable]$InternalErrorMessages
+
+    # Service dependencies for DI
+    hidden [object]$FileSystem
+    hidden [object]$Environment
+    hidden [object]$PathProvider
+    hidden [object]$Process
 
     AppConfiguration() {
         $this.Parameters = [RuntimeParameters]::new()

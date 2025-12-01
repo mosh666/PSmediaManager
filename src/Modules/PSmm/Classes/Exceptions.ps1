@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Custom exception classes for PSmediaManager application.
 

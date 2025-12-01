@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.9.0 - 2025-12-01
+
+### Added (Features)
+- `Get-PSmmHealth`: health summary command aggregating PowerShell version, required modules, plugin states, storage, and vault status. Supports `-Format` for readable output.
+- Core bootstrap services in `src/Core/BootstrapServices.ps1` to enable early dependency injection before module import (path, filesystem, environment, process services).
+- Codacy/markdown linting config: `.codacy.yml`, `.markdownlint.yml`, and `.trivyignore` for upstream base image CVE suppression tracking.
+
+### Changed (Tests)
+- Tests updated to align with new service injection patterns (FileSystem, PathProvider, Process services) and to remove stray BOM characters.
+- Coverage baseline improved; latest coverage recorded in `tests/.coverage-latest.json`.
+
+### Notes
+- Security rationale for `.trivyignore` entries documented in `SECURITY.md`.
+
 This project adheres to "Keep a Changelog" ([Keep a Changelog](https://keepachangelog.com/en/1.0.0/)) and uses Semantic Versioning ([SemVer](https://semver.org/)).
 
 The format below is designed for clear GitHub Releases and PowerShell module maintenance.

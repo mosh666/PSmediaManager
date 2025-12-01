@@ -43,21 +43,33 @@ function Invoke-FirstRunSetup {
         [AppConfiguration]$Config,
 
         [Parameter()]
-        [switch]$NonInteractive
+        [switch]$NonInteractive,
+
+        [Parameter(Mandatory)]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        $Process
     )
 
     try {
                 # Extract paths from config
         $VaultPath = $Config.Paths.App.Vault
-        $dbPath = Join-Path $VaultPath 'PSmm_System.kdbx'
-        $tokenCachePath = Join-Path $VaultPath '.pending_setup.cache'
+        $dbPath = $PathProvider.CombinePath(@($VaultPath,'PSmm_System.kdbx'))
+        $tokenCachePath = $PathProvider.CombinePath(@($VaultPath,'.pending_setup.cache'))
 
         # Check if vault already exists
-        if (Test-Path $dbPath) {
+        if ($FileSystem.TestPath($dbPath)) {
             Write-Verbose "Vault already exists at: $dbPath"
             # Clean up any pending cache
-            if (Test-Path $tokenCachePath) {
-                Remove-Item $tokenCachePath -Force -ErrorAction SilentlyContinue
+            if ($FileSystem.TestPath($tokenCachePath)) {
+                $FileSystem.RemoveItem($tokenCachePath, $false)
             }
             return $true
         }
@@ -66,11 +78,12 @@ function Invoke-FirstRunSetup {
         $githubTokenSec = $null
         $hasToken = $false
 
-        if (Test-Path $tokenCachePath) {
+        if ($FileSystem.TestPath($tokenCachePath)) {
             Write-PSmmHost ""
             Write-PSmmHost "Found cached setup data from previous attempt..." -ForegroundColor Cyan
             try {
-                $cacheData = Get-Content -Path $tokenCachePath -Raw | ConvertFrom-Json
+                $cacheRaw = $FileSystem.GetContent($tokenCachePath)
+                $cacheData = $cacheRaw | ConvertFrom-Json
                 $encryptedToken = $cacheData.Token
                 $githubTokenSec = $encryptedToken | ConvertTo-SecureString
 
@@ -221,7 +234,7 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
             Write-PSmmHost ""
 
-        $cliResolution = Resolve-KeePassCliCommand -VaultPath $Config.Paths.App.Vault
+        $cliResolution = Resolve-KeePassCliCommand -VaultPath $Config.Paths.App.Vault -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
         $cliCheck = if ($cliResolution -and $cliResolution.Command) { $cliResolution.Command } else { $null }
         if (-not $cliCheck) {
             Write-PSmmHost "❌ KeePassXC not found!" -ForegroundColor Red
@@ -232,8 +245,8 @@ function Invoke-FirstRunSetup {
                 Write-PSmmHost "Caching your token securely..." -ForegroundColor Cyan
                 try {
                     # Ensure vault directory exists
-                    if (-not (Test-Path $VaultPath)) {
-                        New-Item -ItemType Directory -Path $VaultPath -Force | Out-Null
+                    if (-not $FileSystem.TestPath($VaultPath)) {
+                        $FileSystem.NewItem($VaultPath,'Directory')
                     }
 
                     # Store encrypted token using DPAPI
@@ -242,7 +255,8 @@ function Invoke-FirstRunSetup {
                         Token = $encryptedToken
                         Timestamp = Get-Date -Format 'o'
                     }
-                    $cacheData | ConvertTo-Json | Set-Content -Path $tokenCachePath -Force
+                    $json = $cacheData | ConvertTo-Json
+                    $FileSystem.SetContent($tokenCachePath,$json)
                     Write-PSmmHost "✓ Token cached securely" -ForegroundColor Green
                 }
                 catch {
@@ -271,7 +285,7 @@ function Invoke-FirstRunSetup {
         Write-PSmmHost ""
 
         # Initialize the vault
-        $vaultCreated = Initialize-SystemVault -VaultPath $Config.Paths.App.Vault -ErrorAction Stop
+        $vaultCreated = Initialize-SystemVault -VaultPath $Config.Paths.App.Vault -FileSystem $FileSystem -ErrorAction Stop
 
         if (-not $vaultCreated) {
             Write-PSmmHost "❌ Failed to create vault" -ForegroundColor Red
@@ -303,8 +317,8 @@ function Invoke-FirstRunSetup {
                 Write-PSmmHost "✓ Token saved successfully" -ForegroundColor Green
 
                 # Clean up cached token
-                if (Test-Path $tokenCachePath) {
-                    Remove-Item $tokenCachePath -Force -ErrorAction SilentlyContinue
+                if ($FileSystem.TestPath($tokenCachePath)) {
+                    $FileSystem.RemoveItem($tokenCachePath, $false)
                 }
             }
             else {
@@ -328,9 +342,9 @@ function Invoke-FirstRunSetup {
 
         # Get drive root and check if storage config already exists
         $driveRoot = [System.IO.Path]::GetPathRoot($Config.Paths.App.Vault)
-        $storagePath = Join-Path -Path $driveRoot -ChildPath 'PSmm.Config\PSmm.Storage.psd1'
+        $storagePath = $PathProvider.CombinePath(@($driveRoot,'PSmm.Config','PSmm.Storage.psd1'))
 
-        if (-not (Test-Path -Path $storagePath)) {
+        if (-not $FileSystem.TestPath($storagePath)) {
             Write-PSmmHost "Starting storage wizard..." -ForegroundColor Cyan
             Write-PSmmHost ""
 

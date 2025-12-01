@@ -294,12 +294,14 @@ function Show-MenuMain {
     )    if ($Config.Parameters.Debug -or $Config.Parameters.Dev) {
         Write-Verbose '[UI] Show-MenuMain starting diagnostics...'
         Write-Verbose ("[UI] Storage groups present: {0}" -f ($Config.Storage.Keys -join ', '))
-        if ($Config.Projects.Registry) {
+        if ($Config.Projects -is [hashtable] -and $Config.Projects.ContainsKey('Registry') -and $null -ne $Config.Projects.Registry) {
             $hasRegMaster = ($Config.Projects.Registry -is [hashtable] -and $Config.Projects.Registry.ContainsKey('Master')) -or ($null -ne $Config.Projects.Registry.PSObject.Properties['Master'])
             if ($hasRegMaster -and $null -ne $Config.Projects.Registry.Master) {
                 $keys = if ($Config.Projects.Registry.Master -is [hashtable]) { $Config.Projects.Registry.Master.Keys } else { @() }
                 Write-Verbose ("[UI] Registry Master keys: {0}" -f ($keys -join ', '))
             }
+        } else {
+            Write-Verbose '[UI] Projects.Registry not present (skipping registry diagnostics)'
         }
     }
 
@@ -864,20 +866,28 @@ function Show-Menu_Project {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [object]$Config
+        [object]$Config,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )    # Check for running processes
     $ProcMariaDB = $null
     $ProcDigiKam = $null
 
     if ($Config.Projects.ContainsKey('Current')) {
         if ($Config.Projects.Current.ContainsKey('Databases')) {
-            $ProcMariaDB = Get-Process -Name mariadbd -ErrorAction SilentlyContinue |
-                Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+            $allMariaDB = $Process.GetProcess('mariadbd')
+            if ($null -ne $allMariaDB) {
+                $ProcMariaDB = $allMariaDB | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+            }
         }
 
         if ($Config.Projects.Current.ContainsKey('Config')) {
-            $ProcDigiKam = Get-Process -Name digikam -ErrorAction SilentlyContinue |
-                Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+            $allDigiKam = $Process.GetProcess('digikam')
+            if ($null -ne $allDigiKam) {
+                $ProcDigiKam = $allDigiKam | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+            }
         }
     }
 

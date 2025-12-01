@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 function Select-PSmmProject {
@@ -49,8 +49,11 @@ function Select-PSmmProject {
         [Parameter()]
         [string]$SerialNumber = $null,
 
-        [Parameter()]
-        [IFileSystemService]$FileSystem = [FileSystemService]::new()
+        [Parameter(Mandatory)]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        $PathProvider
     )
 
     # Build internal runtime projection for helpers
@@ -162,13 +165,13 @@ function Select-PSmmProject {
 
         # Update all project-specific paths
         $Run.Projects.Current.Path = $projectBasePath
-        $Run.Projects.Current.Config = Join-Path -Path $projectBasePath -ChildPath 'Config'
-        $Run.Projects.Current.Backup = Join-Path -Path $projectBasePath -ChildPath 'Backup'
-        $Run.Projects.Current.Databases = Join-Path -Path $projectBasePath -ChildPath 'Databases'
-        $Run.Projects.Current.Documents = Join-Path -Path $projectBasePath -ChildPath 'Documents'
-        $Run.Projects.Current.Libraries = Join-Path -Path $projectBasePath -ChildPath 'Libraries'
-        $Run.Projects.Current.Vault = Join-Path -Path $projectBasePath -ChildPath 'Vault'
-        $Run.Projects.Current.Log = Join-Path -Path $projectBasePath -ChildPath 'Log'
+        $Run.Projects.Current.Config = $PathProvider.CombinePath($projectBasePath,'Config')
+        $Run.Projects.Current.Backup = $PathProvider.CombinePath($projectBasePath,'Backup')
+        $Run.Projects.Current.Databases = $PathProvider.CombinePath($projectBasePath,'Databases')
+        $Run.Projects.Current.Documents = $PathProvider.CombinePath($projectBasePath,'Documents')
+        $Run.Projects.Current.Libraries = $PathProvider.CombinePath($projectBasePath,'Libraries')
+        $Run.Projects.Current.Vault = $PathProvider.CombinePath($projectBasePath,'Vault')
+        $Run.Projects.Current.Log = $PathProvider.CombinePath($projectBasePath,'Log')
 
         # Store storage drive information
         $Run.Projects.Current.StorageDrive = @{

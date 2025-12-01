@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     FFmpeg
 #>
@@ -35,11 +35,22 @@ function Get-LatestUrlFromUrl-ffmpeg {
 }
 
 function Get-Installer-ffmpeg {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Http', Justification = 'Parameter reserved for future HTTP-based downloads')]
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths
+        [hashtable]$Paths,
+        $Http,
+        $FileSystem
     )
-    Remove-Item -Path "$($Paths._Downloads)\$($Plugin.Config.Name)*.7z" -ErrorAction SilentlyContinue -Force
+    $pattern = "$($Paths._Downloads)\$($Plugin.Config.Name)*.7z"
+    if ($FileSystem) {
+        Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue |
+            ForEach-Object { $FileSystem.RemoveItem($_.FullName, $false) }
+    }
+    else {
+        Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
     Move-Item -Path "$($Paths._Temp)\$($Plugin.Config.Name)*.7z" -Destination $Paths._Downloads -Force
     $InstallerPath = Join-Path -Path $Paths._Downloads -ChildPath $Plugin.Config.State.LatestInstaller
     return $InstallerPath

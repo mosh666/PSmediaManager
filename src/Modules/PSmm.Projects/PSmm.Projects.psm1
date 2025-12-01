@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     PowerShell module for PSmediaManager project management.
 
@@ -26,43 +26,48 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Ensure the PSmm module is loaded (for IFileSystemService and other shared classes)
-$CoreModulePath = Join-Path -Path (Split-Path $PSScriptRoot -Parent) -ChildPath 'PSmm\PSmm.psd1'
-if (Test-Path $CoreModulePath) {
-    if (-not (Get-Module -Name 'PSmm')) {
-        Import-Module $CoreModulePath -Force -Global -ErrorAction Stop
-    }
+# Service-aware path helpers (optional - check variable existence first to avoid StrictMode errors)
+$servicesVar = Get-Variable -Name 'Services' -Scope Script -ErrorAction SilentlyContinue
+$hasServices = ($null -ne $servicesVar) -and ($null -ne $servicesVar.Value)
+$pathProvider = if ($hasServices -and $servicesVar.Value.PathProvider) { $servicesVar.Value.PathProvider } else { $null }
+$fileSystem   = if ($hasServices -and $servicesVar.Value.FileSystem) { $servicesVar.Value.FileSystem } else { $null }
 
-    # Also dot-source the required class files to ensure types are available
-    $ClassesPath = Join-Path -Path (Split-Path $PSScriptRoot -Parent) -ChildPath 'PSmm\Classes'
-    . (Join-Path $ClassesPath 'Interfaces.ps1')
-    . (Join-Path $ClassesPath 'Exceptions.ps1')
-    . (Join-Path $ClassesPath 'Services\FileSystemService.ps1')
-    . (Join-Path $ClassesPath 'AppConfiguration.ps1')
-}
-else {
-    Write-Warning "Core module not found at: $CoreModulePath"
-}
+# Ensure the PSmm module is loaded (for IFileSystemService and other shared classes)
+# NOTE: Module dependencies are handled by PSmediaManager.ps1 bootstrap - no need to force re-import here
+# $CoreModulePath = if ($pathProvider) { $pathProvider.CombinePath(@($parentRoot,'PSmm','PSmm.psd1')) } else { Join-Path -Path $parentRoot -ChildPath 'PSmm\PSmm.psd1' }
+# if ((($fileSystem) -and $fileSystem.TestPath($CoreModulePath)) -or (-not $fileSystem -and (Test-Path $CoreModulePath))) {
+#     if (-not (Get-Module -Name 'PSmm')) {
+#         Import-Module $CoreModulePath -Force -Global -ErrorAction Stop
+#     }
+
+#     # Also dot-source the required class files to ensure types are available
+#     $ClassesPath = if ($pathProvider) { $pathProvider.CombinePath(@($parentRoot,'PSmm','Classes')) } else { Join-Path -Path $parentRoot -ChildPath 'PSmm\Classes' }
+#     . (if ($pathProvider) { $pathProvider.CombinePath(@($ClassesPath,'Interfaces.ps1')) } else { Join-Path $ClassesPath 'Interfaces.ps1' })
+#     . (if ($pathProvider) { $pathProvider.CombinePath(@($ClassesPath,'Exceptions.ps1')) } else { Join-Path $ClassesPath 'Exceptions.ps1' })
+#     . (if ($pathProvider) { $pathProvider.CombinePath(@($ClassesPath,'Services','FileSystemService.ps1')) } else { Join-Path $ClassesPath 'Services\FileSystemService.ps1' })
+#     . (if ($pathProvider) { $pathProvider.CombinePath(@($ClassesPath,'AppConfiguration.ps1')) } else { Join-Path $ClassesPath 'AppConfiguration.ps1' })
+# }
+# else {
+#     Write-Warning "Core module not found at: $CoreModulePath"
+# }
 
 # Ensure the PSmm.Logging module is loaded for Write-PSmmLog and logging helpers
-$LoggingModulePath = Join-Path -Path (Split-Path $PSScriptRoot -Parent) -ChildPath 'PSmm.Logging\PSmm.Logging.psd1'
-if (Test-Path $LoggingModulePath) {
-    if (-not (Get-Module -Name 'PSmm.Logging')) {
-        Import-Module $LoggingModulePath -Force -Global -ErrorAction Stop
-    }
-}
-else {
-    Write-Verbose "Logging module not found at: $LoggingModulePath"
-}
+# NOTE: Module dependencies are handled by PSmediaManager.ps1 bootstrap - no need to force re-import here
+# $LoggingModulePath = if ($pathProvider) { $pathProvider.CombinePath(@($parentRoot,'PSmm.Logging','PSmm.Logging.psd1')) } else { Join-Path -Path $parentRoot -ChildPath 'PSmm.Logging\PSmm.Logging.psd1' }
+# if ((($fileSystem) -and $fileSystem.TestPath($LoggingModulePath)) -or (-not $fileSystem -and (Test-Path $LoggingModulePath))) {
+#     if (-not (Get-Module -Name 'PSmm.Logging')) {
+#         Import-Module $LoggingModulePath -Force -Global -ErrorAction Stop
+#     }
+# }
 
 # Get module paths
-$PublicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
-$PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
+$PublicPath  = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Public')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Public' }
+$PrivatePath = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Private')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Private' }
 
 # Import all public and private functions
 try {
     # Import public functions
-    if (Test-Path $PublicPath) {
+    if ((($fileSystem) -and $fileSystem.TestPath($PublicPath)) -or (-not $fileSystem -and (Test-Path $PublicPath))) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PublicFunctions.Count -gt 0) {
@@ -86,7 +91,7 @@ try {
     }
 
     # Import private functions
-    if (Test-Path $PrivatePath) {
+    if ((($fileSystem) -and $fileSystem.TestPath($PrivatePath)) -or (-not $fileSystem -and (Test-Path $PrivatePath))) {
         $PrivateFunctions = @(Get-ChildItem -Path "$PrivatePath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PrivateFunctions.Count -gt 0) {
@@ -106,8 +111,15 @@ try {
         }
     }
     else {
-        Write-Verbose "Creating Private functions directory: $PrivatePath"
-        New-Item -Path $PrivatePath -ItemType Directory -Force | Out-Null
+        # Private directory doesn't exist - create it if FileSystem service is available
+        # During early bootstrap, service may not be available yet - that's okay, directory can be created later if needed
+        if ($fileSystem -and ($fileSystem | Get-Member -Name 'NewItem' -ErrorAction SilentlyContinue)) {
+            Write-Verbose "Creating Private functions directory: $PrivatePath"
+            $null = $fileSystem.NewItem($PrivatePath, 'Directory')
+        }
+        else {
+            Write-Verbose "Private functions directory does not exist (will be created when needed): $PrivatePath"
+        }
     }
 }
 catch {

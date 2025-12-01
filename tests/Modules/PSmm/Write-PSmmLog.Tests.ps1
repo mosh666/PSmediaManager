@@ -1,4 +1,4 @@
-﻿Describe 'Write-PSmmLog' {
+Describe 'Write-PSmmLog' {
     BeforeAll {
         $scriptPath = Join-Path $PSScriptRoot '../../../src/Modules/PSmm.Logging/Public/Write-PSmmLog.ps1'
         $scriptPath = [System.IO.Path]::GetFullPath($scriptPath)
@@ -9,10 +9,19 @@
         # Provide minimal PSLogs-compatible helper functions (only what's necessary)
         function Write-Log { param($Level, $Message, $Body, $ExceptionInfo) $script:LastWriteLog = @{ Level = $Level; Message = $Message; Body = $Body; Exception = $ExceptionInfo } }
         function Wait-Logging { return }
+        function Get-LoggingTarget { return [System.Collections.ArrayList]::new() }
+        function Add-LoggingTarget_File { return }
+        function Add-LoggingTarget_Console { return }
+        function Set-LogContext { param($Context) return }
 
+        # Initialize the variable that Write-Log will set
+        $script:LastWriteLog = $null
 
         # Initialize script-scoped context (the implementation reads $script:Context directly)
         $script:Context = @{ Context = $null }
+
+        # Initialize script-scoped Logging configuration
+        $script:Logging = @{ DefaultLevel = 'INFO'; Format = '[%{level}] %{message}' }
 
         # Call the logger without passing -Context to avoid invoking Set-LogContext
         { Write-PSmmLog -Level 'INFO' -Message 'Hello' -Body 'Details' -Console -File } | Should -Not -Throw

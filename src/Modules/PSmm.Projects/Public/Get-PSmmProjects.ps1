@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 function Get-PSmmProjects {
@@ -51,7 +51,7 @@ function Get-PSmmProjects {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter()]
         [switch]$Force,
@@ -475,7 +475,7 @@ function Get-ProjectsFromDrive {
         [Parameter(Mandatory)] [ValidateSet('Master', 'Backup')] [string] $DriveType,
         [Parameter(Mandatory)] [hashtable] $Projects,
         [Parameter(Mandatory)] [hashtable] $ProjectDirs,
-        [Parameter(Mandatory)] [AppConfiguration] $Config,
+        [Parameter(Mandatory)] [object] $Config,
         [Parameter(Mandatory)] $FileSystem
     )
 
@@ -637,7 +637,7 @@ function Get-ProjectsFromDrive {
                 $null = $FileSystem.NewItem($projectsPath, 'Directory')
             }
             else {
-                $null = New-Item -Path $projectsPath -ItemType Directory -Force
+                throw "FileSystem service is required to create Projects folder: $projectsPath"
             }
 
             Write-PSmmLog -Level SUCCESS -Context 'Get-ProjectsFromDrive' `
@@ -782,7 +782,7 @@ function Initialize-GlobalProject {
 
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -822,7 +822,7 @@ function Initialize-GlobalProject {
                 $null = $FileSystem.NewItem($AssetsFullPath, 'Directory')
             }
             else {
-                $null = New-Item -Path $AssetsFullPath -ItemType Directory -Force
+                throw "FileSystem service is required to create Assets folder: $AssetsFullPath"
             }
 
             Write-PSmmLog -Level INFO -Context 'Initialize-GlobalProject' `

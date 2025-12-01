@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Bootstraps the PSmediaManager application.
 
@@ -61,6 +61,16 @@ function Invoke-PSmm {
             $Config.Paths.EnsureDirectoriesExist()
             #endregion ----- Setup Folders
 
+            #region ----- Initialize Shared Services (Early)
+            # Create core services needed for configuration and logging
+            $fileSystemService = [FileSystemService]::new()
+            $pathProviderService = [PathProvider]::new()
+            $environmentService = [EnvironmentService]::new()
+            $processService = [ProcessService]::new()
+            $httpService = [HttpService]::new()
+            $cryptoService = [CryptoService]::new()
+            #endregion ----- Initialize Shared Services (Early)
+
             #region ----- Load Configuration
             Write-Verbose 'Verifying configuration...'
 
@@ -76,8 +86,19 @@ function Invoke-PSmm {
 
             #region ----- Initialize Logging
             Write-Verbose 'Initializing logging system...'
+            Write-Verbose 'SENTINEL: About to call Initialize-Logging'
             Write-Output ''
-            Initialize-Logging -Config $Config
+            try {
+                Initialize-Logging -Config $Config -FileSystem $fileSystemService -PathProvider $pathProviderService -SkipPsLogsInit
+                Write-Verbose 'SENTINEL: Returned from Initialize-Logging'
+            }
+            catch {
+                Write-Error "EXCEPTION DETAILS: $($_.Exception.Message)"
+                Write-Verbose "InvocationInfo: $($_.InvocationInfo | Out-String)"
+                Write-Verbose "ScriptStackTrace: $($_.ScriptStackTrace)"
+                Write-Verbose "TargetObject: $($_.TargetObject)"
+                throw
+            }
             Start-Sleep -Milliseconds 500
             #endregion ----- Initialize Logging
 
@@ -86,13 +107,13 @@ function Invoke-PSmm {
             #region ----- First-Run Setup
             $setupPending = $false
             $vaultPath = $Config.Paths.App.Vault
-            $dbPath = Join-Path $vaultPath 'PSmm_System.kdbx'
+            $dbPath = $pathProviderService.CombinePath(@($vaultPath,'PSmm_System.kdbx'))
 
-            if (-not (Test-Path $dbPath)) {
+            if (-not ($fileSystemService.TestPath($dbPath))) {
                 Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' -Message 'KeePass vault not found - starting first-run setup' -Console -File
 
                 if (Get-Command Invoke-FirstRunSetup -ErrorAction SilentlyContinue) {
-                    $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$Config.Parameters.NonInteractive
+                    $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$Config.Parameters.NonInteractive -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
 
                     if ($setupSuccess -eq 'PendingKeePassXC') {
                         Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' `
@@ -128,17 +149,11 @@ function Invoke-PSmm {
             }
             #endregion ----- First-Run Setup
 
-            #region ----- Initialize Shared Services
-            $httpService = [HttpService]::new()
-            $cryptoService = [CryptoService]::new()
-            $fileSystemService = [FileSystemService]::new()
-            $processService = [ProcessService]::new()
-            #endregion ----- Initialize Shared Services
-
             #region ----- Load Secrets (Skip if setup is pending)
             if (-not $setupPending) {
                 Write-Verbose 'Ensuring KeePassXC CLI is available before loading secrets...'
-                $null = Get-KeePassCli -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $fileSystemService -Process $processService
+                $null = Get-KeePassCli -Config $Config -Http $httpService -Crypto $cryptoService `
+                    -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
 
                 Write-Verbose 'Loading secrets from KeePassXC vault...'
                 # Load secrets after logging is initialized so warnings can be properly logged
@@ -158,7 +173,8 @@ function Invoke-PSmm {
 
             #region ----- Verify Required Plugins
             Write-PSmmLog -Level NOTICE -Context 'Confirm-Plugins' -Message 'Checking required plugins' -Console -File
-            Confirm-Plugins -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $fileSystemService -Process $processService
+            Confirm-Plugins -Config $Config -Http $httpService -Crypto $cryptoService `
+                -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
             Write-Verbose "Required plugins verified"
             #endregion ----- Verify Required Plugins
 
@@ -167,15 +183,15 @@ function Invoke-PSmm {
                 Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' -Message 'KeePassXC now available - completing vault setup' -Console -File
 
                 $vaultPath = $Config.Paths.App.Vault
-                $dbPath = Join-Path $vaultPath 'PSmm_System.kdbx'
+                $dbPath = $pathProviderService.CombinePath(@($vaultPath,'PSmm_System.kdbx'))
 
                 # Check if vault was created during plugin installation
-                if (-not (Test-Path $dbPath)) {
+                if (-not ($fileSystemService.TestPath($dbPath))) {
                     if (Get-Command Invoke-FirstRunSetup -ErrorAction SilentlyContinue) {
-                        $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$Config.Parameters.NonInteractive
+                        $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$Config.Parameters.NonInteractive -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
 
                         # Re-check DB existence in case function succeeded but returned non-boolean
-                        $dbNowExists = Test-Path $dbPath
+                        $dbNowExists = $fileSystemService.TestPath($dbPath)
                         $pending = ($setupSuccess -is [string] -and $setupSuccess -eq 'PendingKeePassXC')
                         $ok = ($setupSuccess -is [bool] -and $setupSuccess) -or ($setupSuccess -is [string] -and $setupSuccess -eq 'True') -or $dbNowExists
 

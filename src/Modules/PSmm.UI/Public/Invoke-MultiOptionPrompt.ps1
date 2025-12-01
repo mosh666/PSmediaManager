@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Displays an interactive multi-option prompt for user selection.
 

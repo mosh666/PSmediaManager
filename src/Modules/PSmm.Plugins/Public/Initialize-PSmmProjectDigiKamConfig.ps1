@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 <#
@@ -60,6 +60,12 @@ function Initialize-PSmmProjectDigiKamConfig {
         [ValidateNotNullOrEmpty()]
         [string]$ProjectName,
 
+        [Parameter(Mandatory)]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
         [Parameter()]
         [switch]$Force
     )
@@ -93,22 +99,22 @@ function Initialize-PSmmProjectDigiKamConfig {
                 throw [ConfigurationException]::new("Project '$ProjectName' is not currently selected. Please select the project first using Select-PSmmProject.", 'ProjectNotSelected')
             }
 
-            if (-not $projectPath -or -not (Test-Path -Path $projectPath)) {
+            if (-not $projectPath -or -not ($FileSystem.TestPath($projectPath))) {
                 throw [ConfigurationException]::new("Project path not found for project: $ProjectName", 'ProjectPath')
             }
 
             # Define project-specific paths
-            $projectConfigPath = Join-Path -Path $projectPath -ChildPath 'Config'
-            $projectDatabasePath = Join-Path -Path $projectPath -ChildPath 'Databases' -AdditionalChildPath 'digiKam'
-            $projectDigiKamAppDir = Join-Path -Path $projectConfigPath -ChildPath 'digiKam'
-            $digiKamRcPath = Join-Path -Path $projectConfigPath -ChildPath 'digiKam-rc'
+            $projectConfigPath = $PathProvider.CombinePath($projectPath,'Config')
+            $projectDatabasePath = $PathProvider.CombinePath($projectPath,'Databases','digiKam')
+            $projectDigiKamAppDir = $PathProvider.CombinePath($projectConfigPath,'digiKam')
+            $digiKamRcPath = $PathProvider.CombinePath($projectConfigPath,'digiKam-rc')
 
             # Create necessary directories
             $directories = @($projectConfigPath, $projectDatabasePath, $projectDigiKamAppDir)
             foreach ($dir in $directories) {
-                if (-not (Test-Path -Path $dir)) {
+                if (-not ($FileSystem.TestPath($dir))) {
                     Write-Verbose "Creating directory: $dir"
-                    $null = New-Item -Path $dir -ItemType Directory -Force
+                    $null = $FileSystem.NewDirectory($dir)
                 }
             }
 
@@ -116,33 +122,33 @@ function Initialize-PSmmProjectDigiKamConfig {
             $databasePort = Get-PSmmAvailablePort -Config $Config -ProjectName $ProjectName -Force:$Force
 
             # Get plugin paths
-            $digiKamInstallations = Get-ChildItem -Path $Config.Paths.App.Plugins.Root -Directory -Filter 'digiKam-*' -ErrorAction SilentlyContinue
+            $digiKamInstallations = $FileSystem.GetChildItem($Config.Paths.App.Plugins.Root,'Directory','digiKam-*')
             if (-not $digiKamInstallations) {
                 throw [PluginRequirementException]::new('digiKam installation not found in Plugins directory', 'digiKam')
             }
             $digiKamPluginsPath = $digiKamInstallations[0].FullName
 
-            $mariaDbInstallations = Get-ChildItem -Path $Config.Paths.App.Plugins.Root -Directory -Filter 'mariadb-*' -ErrorAction SilentlyContinue
+            $mariaDbInstallations = $FileSystem.GetChildItem($Config.Paths.App.Plugins.Root,'Directory','mariadb-*')
             if (-not $mariaDbInstallations) {
                 throw [PluginRequirementException]::new('MariaDB installation not found in Plugins directory', 'MariaDB')
             }
             $mariaDbPath = $mariaDbInstallations[0].FullName
 
             # Check if digiKam-rc already exists
-            if ((Test-Path -Path $digiKamRcPath) -and -not $Force.IsPresent) {
+            if (($FileSystem.TestPath($digiKamRcPath)) -and -not $Force.IsPresent) {
                 Write-Verbose "DigiKam configuration already exists for project $ProjectName, using existing configuration"
                 Write-PSmmLog -Level INFO -Context 'Initialize-PSmmProjectDigiKamConfig' `
                     -Message "Using existing digiKam configuration for project $ProjectName" -Console -File
             }
             else {
                 # Load template and replace variables
-                $templatePath = Join-Path -Path $Config.Paths.App.ConfigDigiKam -ChildPath 'digiKam-rc-template'
-                if (-not (Test-Path -Path $templatePath)) {
+                $templatePath = $PathProvider.CombinePath(@($Config.Paths.App.ConfigDigiKam, 'digiKam-rc-template'))
+                if (-not ($FileSystem.TestPath($templatePath))) {
                     throw [ConfigurationException]::new("DigiKam template file not found: $templatePath", 'TemplateFile')
                 }
 
                 Write-Verbose "Reading digiKam template from: $templatePath"
-                $templateContent = Get-Content -Path $templatePath -Raw
+                $templateContent = $FileSystem.GetContent($templatePath)
 
                 # Replace template variables
                 $configContent = $templateContent -replace '%%ProjectName%%', $ProjectName
@@ -154,19 +160,19 @@ function Initialize-PSmmProjectDigiKamConfig {
 
                 # Write project-specific configuration
                 Write-Verbose "Writing digiKam configuration to: $digiKamRcPath"
-                $configContent | Set-Content -Path $digiKamRcPath -Encoding UTF8
+                $FileSystem.SetContent($digiKamRcPath, $configContent)
 
                 Write-PSmmLog -Level SUCCESS -Context 'Initialize-PSmmProjectDigiKamConfig' `
                     -Message "Created digiKam configuration for project $ProjectName on port $databasePort" -Console -File
             }
 
             # Copy metadata profile if it doesn't exist
-            $sourceProfilePath = Join-Path -Path $Config.Paths.App.ConfigDigiKam -ChildPath 'digiKam-metadataProfile.dkamp'
-            $targetProfilePath = Join-Path -Path $projectDigiKamAppDir -ChildPath 'digiKam-metadataProfile.dkamp'
+            $sourceProfilePath = $PathProvider.CombinePath($Config.Paths.App.ConfigDigiKam,'digiKam-metadataProfile.dkamp')
+            $targetProfilePath = $PathProvider.CombinePath($projectDigiKamAppDir,'digiKam-metadataProfile.dkamp')
 
-            if ((Test-Path -Path $sourceProfilePath) -and (-not (Test-Path -Path $targetProfilePath) -or $Force.IsPresent)) {
+            if (($FileSystem.TestPath($sourceProfilePath)) -and (-not ($FileSystem.TestPath($targetProfilePath)) -or $Force.IsPresent)) {
                 Write-Verbose "Copying metadata profile to project APPDIR"
-                Copy-Item -Path $sourceProfilePath -Destination $targetProfilePath -Force
+                $FileSystem.CopyItem($sourceProfilePath,$targetProfilePath,$true)
             }
 
             # Create configuration result

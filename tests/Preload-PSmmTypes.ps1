@@ -26,14 +26,7 @@ if (Test-Path $interfaces) { . $interfaces }
 $exceptions = Join-Path $classesBase 'Exceptions.ps1'
 if (Test-Path $exceptions) { . $exceptions }
 
-# Core configuration types and builder
-$appConfig = Join-Path $classesBase 'AppConfiguration.ps1'
-if (Test-Path $appConfig) { . $appConfig }
-
-$appBuilder = Join-Path $classesBase 'AppConfigurationBuilder.ps1'
-if (Test-Path $appBuilder) { . $appBuilder }
-
-# Service implementations
+# Service implementations (must load before AppConfiguration which uses them)
 $servicesDir = Join-Path $classesBase 'Services'
 if (Test-Path $servicesDir) {
     $serviceFiles = @( 'CimService.ps1','CryptoService.ps1','EnvironmentService.ps1','FileSystemService.ps1','GitService.ps1','HttpService.ps1','ProcessService.ps1' )
@@ -42,5 +35,12 @@ if (Test-Path $servicesDir) {
         if (Test-Path $path) { . $path }
     }
 }
+
+# Core configuration types and builder (after services)
+$appConfig = Join-Path $classesBase 'AppConfiguration.ps1'
+if (Test-Path $appConfig) { . $appConfig }
+
+$appBuilder = Join-Path $classesBase 'AppConfigurationBuilder.ps1'
+if (Test-Path $appBuilder) { . $appBuilder }
 
 Write-Verbose "Preload: complete"

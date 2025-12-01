@@ -1,0 +1,7 @@
+# Upstream WSL/Ubuntu base image CVEs currently suppressed.
+# Rationale documented in SECURITY.md under "Upstream Base Image / WSL Package CVEs".
+# Review every 30 days or after base image upgrade.
+# Remove entries once patched upstream. Do NOT add project dependency CVEs here.
+CVE-2024-56406
+CVE-2025-40909
+CVE-2025-45582

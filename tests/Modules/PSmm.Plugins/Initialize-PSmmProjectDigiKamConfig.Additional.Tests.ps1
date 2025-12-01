@@ -1,4 +1,4 @@
-﻿Set-StrictMode -Version Latest
+Set-StrictMode -Version Latest
 
 Describe 'Initialize-PSmmProjectDigiKamConfig (additional cases)' {
         BeforeAll {
@@ -43,6 +43,32 @@ $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Pat
             $null = New-Item -Path $script:cfg.Paths.App.ConfigDigiKam -ItemType Directory -Force
             $null = New-Item -Path $script:cfg.Paths.App.Plugins.Root -ItemType Directory -Force
 
+            # Mock FileSystemService
+            $script:mockFS = [PSCustomObject]@{
+                PSTypeName = 'FileSystemService'
+            }
+            $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'TestPath' -Value { param($path) Test-Path $path }
+            $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'NewDirectory' -Value { param($path) New-Item -Path $path -ItemType Directory -Force }
+            $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'CopyItem' -Value { param($src, $dest) Copy-Item -Path $src -Destination $dest -Force }
+            $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'GetChildItem' -Value { param($path, $filter, $pattern) Get-ChildItem -Path $path -Directory -Filter $pattern -ErrorAction SilentlyContinue }
+            $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'GetContent' -Value { param($path) Get-Content -Path $path -Raw }
+            $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'SetContent' -Value { param($path, $content) Set-Content -Path $path -Value $content -Force }
+
+            # Mock PathProvider
+            $script:mockPath = [PSCustomObject]@{
+                PSTypeName = 'PathProvider'
+            }
+            $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'Join' -Value {
+                $parts = if ($args.Count -eq 1 -and $args[0] -is [System.Array]) { @($args[0]) } else { @($args) }
+                [IO.Path]::Combine([string[]]$parts)
+            } -Force
+            $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'CombinePath' -Value {
+                $parts = if ($args.Count -eq 1 -and $args[0] -is [System.Array]) { @($args[0]) } else { @($args) }
+                [IO.Path]::Combine([string[]]$parts)
+            } -Force
+            $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'GetDirectoryName' -Value { param($path) Split-Path -Path $path -Parent }
+            $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'GetFileName' -Value { param($path) Split-Path -Path $path -Leaf }
+
             Set-Content -Path (Join-Path $script:cfg.Paths.App.ConfigDigiKam 'digiKam-rc-template') -Value @"
 [General]
 AppDir=%%ProjectPath%%/Config/digiKam
@@ -63,7 +89,7 @@ Port=%%DatabasePort%%
         It 'respects WhatIf and returns empty result' {
             Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
 
-            $result = PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' -WhatIf
+            $result = PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' -FileSystem $script:mockFS -PathProvider $script:mockPath -WhatIf
 
             # WhatIf should not create files
             Test-Path -Path (Join-Path $script:projectRoot 'Config/digiKam-rc') | Should -BeFalse
@@ -73,7 +99,7 @@ Port=%%DatabasePort%%
             Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
             $script:cfg.Projects = @{}
 
-            { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'Missing' } | Should -Throw '*Project*not currently selected*'
+            { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'Missing' -FileSystem $script:mockFS -PathProvider $script:mockPath } | Should -Throw '*Project*not currently selected*'
     }
 
         It 'throws when digiKam plugins are missing' {
@@ -81,7 +107,7 @@ Port=%%DatabasePort%%
             $script:cfg.Paths.App.Plugins.Root = Join-Path $script:repoRoot 'EmptyPlugins'
             $null = New-Item -Path $script:cfg.Paths.App.Plugins.Root -ItemType Directory -Force
 
-            { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' } | Should -Throw '*digiKam installation not found*'
+            { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' -FileSystem $script:mockFS -PathProvider $script:mockPath } | Should -Throw '*digiKam installation not found*'
     }
 
         It 'throws when MariaDB plugins are missing' {
@@ -90,7 +116,7 @@ Port=%%DatabasePort%%
             $null = New-Item -Path (Join-Path $script:cfg.Paths.App.Plugins.Root 'digiKam-9.0.0') -ItemType Directory -Force
             Get-ChildItem -Path $script:cfg.Paths.App.Plugins.Root -Directory -Filter 'mariadb-*' | Remove-Item -Recurse -Force
 
-            { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' } | Should -Throw '*MariaDB installation not found*'
+            { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' -FileSystem $script:mockFS -PathProvider $script:mockPath } | Should -Throw '*MariaDB installation not found*'
     }
 
         It 'throws when the template file is missing' {
@@ -98,7 +124,7 @@ Port=%%DatabasePort%%
             # Remove template
             Remove-Item -Path (Join-Path $script:cfg.Paths.App.ConfigDigiKam 'digiKam-rc-template') -Force
 
-            { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' -Force } | Should -Throw '*template*not found*'
+            { PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' -FileSystem $script:mockFS -PathProvider $script:mockPath -Force } | Should -Throw '*template*not found*'
     }
 
         It 'copies metadata profile on -Force even if target exists' {
@@ -110,11 +136,11 @@ Port=%%DatabasePort%%
             Set-Content -Path $targetProfile -Value 'old' -Encoding UTF8
 
             # First run without -Force should keep existing profile
-            $null = PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB'
+            $null = PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' -FileSystem $script:mockFS -PathProvider $script:mockPath
             (Get-Content -Path $targetProfile -Raw).Trim() | Should -Be 'old'
 
             # Now with -Force should overwrite
-            $null = PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' -Force
+            $null = PSmm.Plugins\Initialize-PSmmProjectDigiKamConfig -Config $script:cfg -ProjectName 'ProjectB' -FileSystem $script:mockFS -PathProvider $script:mockPath -Force
             (Get-Content -Path $targetProfile -Raw).Trim() | Should -Be 'profile'
     }
 }

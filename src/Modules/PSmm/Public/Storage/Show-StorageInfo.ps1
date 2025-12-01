@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Displays storage configuration information.
 

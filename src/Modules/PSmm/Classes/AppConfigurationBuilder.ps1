@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Builder pattern for constructing AppConfiguration instances.
 
@@ -39,6 +39,12 @@ param()
 class AppConfigurationBuilder {
     hidden [AppConfiguration]$_config
     hidden [bool]$_built = $false
+
+    # Service dependencies
+    hidden [object]$_fileSystem
+    hidden [object]$_environment
+    hidden [object]$_pathProvider
+    hidden [object]$_process
 
     AppConfigurationBuilder() {
         $this.InitializeConfig()
@@ -96,6 +102,14 @@ class AppConfigurationBuilder {
         $this._config.Paths = $paths
         $this._config.Secrets = [AppSecrets]::new($paths.App.Vault)
 
+        # Inject services into Secrets if available
+        if ($null -ne $this._fileSystem) {
+            $this._config.Secrets.FileSystem = $this._fileSystem
+            $this._config.Secrets.Environment = $this._environment
+            $this._config.Secrets.PathProvider = $this._pathProvider
+            $this._config.Secrets.Process = $this._process
+        }
+
         # Initialize logging with date-based filename anchored to runtime root
         $timestamp = Get-Date -Format 'yyyyMMdd'
         $logFileName = "$timestamp-$($this._config.InternalName)-$env:USERNAME@$env:COMPUTERNAME.log"
@@ -133,6 +147,30 @@ class AppConfigurationBuilder {
     [AppConfigurationBuilder] WithVersion([version]$version) {
         $this.EnsureNotBuilt()
         $this._config.Version = $version
+        return $this
+    }
+
+    [AppConfigurationBuilder] WithServices([object]$fileSystem, [object]$environment, [object]$pathProvider, [object]$process) {
+        $this.EnsureNotBuilt()
+        $this._fileSystem = $fileSystem
+        $this._environment = $environment
+        $this._pathProvider = $pathProvider
+        $this._process = $process
+
+        # Inject services into config
+        $this._config.FileSystem = $fileSystem
+        $this._config.Environment = $environment
+        $this._config.PathProvider = $pathProvider
+        $this._config.Process = $process
+
+        # Inject services into Secrets if it exists
+        if ($null -ne $this._config.Secrets) {
+            $this._config.Secrets.FileSystem = $fileSystem
+            $this._config.Secrets.Environment = $environment
+            $this._config.Secrets.PathProvider = $pathProvider
+            $this._config.Secrets.Process = $process
+        }
+
         return $this
     }
 
@@ -325,6 +363,14 @@ class AppConfigurationBuilder {
             $this._config.Secrets = [AppSecrets]::new($this._config.Paths.App.Vault)
         }
 
+        # Ensure services are injected before loading secrets
+        if ($null -ne $this._fileSystem) {
+            $this._config.Secrets.FileSystem = $this._fileSystem
+            $this._config.Secrets.Environment = $this._environment
+            $this._config.Secrets.PathProvider = $this._pathProvider
+            $this._config.Secrets.Process = $this._process
+        }
+
         $this._config.Secrets.LoadSecrets()
         return $this
     }
@@ -470,14 +516,15 @@ class AppConfigurationBuilder {
         # Convert to .psd1 format
         $psd1Content = [AppConfigurationBuilder]::ConvertStorageToPsd1($renumbered)
 
-        # Ensure directory exists
+        # Ensure directory exists via FileSystem service
         $configRoot = Split-Path -Path $storagePath -Parent
-        if (-not (Test-Path -Path $configRoot)) {
-            $null = New-Item -Path $configRoot -ItemType Directory -Force
+        $fs = [FileSystemService]::new()
+        if (-not $fs.TestPath($configRoot)) {
+            $null = $fs.NewItem($configRoot, 'Directory')
         }
 
-        # Write to file
-        Set-Content -Path $storagePath -Value $psd1Content -Encoding UTF8
+        # Write to file via FileSystem service
+        $fs.SetContent($storagePath, $psd1Content)
     }
 
     <#
