@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - **CI/Codacy**: Ensure `./.codacy/cli.sh` is executable in workflow to prevent `Permission denied` on Linux runners and restore SARIF uploads.
+- **CI/Codacy**: Normalize `.codacy/codacy.yaml` to CLI v2 schema (`version: "2"`, `tools: [ { name: ... } ]`).
 - **CI/Security**: Migrated from Codacy classic GitHub Action to Codacy CLI v2 for more flexible local analysis and CI integration.
 - **Configuration**: Consolidated Codacy configuration from root `.codacy.yml` to `.codacy/codacy.yaml` with cross-tool path exclusions.
 - **Linting**: Separated markdownlint execution into dedicated GitHub Action with SARIF output; removed markdownlint from Codacy CLI v2 (unsupported).

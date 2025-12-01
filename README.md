@@ -133,6 +133,16 @@ CI note: Linux runners require the Codacy CLI script to be executable. The workf
 
 If you fork this repository or copy the workflow, ensure this step is present.
 
+Configuration note: Codacy CLI v2 expects `tools` to be an array of objects with a `name` field and a top-level `version: "2"` in `.codacy/codacy.yaml`. Example:
+
+```yaml
+version: "2"
+tools:
+  - name: pmd
+  - name: semgrep
+  - name: trivy
+```
+
 ### Recent Cleanup Highlights (2025-11-30)
 
 - Duplicate GitHub helper removed; single source of truth in `Get-PluginFromGitHub.ps1`.
