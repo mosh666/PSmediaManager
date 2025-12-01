@@ -370,6 +370,10 @@ Continuous integration:
 - `.github/workflows/codacy.yml` runs Codacy CLI v2 via `./.codacy/cli.sh analyze` and uploads SARIF results via `github/codeql-action/upload-sarif@v4` so findings appear in GitHub code scanning alongside CodeQL results.
 - Coverage baselines are enforced via `tests/.coverage-baseline.json`; commits that lower coverage fail CI until baseline is updated intentionally.
 
+### Repository Hygiene & Dot File Conventions
+
+All dot files and top-level config files in the repo root are reviewed regularly for necessity and best practices. Only files required for CI, code quality, documentation, or developer experience are retained. Unused or legacy files (e.g., `.semgrep.yml`) are removed to keep the root clean and maintainable.
+
 ### Static Analysis & Linting
 - Codacy CLI v2 configured via `.codacy/codacy.yaml` (runs in CI and locally via `.\.codacy\Invoke-CodacyWSL.ps1`).
 - Markdown lint rules defined in `.markdownlint.yml` with relaxed formatting for project docs.
