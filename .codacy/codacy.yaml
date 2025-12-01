@@ -1,7 +1,24 @@
 runtimes:
-    - java@17.0.10
-    - python@3.11.11
+    - java
+    - python
+
+exclude_paths:
+    # Test harness, coverage artifacts, and generated files
+    - tests/**
+    - "*.coverage-*.json"
+    - "*.coverage-*.xml"
+    - .codacy/**
+    - _tmp/**
+    # Dependency caches
+    - node_modules/**
+    - "**/.venv/**"
+    - "**/.pytest_cache/**"
+    # Logs and temp
+    - "**/*.log"
+    - "**/.DS_Store"
+    - "**/Thumbs.db"
+
 tools:
-    - pmd@6.55.0
-    - semgrep@1.78.0
-    - trivy@0.67.2
+    - pmd
+    - semgrep
+    - trivy

@@ -114,7 +114,7 @@ This project maintains high code quality standards:
 
 ### Codacy Analysis
 
-PSmediaManager uses the Codacy Analysis CLI (scheduled + on push) to surface security and maintainability findings alongside CodeQL in GitHub Advanced Security. The workflow is defined in `.github/workflows/codacy.yml` and enforced by internal instructions stored at `.github/instructions/codacy.instructions.md`.
+PSmediaManager uses Codacy CLI v2 (scheduled + on push) to surface security and maintainability findings alongside CodeQL in GitHub Advanced Security. The workflow is defined in `.github/workflows/codacy.yml` and enforced by internal instructions stored at `.github/instructions/codacy.instructions.md`. CLI v2 reads configuration from `.codacy/codacy.yaml`.
 
 Local run (mirrors CI wrapper):
 
@@ -367,11 +367,11 @@ Coding Practices:
 Continuous integration:
 
 - `.github/workflows/ci.yml` installs PowerShell 7.5.4, the required PSGallery modules, runs `tests/Invoke-PSScriptAnalyzer.ps1`, then `tests/Invoke-Pester.ps1 -CodeCoverage -Quiet`, and uploads analyzer/test/coverage artifacts.
-- `.github/workflows/codacy.yml` runs Codacy Analysis CLI and uploads SARIF results via `github/codeql-action/upload-sarif@v4` so findings appear in GitHub code scanning alongside CodeQL results.
+- `.github/workflows/codacy.yml` runs Codacy CLI v2 via `./.codacy/cli.sh analyze` and uploads SARIF results via `github/codeql-action/upload-sarif@v4` so findings appear in GitHub code scanning alongside CodeQL results.
 - Coverage baselines are enforced via `tests/.coverage-baseline.json`; commits that lower coverage fail CI until baseline is updated intentionally.
 
 ### Static Analysis & Linting
-- Codacy CLI configured via `.codacy.yml` (runs in CI and locally via `.\.codacy\Invoke-CodacyWSL.ps1`).
+- Codacy CLI v2 configured via `.codacy/codacy.yaml` (runs in CI and locally via `.\.codacy\Invoke-CodacyWSL.ps1`).
 - Markdown lint rules defined in `.markdownlint.yml` with relaxed formatting for project docs.
 - `.trivyignore` tracks suppressed upstream WSL/Ubuntu base image CVEs; see `SECURITY.md` for rationale and review cadence.
 

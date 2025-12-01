@@ -5,6 +5,3 @@ MD022: false  # blanks-around-headings
 MD032: false  # blanks-around-lists
 MD026: false  # no-trailing-punctuation
 MD025: false  # single-title
-# Exclude non-Markdown files explicitly via glob rules
-globs:
-  - "**/*.md"

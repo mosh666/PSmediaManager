@@ -38,24 +38,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Execute Codacy Analysis CLI and generate a SARIF output with the security issues identified during the analysis
-      - name: Run Codacy Analysis CLI
-        uses: codacy/codacy-analysis-cli-action@d840f886c4bd4edc059706d09c6a1586111c540b
-        with:
-          # Check https://github.com/codacy/codacy-analysis-cli#project-token to get your project token from your Codacy repository
-          # You can also omit the token and run the tools that support default configurations
-          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          verbose: true
-          output: results.sarif
-          format: sarif
-          # Adjust severity of non-security issues
-          gh-code-scanning-compat: true
-          # Force 0 exit code to allow SARIF file generation
-          # This will handover control about PR rejection to the GitHub side
-          max-allowed-issues: 2147483647
+      # Run Codacy CLI v2 and generate SARIF output for GitHub code scanning
+      - name: Run Codacy CLI v2 (local analysis)
+        env:
+          CODACY_CONFIGURATION: .codacy/codacy.yaml
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash -o pipefail -c "./.codacy/cli.sh analyze --format sarif --output results.sarif || true"
 
       # Upload the SARIF file generated in the previous step
       - name: Upload SARIF results file
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: results.sarif
+
+      # Lint Markdown files with markdownlint-cli2 and produce SARIF
+      - name: Run markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@v21
+        continue-on-error: true
+        with:
+          globs: '**/*.md'
+
+      - name: Upload markdownlint SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: markdownlint.sarif

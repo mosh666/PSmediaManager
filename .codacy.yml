@@ -1,7 +1,0 @@
-# Codacy configuration
-# Exclude non-Markdown files from Markdown lint engine
-engines:
-  markdownlint:
-    enabled: true
-    exclude_paths:
-      - ".trivyignore"

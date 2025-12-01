@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **CI/Security**: Migrated from Codacy classic GitHub Action to Codacy CLI v2 for more flexible local analysis and CI integration.
+- **Configuration**: Consolidated Codacy configuration from root `.codacy.yml` to `.codacy/codacy.yaml` with cross-tool path exclusions.
+- **Linting**: Separated markdownlint execution into dedicated GitHub Action with SARIF output; removed markdownlint from Codacy CLI v2 (unsupported).
+- **Configuration**: Removed version pinning from `.codacy/codacy.yaml` to use latest stable tool versions (pmd, semgrep, trivy).
+- **Configuration**: Added `exclude_paths` to `.codacy/codacy.yaml` mirroring `.semgrepignore` patterns for consistent exclusions across all tools.
+- **Configuration**: Cleaned `.markdownlint.yml` to contain only rule toggles; moved glob patterns to `.markdownlint-cli2.jsonc`.
+
+### Added
+
+- **CI/Linting**: Added `.markdownlint-cli2.jsonc` to configure markdownlint-cli2 with glob patterns and SARIF formatter output.
+- **CI/Security**: Added separate SARIF upload step for markdownlint results in Codacy workflow.
+
+### Removed
+
+- **Configuration**: Removed legacy root `.codacy.yml` (replaced by `.codacy/codacy.yaml` for CLI v2).
+
 ## 0.9.0 - 2025-12-01
 
 ### Added (Features)
