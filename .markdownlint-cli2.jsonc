@@ -3,6 +3,6 @@
   "globs": ["**/*.md", "#node_modules"],
   // Emit SARIF file for GitHub code scanning
   "outputFormatters": [
-    [ "formatter-sarif", { "name": "markdownlint.sarif" } ]
+    [ "markdownlint-cli2-formatter-sarif", { "name": "markdownlint.sarif" } ]
   ]
 }

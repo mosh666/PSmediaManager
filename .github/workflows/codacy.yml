@@ -42,6 +42,11 @@ jobs:
       - name: Make Codacy CLI executable
         run: chmod +x ./.codacy/cli.sh
 
+      # Install runtimes and tools specified in .codacy/codacy.yaml
+      - name: Codacy CLI v2 install
+        run: |
+          ./.codacy/cli.sh install || true
+
       # Run Codacy CLI v2 and generate SARIF output for GitHub code scanning
       - name: Run Codacy CLI v2 (local analysis)
         env:
