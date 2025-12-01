@@ -124,6 +124,15 @@ pwsh -NoProfile -File .\.codacy\Invoke-CodacyWSL.ps1 -RepositoryPath . -Verbose
 
 After editing repository files programmatically (e.g., via automation/AI), the instructions file mandates triggering Codacy CLI for the touched paths. Keep the instructions file updated if analysis behavior changes.
 
+CI note: Linux runners require the Codacy CLI script to be executable. The workflow now includes a step to set the bit before analysis to avoid `Permission denied` and missing SARIF uploads:
+
+```yaml
+- name: Make Codacy CLI executable
+  run: chmod +x ./.codacy/cli.sh
+```
+
+If you fork this repository or copy the workflow, ensure this step is present.
+
 ### Recent Cleanup Highlights (2025-11-30)
 
 - Duplicate GitHub helper removed; single source of truth in `Get-PluginFromGitHub.ps1`.
