@@ -38,6 +38,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Ensure Codacy CLI script is executable
+      - name: Make Codacy CLI executable
+        run: chmod +x ./.codacy/cli.sh
+
       # Run Codacy CLI v2 and generate SARIF output for GitHub code scanning
       - name: Run Codacy CLI v2 (local analysis)
         env:
