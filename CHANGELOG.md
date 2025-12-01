@@ -1,12 +1,16 @@
 # Changelog
 
+<!-- markdownlint-disable MD024 -->
+
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+<!-- markdownlint-disable MD024 -->
+## [Unreleased Details]
 
 ### Changed
 
 - **CI/Codacy**: Ensure `./.codacy/cli.sh` is executable in workflow to prevent `Permission denied` on Linux runners and restore SARIF uploads.
+- **CI/Codacy**: Guard SARIF upload steps using `hashFiles(...)` so the job does not fail when `results.sarif` (or `markdownlint.sarif`) is not produced; fixes "Path does not exist: results.sarif" in GitHub Actions.
 - **CI/Codacy**: Normalize `.codacy/codacy.yaml` to CLI v2 schema (`version: "2"`, `tools: [ { name: ... } ]`).
 - **CI/Security**: Migrated from Codacy classic GitHub Action to Codacy CLI v2 for more flexible local analysis and CI integration.
 - **Configuration**: Consolidated Codacy configuration from root `.codacy.yml` to `.codacy/codacy.yaml` with cross-tool path exclusions.
@@ -15,7 +19,7 @@ All notable changes to this project will be documented in this file.
 - **Configuration**: Added `exclude_paths` to `.codacy/codacy.yaml` mirroring `.semgrepignore` patterns for consistent exclusions across all tools.
 - **Configuration**: Cleaned `.markdownlint.yml` to contain only rule toggles; moved glob patterns to `.markdownlint-cli2.jsonc`.
 
-### Added
+### Added (Details)
 
 - **CI/Linting**: Added `.markdownlint-cli2.jsonc` to configure markdownlint-cli2 with glob patterns and SARIF formatter output.
 - **CI/Security**: Added separate SARIF upload step for markdownlint results in Codacy workflow.
@@ -23,6 +27,8 @@ All notable changes to this project will be documented in this file.
 ### Removed
 
 - **Configuration**: Removed legacy root `.codacy.yml` (replaced by `.codacy/codacy.yaml` for CLI v2).
+
+<!-- markdownlint-enable MD024 -->
 
 ## 0.9.0 - 2025-12-01
 
@@ -74,7 +80,7 @@ When preparing a release, move the items into a new versioned section and update
 - **refactor(build)**: Replaced non-interactive `Write-Host` calls in `Build-ScanImage.ps1` with `Write-Information` for proper stream usage.
 - **chore(coverage)**: Updated coverage baseline JSON to reflect new executed command set (68.67%).
 
-### Changed
+### Changed (Details)
 
 #### Logging & UX Tweaks (2025-11-28)
 
@@ -182,7 +188,7 @@ These are small documentation/metadata updates; move to a versioned release entr
 
 - Once-proposed features scheduled for removal.
 
-### Removed
+### Removed (Details)
 
 - Tests: retired `tests/Modules/PSmm/Exit-Order.Tests.ps1` now that `Write-PSmmHost` export coverage is handled via module tests and integration smoke runs.
 - CI: removed `.github/workflows/powershell-tests.yml` because the consolidated `ci.yml` plus the improved `tests/Invoke-Pester.ps1` cover the same validation steps.
@@ -268,3 +274,5 @@ These are small documentation/metadata updates; move to a versioned release entr
 - [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - [Semantic Versioning](https://semver.org/)
 - [GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
+
+<!-- markdownlint-enable MD024 -->
