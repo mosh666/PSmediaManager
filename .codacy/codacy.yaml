@@ -2,6 +2,8 @@ runtimes:
     - java
     - python
 
+version: "2"
+
 exclude_paths:
     # Test harness, coverage artifacts, and generated files
     - tests/**
@@ -19,6 +21,6 @@ exclude_paths:
     - "**/Thumbs.db"
 
 tools:
-    - pmd
-    - semgrep
-    - trivy
+    - name: pmd
+    - name: semgrep
+    - name: trivy
