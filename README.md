@@ -131,6 +131,16 @@ CI note: Linux runners require the Codacy CLI script to be executable. The workf
   run: chmod +x ./.codacy/cli.sh
 ```
 
+Additionally, SARIF uploads are guarded so jobs do not fail when a tool does not emit a SARIF file (e.g., empty result sets or skipped tools):
+
+```yaml
+- name: Upload SARIF results file
+  if: ${{ hashFiles('results.sarif') != '' }}
+  uses: github/codeql-action/upload-sarif@v4
+  with:
+    sarif_file: results.sarif
+```
+
 If you fork this repository or copy the workflow, ensure this step is present.
 
 Configuration note: Codacy CLI v2 expects `tools` to be an array of objects with a `name` field and a top-level `version: "2"` in `.codacy/codacy.yaml`. Example:
