@@ -88,14 +88,23 @@ Outputs PowerShell version compliance, required modules availability, plugin sta
 This project maintains high code quality standards:
 
 - **98.2%** PSScriptAnalyzer compliance (2/113 issues – documented false positives)
-- **68.67%** line coverage (baseline enforced, previously 65.43%)
-- Extensive Pester suite (200+ tests, expanded UI & logging coverage)
+- **68.77%** line coverage (2571 commands analyzed, 1768 executed – baseline enforced, up from 68.76%)
+- Extensive Pester suite (200+ tests with organized test structure and comprehensive edge case coverage)
 - Follows PowerShell best practices:
   - Named parameters for all function calls
   - Proper stream usage (`Write-Information` over `Write-Host` in non-interactive paths)
   - `ShouldProcess` implementation for destructive operations
   - Type declarations with `[OutputType]` attributes
   - Suppression attributes only for vetted false positives
+
+### Recent Quality Improvements (2025-12-02)
+
+- **test(coverage)**: Improved line coverage from 68.76% to 68.77% with enhanced test organization
+- **refactor(tests)**: Consolidated duplicate test files into organized directory structure (`tests/Modules/PSmm/Storage/`)
+- **test(pester)**: Added smarter CI detection (`Test-IsCiContext`) and conditional read-key pauses for better CI/local parity
+- **test(logging)**: Expanded Initialize-Logging tests with comprehensive error branch and edge case coverage
+- **feat(tests)**: Added `GlobalFilesystemGuards.ps1` to prevent accidental writes to system paths during tests
+- **docs(deployment)**: Added comprehensive container deployment guide covering Docker, Kubernetes, security hardening, and CI/CD integration
 
 ### Recent Quality Improvements (2025-11-30)
 
@@ -319,11 +328,22 @@ Write-PSmmLog -Level Info -Message 'Initialization complete'
 - Colorized, accessible output formatting.
 - `Invoke-PSmmUI` acts as the main interactive shell dispatcher.
 
+### Tool resolution helper
+
+When PSmm needs to call external executables (e.g., Git, pwsh) outside the plugin subsystem, it now uses the private `Resolve-ToolCommandPath` helper. The function accepts a `Paths` hashtable that mirrors the plugin cache structure (`Root`, `_Temp`, `_Downloads`, and optional `Commands`) and resolves commands by:
+
+- Returning cached values from `Paths.Commands` when available.
+- Honoring a provided absolute `CommandName` or `DefaultCommand`.
+- Falling back to `Process.TestCommand()` + `Get-Command` to locate items already on PATH.
+- Scanning the supplied `Root` directory for the executable (auto-appending `.exe` when extensions are missing).
+
+This keeps command lookups deterministic across Windows/Linux runners and lets tests inject fake filesystem roots without mutating the real PATH.
+
 ## Modules Overview
 
 | Module | Purpose | Key Public Functions |
 |--------|---------|----------------------|
-| PSmm | Core bootstrap, storage, secrets, configuration | `Invoke-PSmm`, `Confirm-Storage`, `Export-SafeConfiguration`, `Get-SystemSecret` |
+| PSmm | Core bootstrap, storage, secrets, configuration | `Invoke-PSmm`, `Confirm-Storage`, `Export-SafeConfiguration`, `Get-SystemSecret`, `Resolve-ToolCommandPath` |
 | PSmm.Logging | Structured logging | `Initialize-Logging`, `Write-PSmmLog` |
 | PSmm.Plugins | External tool lifecycle | `Confirm-Plugins`, `Install-KeePassXC`, `Start-PSmmdigiKam` |
 | PSmm.Projects | Project isolation | `New-PSmmProject`, `Select-PSmmProject` |
@@ -342,8 +362,10 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-Pester.ps1 
 Key behavior:
 
 - Wraps `Invoke-PSScriptAnalyzer.ps1`, which preloads PSmm types so `TypeNotFound` noise is filtered before enforcing errors.
-- Persists results to `tests/PSScriptAnalyzerResults.json`, `tests/TestResults.xml`, `.coverage-jacoco.xml`, and `.coverage-latest.json` (currently 65.43% line coverage enforced by baseline).
+- Persists results to `tests/PSScriptAnalyzerResults.json`, `tests/TestResults.xml`, `.coverage-jacoco.xml`, and `.coverage-latest.json` (currently 69.5% line coverage enforced by baseline).
 - Supports `-PassThru` for tooling scenarios and sets the exit code the same way GitHub Actions does (Environment.Exit in CI contexts).
+- Helper sourcing: keep dot-sourcing only the support files your suite needs (e.g., `tests/Support/TestConfig.ps1`, `tests/Support/Stub-WritePSmmLog.ps1`). `tests/Support/Import-AllTestHelpers.ps1` stays available when you explicitly want the consolidated behavior (it imports PSmm plus logging/filesystem stubs), but explicit imports remain the preferred pattern for clarity inside `InModuleScope`.
+- Harness pause control: `tests/Invoke-Pester.ps1` now respects `MEDIA_MANAGER_SKIP_READKEY`. CI (or any shell that sets the variable to `1` before invoking the harness) skips the final `Read-Host` pauses automatically, while default local runs still pause so you can inspect output.
 - **Test Isolation**: Automatically sets `MEDIA_MANAGER_TEST_MODE='1'` to ensure runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) are created within test directories rather than on the system drive, preventing test pollution and enabling parallel test execution.
 - Recent additions: dedicated logging specs (`Initialize-Logging.Tests.ps1`, `Invoke-LogRotation.Tests.ps1`) cover new error handling paths and the `New-FileSystemService` helper so regression failures surface quickly.
 

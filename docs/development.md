@@ -36,6 +36,10 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tests/Invoke-Pester.ps1 
 
 This script dot-sources `tests/Invoke-PSScriptAnalyzer.ps1`, preloads PSmm classes (preventing `TypeNotFound` noise), enforces the coverage baseline stored in `tests/.coverage-baseline.json`, and captures diagnostics under `tests/.coverage-debug.txt` whenever coverage paths change.
 
+Helper sourcing stays intentional: dot-source the specific support files you need (commonly `tests/Support/TestConfig.ps1`, `tests/Support/Stub-WritePSmmLog.ps1`, or filesystem/test double helpers). `tests/Support/Import-AllTestHelpers.ps1` remains available when you explicitly want every helper plus the PSmm module, but because it carries extra side effects it should only be used when that is desired—most suites keep the imports explicit so `InModuleScope` blocks stay deterministic.
+
+Harness pauses now honor `MEDIA_MANAGER_SKIP_READKEY`. CI and any local automation that sets the variable to `1` before calling `tests/Invoke-Pester.ps1` skip the final `Read-Host` prompts, while the default local invocation still pauses so you can review output.
+
 Add new test files under the matching `tests/Modules/<ModuleName>` path. Keep one `Describe` block per function family and narrow `Context` blocks for edge cases.
 
 ### Test Environment Isolation
@@ -64,9 +68,9 @@ Running `./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer` automatically invokes 
 - Expand any relevant doc section (`architecture.md`, `modules.md`, `install.md`, etc.).
 - If adding configuration keys, update `configuration.md` and note how to export them safely via `Export-SafeConfiguration`.
 - Mention CI/security workflow impacts (new jobs, prerequisites) so GitHub users know which checks run.
- - When moving internal helpers, prefer `src/Modules/<Module>/Private/` over `Public/`. Example: `Show-InvalidSelection` moved to `PSmm.UI/Private` and is no longer a public surface.
- - Tests should source helpers from `tests/Support/TestConfig.ps1` (the consolidated path), not `tests/Helpers/TestConfig.ps1`.
- - Bootstrap checks rely on `Confirm-PowerShell` during startup; ensure this file remains available under `PSmm/Private/Bootstrap/Confirm-PowerShell.ps1`.
+- When moving internal helpers, prefer `src/Modules/<Module>/Private/` over `Public/`. Example: `Show-InvalidSelection` moved to `PSmm.UI/Private` and is no longer a public surface.
+- Tests should source helpers from `tests/Support/TestConfig.ps1` (the consolidated path), not `tests/Helpers/TestConfig.ps1`.
+- Bootstrap checks rely on `Confirm-PowerShell` during startup; ensure this file remains available under `PSmm/Private/Bootstrap/Confirm-PowerShell.ps1`.
 
 ## Release Process (Proposed)
 

@@ -27,9 +27,10 @@ Use Conventional Commits for clarity:
 ## Testing Expectations
 
 - High-risk logic (configuration export, secret handling, plugin acquisition) must have coverage.
-- Use Support helpers for consistent mocking.
+- Use Support helpers for consistent mocking. Prefer dot-sourcing only the scripts you need (e.g., `tests/Support/TestConfig.ps1`, `tests/Support/Stub-WritePSmmLog.ps1`). `tests/Support/Import-AllTestHelpers.ps1` is still available when you explicitly want the bundled behavior, but it also imports the PSmm module, so keep individual imports for clarity inside `InModuleScope` blocks.
 - Add regression tests for every fixed bug.
-- Update `tests/.coverage-baseline.json` via `./tests/Update-CoverageBaseline.ps1` only after demonstrable improvements so the enforced baseline in CI stays accurate.
+- Update `tests/.coverage-baseline.json` via `./tests/Update-CoverageBaseline.ps1` only after demonstrable improvements so the enforced baseline in CI stays accurate (current floor is 69.5%).
+- Harness pause control: CI already sets `GITHUB_ACTIONS=true`, which skips the harness prompt. Locally, set `MEDIA_MANAGER_SKIP_READKEY=1` before invoking `tests/Invoke-Pester.ps1` if you want the script to exit immediately after reporting results; otherwise it pauses so you can review the output before exiting.
 
 ## PowerShell Practices
 

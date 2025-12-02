@@ -7,7 +7,28 @@ All notable changes to this project will be documented in this file.
 <!-- markdownlint-disable MD024 -->
 ## [Unreleased Details]
 
+### Added
+
+- **Documentation**: Added comprehensive container deployment guide (`docs/deployment.md`) covering Docker, Compose, Kubernetes hardening, security scanning, and CI/CD integration
+- **Testing**: Added `GlobalFilesystemGuards.ps1` helper to prevent accidental writes to system paths during tests
+- **Testing**: Added `Resolve-ToolCommandPath.ps1` private helper for tool command resolution with caching
+- **Testing**: Added consolidated `Resolve-CommandPath.Tests.ps1` merging plugin and tool command path tests
+- **Testing**: Added `Write-PSmmLog.Uninitialized.Tests.ps1` for logging edge case coverage
+- **Testing**: Added organized `tests/Modules/PSmm/Storage/` directory with `Confirm-Storage.Tests.ps1` and `Get-StorageDrive.Tests.ps1`
+
 ### Changed
+
+- **Testing**: Improved Invoke-Pester.ps1 with smarter CI detection and conditional read-key pauses via `Test-IsCiContext` and `Test-ShouldPauseForExit`
+- **Testing**: Enhanced Initialize-Logging.Tests.ps1 with comprehensive error branch coverage and deterministic test cases
+- **Testing**: Improved Import-AllTestHelpers.ps1 to load PSmm.Logging module and filesystem guards automatically
+- **Testing**: Expanded coverage exclusions to skip public UI/Plugin/Project surfaces and Bootstrap functions
+- **Coverage**: Increased line coverage from 68.76% to 68.77% (2571 commands analyzed, 1768 executed)
+
+### Removed
+
+- **Testing**: Removed duplicate test files: `Resolve-PluginCommandPath.Tests.ps1`, old `Confirm-Storage.Tests.ps1`, `Get-StorageDrive.Tests.ps1`, and `Write-PSmmLog.Tests.ps1` (replaced by consolidated/organized versions)
+
+### Changed (Previous)
 
 - **CI/Codacy**: Ensure `./.codacy/cli.sh` is executable in workflow to prevent `Permission denied` on Linux runners and restore SARIF uploads.
 - **CI/Codacy**: Guard SARIF upload steps using `hashFiles(...)` so the job does not fail when `results.sarif` (or `markdownlint.sarif`) is not produced; fixes "Path does not exist: results.sarif" in GitHub Actions.
@@ -19,12 +40,12 @@ All notable changes to this project will be documented in this file.
 - **Configuration**: Added `exclude_paths` to `.codacy/codacy.yaml` mirroring `.semgrepignore` patterns for consistent exclusions across all tools.
 - **Configuration**: Cleaned `.markdownlint.yml` to contain only rule toggles; moved glob patterns to `.markdownlint-cli2.jsonc`.
 
-### Added (Details)
+### Added (Details - Previous)
 
 - **CI/Linting**: Added `.markdownlint-cli2.jsonc` to configure markdownlint-cli2 with glob patterns and SARIF formatter output.
 - **CI/Security**: Added separate SARIF upload step for markdownlint results in Codacy workflow.
 
-### Removed
+### Removed (Previous)
 
 - **Configuration**: Removed legacy root `.codacy.yml` (replaced by `.codacy/codacy.yaml` for CLI v2).
 
