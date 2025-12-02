@@ -9,6 +9,7 @@ Welcome to the PSmediaManager documentation portal. This site expands on the hig
 - [Modules](modules.md)
 - [Development](development.md)
 - [Architecture](architecture.md)
+- [Deployment](deployment.md) – Container deployment, security hardening, CI/CD integration
 
 ## What’s New (0.9.0)
 
