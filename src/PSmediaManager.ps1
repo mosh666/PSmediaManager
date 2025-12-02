@@ -436,7 +436,7 @@ finally {
 
     # Save runtime configuration (sanitized for security)
     if (Get-Command Export-SafeConfiguration -ErrorAction SilentlyContinue) {
-        $runConfigPath = Join-Path -Path $appConfig.Paths.Log -ChildPath "$($appConfig.InternalName)Run.psd1"
+        $runConfigPath = Join-Path -Path $appConfig.Paths.Log -ChildPath "$($appConfig.InternalName).Run.psd1"
         Write-Verbose "Saving configuration to: $runConfigPath"
         try {
             Export-SafeConfiguration -Configuration $appConfig -Path $runConfigPath -FileSystem $script:Services.FileSystem -ErrorAction Stop
