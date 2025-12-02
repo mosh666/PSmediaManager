@@ -7,6 +7,10 @@ All notable changes to this project will be documented in this file.
 <!-- markdownlint-disable MD024 -->
 ## [Unreleased Details]
 
+### Fixed
+
+- **Core**: Corrected run configuration filename format in `PSmediaManager.ps1` to include missing dot between `InternalName` and `Run` (e.g., `PSmm.Run.psd1` instead of `PSmmRun.psd1`)
+
 ### Added
 
 - **Documentation**: Added comprehensive container deployment guide (`docs/deployment.md`) covering Docker, Compose, Kubernetes hardening, security scanning, and CI/CD integration
