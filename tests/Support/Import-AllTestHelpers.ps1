@@ -22,6 +22,23 @@ if (Test-Path -Path $tc) { . $tc }
 $stub = Join-Path -Path $RepositoryRoot -ChildPath 'tests/Support/Stub-WritePSmmLog.ps1'
 if (Test-Path -Path $stub) { . $stub; Import-TestWritePSmmLogStub -RepositoryRoot $RepositoryRoot }
 
+# Global filesystem guards to prevent writes to C:\ during tests
+$guards = Join-Path -Path $RepositoryRoot -ChildPath 'tests/Support/GlobalFilesystemGuards.ps1'
+if (Test-Path -Path $guards) { . $guards; Register-GlobalFilesystemGuards | Out-Null }
+
+# Ensure PSmm.Logging module is available for tests that use InModuleScope
+$psmmLoggingManifest = Join-Path -Path $RepositoryRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
+$psmmLoggingRootModule = Join-Path -Path $RepositoryRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psm1'
+try {
+    if (-not (Get-Module -Name PSmm.Logging)) {
+        if (Test-Path -Path $psmmLoggingManifest) { Import-Module $psmmLoggingManifest -Force -ErrorAction Stop }
+        elseif (Test-Path -Path $psmmLoggingRootModule) { Import-Module $psmmLoggingRootModule -Force -ErrorAction Stop }
+    }
+}
+catch {
+    Write-Verbose ("[Import-AllTestHelpers] Failed to import PSmm.Logging module: " + $_.Exception.Message)
+}
+
 # Ensure PSmm module is available for tests (functions and private helpers)
 $psmmManifest = Join-Path -Path $RepositoryRoot -ChildPath 'src/Modules/PSmm/PSmm.psd1'
 $psmmRootModule = Join-Path -Path $RepositoryRoot -ChildPath 'src/Modules/PSmm/PSmm.psm1'
