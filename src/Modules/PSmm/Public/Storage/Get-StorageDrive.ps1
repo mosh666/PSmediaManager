@@ -52,6 +52,12 @@ function Get-StorageDrive {
     [CmdletBinding()] [OutputType([PSCustomObject[]],[object[]])]
     param()
 
+    $forceInlineEnumeration = $false
+    if ($env:MEDIA_MANAGER_TEST_FORCE_INLINE_STORAGE -eq '1') {
+        $forceInlineEnumeration = $true
+        Write-Verbose 'Get-StorageDrive: forcing inline enumeration via MEDIA_MANAGER_TEST_FORCE_INLINE_STORAGE.'
+    }
+
     # Allow tests (and non-Windows platforms) to short‑circuit via mocked Get-Command.
     if (-not (Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue)) {
         Write-Verbose 'Get-StorageDrive: CIM APIs unavailable; returning empty result.'
@@ -62,7 +68,7 @@ function Get-StorageDrive {
     # still prefer the service for consistency. Tests that mock Win32_* cmdlets will exercise
     # the inline implementation below, because mocks apply to the direct calls.
     $useInlineEnumeration = $true
-    if (Get-Command -Name 'Get-CimInstance' -ErrorAction SilentlyContinue) {
+    if (-not $forceInlineEnumeration -and (Get-Command -Name 'Get-CimInstance' -ErrorAction SilentlyContinue)) {
         # Heuristic: if class exists and no Pester mocks are detected for any of the core
         # cmdlets, we can delegate. Pester registers mocks as functions in the current scope;
         # we check for a script block source reference in command metadata.
@@ -126,11 +132,17 @@ function Get-StorageDrive {
                                 IsRemovable = [bool]$isRemovable
                             }
                         }
-                        catch { continue }
+                        catch {
+                            Write-Verbose "Get-StorageDrive: error processing logical disk '$($logicalDisk.DeviceID)': $_"
+                            continue
+                        }
                     }
                 }
             }
-            catch { continue }
+            catch {
+                Write-Verbose "Get-StorageDrive: error processing disk index '$($disk.Index)': $_"
+                continue
+            }
         }
         return $drives
     }

@@ -95,11 +95,33 @@ class AppPaths : IPathProvider {
             Write-Warning "Path calculations may be invalid. Verify installation layout."
         }
 
-        # Enforce runtime directories in the drive root, not the repository root
-        # Compute the drive root based on the provided runtime root path
-        $driveRoot = [Path]::GetPathRoot($resolvedRuntimeRoot)
+        # CRITICAL: Determine where to place runtime folders based on context
+        # - During TESTS: Use TEMP environment (TestDrive) to avoid polluting any drive
+        # - During PRODUCTION: Use drive root where PSmediaManager is located (e.g., D:\ for D:\PSmediaManager)
+        $isTestMode = $env:MEDIA_MANAGER_TEST_MODE -eq '1'
+        if ($isTestMode) {
+            # Test mode: Use TEMP environment to avoid creating folders on any real drive
+            $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::User)
+            if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::Process)
+            }
+            if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                $tempPath = [Path]::GetTempPath()
+            }
+            # If resolvedRuntimeRoot looks like a TestDrive path, use it directly; otherwise use temp
+            if ($resolvedRuntimeRoot -match 'TestDrive') {
+                $runtimeStorageRoot = $resolvedRuntimeRoot
+            } else {
+                $runtimeStorageRoot = [Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
+            }
+        } else {
+            # Production mode: Use drive root where PSmediaManager repository is located
+            # e.g., if repo is at D:\PSmediaManager, use D:\ for runtime folders
+            $driveRoot = [Path]::GetPathRoot($resolvedRuntimeRoot)
+            $runtimeStorageRoot = $driveRoot
+        }
 
-        $this.Root = $driveRoot
+        $this.Root = $runtimeStorageRoot
         $this.RepositoryRoot = $resolvedRepositoryRoot
 
         # Validate that .git exists in repository root when available

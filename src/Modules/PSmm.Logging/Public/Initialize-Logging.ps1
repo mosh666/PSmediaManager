@@ -28,6 +28,19 @@ Set-StrictMode -Version Latest
 
 #region ########## PUBLIC ##########
 
+function Set-PSmmRepositoryInstallationPolicy {
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact='Medium')]
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$InstallationPolicy
+    )
+
+    # Thin wrapper to make Set-PSRepository easy to mock in tests
+    if ($PSCmdlet.ShouldProcess("Repository '$Name'", "Set InstallationPolicy to '$InstallationPolicy'")) {
+        Set-PSRepository -Name $Name -InstallationPolicy $InstallationPolicy -ErrorAction Stop
+    }
+}
+
 function Initialize-Logging {
     [CmdletBinding()]
     param(
@@ -49,9 +62,19 @@ function Initialize-Logging {
         Write-Verbose 'ENTER Initialize-Logging'
         Write-Verbose 'Initializing logging system...'
 
-        # Basic structure validation to avoid hard dependency on specific class types
-        if (-not ($Config | Get-Member -Name 'Parameters' -ErrorAction SilentlyContinue) -or
-            -not ($Config | Get-Member -Name 'Logging' -ErrorAction SilentlyContinue)) {
+        # Basic structure validation supporting both PSObjects and IDictionary (hashtable) inputs
+        $hasParameters = $false
+        $hasLogging = $false
+        if ($Config -is [System.Collections.IDictionary]) {
+            try { $hasParameters = $Config.ContainsKey('Parameters') } catch { $hasParameters = $false }
+            try { $hasLogging    = $Config.ContainsKey('Logging')    } catch { $hasLogging    = $false }
+        }
+        else {
+            $hasParameters = [bool]($Config | Get-Member -Name 'Parameters' -ErrorAction SilentlyContinue)
+            $hasLogging    = [bool]($Config | Get-Member -Name 'Logging'    -ErrorAction SilentlyContinue)
+        }
+
+        if (-not $hasParameters -or -not $hasLogging) {
             throw "Invalid configuration object: missing 'Parameters' or 'Logging' members"
         }
 
@@ -185,7 +208,7 @@ function Initialize-Logging {
                 $psGallery = Get-PSRepository -Name 'PSGallery' -ErrorAction Stop
                 if ($psGallery.InstallationPolicy -ne 'Trusted') {
                     Write-Verbose 'PSGallery repository not trusted - marking as Trusted'
-                    Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted -ErrorAction Stop
+                    Set-PSmmRepositoryInstallationPolicy -Name 'PSGallery' -InstallationPolicy 'Trusted'
                 }
             }
             catch {

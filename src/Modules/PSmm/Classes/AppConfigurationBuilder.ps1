@@ -79,13 +79,23 @@ class AppConfigurationBuilder {
 
         $paths = $null
         if ($looksLikeRepoRoot) {
-            # In test mode, keep runtime root within test directory to avoid creating folders on system drive
+            # CRITICAL: Determine where to place runtime folders based on context
+            # - During TESTS: Use TEMP environment to avoid polluting any drive
+            # - During PRODUCTION: Use drive root where PSmediaManager is located
             $isTestMode = $env:MEDIA_MANAGER_TEST_MODE -eq '1'
             $runtimeRoot = if ($isTestMode) {
-                # Use the test root itself for runtime folders instead of drive root
-                $resolvedPath
+                # Test mode: Use TEMP environment to avoid creating folders on any real drive
+                $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::User)
+                if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                    $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::Process)
+                }
+                if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                    $tempPath = [System.IO.Path]::GetTempPath()
+                }
+                [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
             } else {
-                # In production, use drive root for runtime folders (PSmm.Log, PSmm.Plugins, PSmm.Vault)
+                # Production mode: Use drive root where PSmediaManager repository is located
+                # e.g., if repo is at D:\PSmediaManager, folders go to D:\PSmm.Log, D:\PSmm.Plugins, etc.
                 $driveRoot = [System.IO.Path]::GetPathRoot($resolvedPath)
                 if ([string]::IsNullOrWhiteSpace($driveRoot)) { $resolvedPath } else { $driveRoot }
             }
