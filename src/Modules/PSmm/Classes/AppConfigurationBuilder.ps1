@@ -82,19 +82,19 @@ class AppConfigurationBuilder {
             # CRITICAL: Determine where to place runtime folders based on context
             # - During TESTS: Use TEMP environment to avoid polluting any drive
             # - During PRODUCTION: Use drive root where PSmediaManager is located
-            
+
             # NOTE: PowerShell classes are compiled at module load time. After modifying this
             # file, you MUST restart PowerShell/VS Code to pick up changes. The test runner
             # caches class definitions and won't see updates until the session is restarted.
-            
+
             # Detect test mode via multiple signals to ensure robustness
             $isTestMode = $false
-            
+
             # Check explicit environment variable
             if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
                 $isTestMode = $true
             }
-            
+
             # Check if called from Pester by examining call stack
             if (-not $isTestMode) {
                 try {
@@ -108,9 +108,10 @@ class AppConfigurationBuilder {
                     }
                 } catch {
                     # Ignore errors in call stack inspection
+                    Write-Verbose "Unable to inspect call stack: $_"
                 }
             }
-            
+
             # Check for Pester module or preference variable
             if (-not $isTestMode) {
                 $pesterLoaded = Get-Module -Name Pester -ErrorAction SilentlyContinue
@@ -119,7 +120,7 @@ class AppConfigurationBuilder {
                     $isTestMode = $true
                 }
             }
-            
+
             $runtimeRoot = if ($isTestMode) {
                 # Test mode: Use TEMP environment to avoid creating folders on any real drive
                 $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::User)

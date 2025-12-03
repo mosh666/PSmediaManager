@@ -98,15 +98,15 @@ class AppPaths : IPathProvider {
         # CRITICAL: Determine where to place runtime folders based on context
         # - During TESTS: Use TEMP environment (TestDrive) to avoid polluting any drive
         # - During PRODUCTION: Use drive root where PSmediaManager is located (e.g., D:\ for D:\PSmediaManager)
-        
+
         # Detect test mode via multiple signals to ensure robustness
         $isTestMode = $false
-        
+
         # Check explicit environment variable
         if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
             $isTestMode = $true
         }
-        
+
         # Check if called from Pester by examining call stack
         if (-not $isTestMode) {
             try {
@@ -120,9 +120,10 @@ class AppPaths : IPathProvider {
                 }
             } catch {
                 # Ignore errors in call stack inspection
+                Write-Verbose "Unable to inspect call stack: $_"
             }
         }
-        
+
         # Check for Pester module or preference variable
         if (-not $isTestMode) {
             $pesterLoaded = Get-Module -Name Pester -ErrorAction SilentlyContinue
@@ -131,7 +132,7 @@ class AppPaths : IPathProvider {
                 $isTestMode = $true
             }
         }
-        
+
         if ($isTestMode) {
             # Test mode: Use TEMP environment to avoid creating folders on any real drive
             $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::User)
