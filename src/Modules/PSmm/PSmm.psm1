@@ -181,6 +181,7 @@ Export-ModuleMember -Function @(
     'Test-DuplicateSerial',
     'Show-StorageInfo',
     'Export-SafeConfiguration',
+    'Get-PSmmHealth',
     # KeePassXC Secret Management Functions
     'Get-KeePassCli',
     'Get-SystemSecret',

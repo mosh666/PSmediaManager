@@ -49,11 +49,15 @@ function Get-PSmmHealth {
         }
         # PowerShell version compliance
         $currentPs = $PSVersionTable.PSVersion
-        $requiredPs = [version]((($requirements.PowerShell.VersionMinimum) -as [string]) ?? '7.5.4')
+        $requiredPs = if ($requirements -and $requirements.PowerShell -and $requirements.PowerShell.VersionMinimum) {
+            [version]$requirements.PowerShell.VersionMinimum
+        } else {
+            [version]'7.5.4'
+        }
         $psOk = $currentPs -ge $requiredPs
         # Module checks
         $modules = @()
-        if ($requirements.PowerShell.Modules) {
+        if ($requirements -and $requirements.PowerShell -and $requirements.PowerShell.Modules) {
             foreach ($m in $requirements.PowerShell.Modules) {
                 $name = $m.Name
                 $loaded = Get-Module -Name $name -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
@@ -92,12 +96,31 @@ function Get-PSmmHealth {
         if ($Config -and $Config.Storage) {
             foreach ($sg in $Config.Storage.Keys) {
                 $group = $Config.Storage[$sg]
-                $master = $group.Master
-                $backups = $group.Backup
+                $master = if ($group.PSObject.Properties['Master']) { $group.Master } else { $null }
+                $backups = if ($group.PSObject.Properties['Backup']) { $group.Backup } else { $null }
+
+                $masterCount = 0
+                if ($master) {
+                    $masterCount = if ($master -is [hashtable] -or $master.PSObject.Properties['Keys']) {
+                        $master.Keys.Count
+                    } else {
+                        0
+                    }
+                }
+
+                $backupCount = 0
+                if ($backups) {
+                    $backupCount = if ($backups -is [hashtable] -or $backups.PSObject.Properties['Keys']) {
+                        $backups.Keys.Count
+                    } else {
+                        0
+                    }
+                }
+
                 $storage += [pscustomobject]@{
                     Group = $sg
-                    MasterDrives = if ($master) { $master.Keys.Count } else { 0 }
-                    BackupDrives = if ($backups) { $backups.Keys.Count } else { 0 }
+                    MasterDrives = $masterCount
+                    BackupDrives = $backupCount
                 }
             }
         }
@@ -134,6 +157,7 @@ function Get-PSmmHealth {
         return $result
     }
     catch {
-        Write-Error "Failed to build health summary: $($_.Exception.Message)"
+        Write-Warning "Failed to build health summary: $($_.Exception.Message)"
+        return $null
     }
 }

@@ -467,10 +467,10 @@ finally {
             Write-PSmmLog -Level NOTICE -Context "Stop $($appConfig.DisplayName)" -Message "########## Stopping $($appConfig.DisplayName) [$exitStatus] ##########" -File
 
             # Persist health summary (with baseline diff if available)
-            if (Get-Command -Name Get-PSmmHealth -ErrorAction SilentlyContinue) {
+            if ($null -ne (Get-Command -Name Get-PSmmHealth -ErrorAction SilentlyContinue)) {
                 try {
                     $prev = if (Get-Variable -Name PSmm_PluginBaseline -Scope Script -ErrorAction SilentlyContinue) { $script:PSmm_PluginBaseline } else { $null }
-                    $health = Get-PSmmHealth -Config $appConfig -Run $Run -PreviousPlugins $prev
+                    $health = Get-PSmmHealth -Config $appConfig -PreviousPlugins $prev
                     if ($health) {
                         $pluginChanges = @($health.Plugins | Where-Object { $_.Changed }).Count
                         $upgrades = @($health.Plugins | Where-Object { $_.Upgraded }).Count

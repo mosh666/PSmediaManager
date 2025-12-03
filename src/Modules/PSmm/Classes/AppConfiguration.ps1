@@ -98,7 +98,40 @@ class AppPaths : IPathProvider {
         # CRITICAL: Determine where to place runtime folders based on context
         # - During TESTS: Use TEMP environment (TestDrive) to avoid polluting any drive
         # - During PRODUCTION: Use drive root where PSmediaManager is located (e.g., D:\ for D:\PSmediaManager)
-        $isTestMode = $env:MEDIA_MANAGER_TEST_MODE -eq '1'
+        
+        # Detect test mode via multiple signals to ensure robustness
+        $isTestMode = $false
+        
+        # Check explicit environment variable
+        if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
+            $isTestMode = $true
+        }
+        
+        # Check if called from Pester by examining call stack
+        if (-not $isTestMode) {
+            try {
+                $callStack = Get-PSCallStack
+                $isPesterContext = $callStack | Where-Object {
+                    $_.Command -match 'Invoke-Pester|Should|It|Describe|Context|BeforeAll|AfterAll' -or
+                    $_.ScriptName -match '\.Tests\.ps1$'
+                }
+                if ($isPesterContext) {
+                    $isTestMode = $true
+                }
+            } catch {
+                # Ignore errors in call stack inspection
+            }
+        }
+        
+        # Check for Pester module or preference variable
+        if (-not $isTestMode) {
+            $pesterLoaded = Get-Module -Name Pester -ErrorAction SilentlyContinue
+            $pesterPref = Get-Variable -Name 'PesterPreference' -Scope Global -ErrorAction SilentlyContinue
+            if ($pesterLoaded -or $pesterPref) {
+                $isTestMode = $true
+            }
+        }
+        
         if ($isTestMode) {
             # Test mode: Use TEMP environment to avoid creating folders on any real drive
             $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::User)
@@ -117,8 +150,21 @@ class AppPaths : IPathProvider {
         } else {
             # Production mode: Use drive root where PSmediaManager repository is located
             # e.g., if repo is at D:\PSmediaManager, use D:\ for runtime folders
+            # CRITICAL: NEVER use C:\ as runtime root - always fallback to TEMP if that happens
             $driveRoot = [Path]::GetPathRoot($resolvedRuntimeRoot)
-            $runtimeStorageRoot = $driveRoot
+            if ([string]::IsNullOrWhiteSpace($driveRoot) -or $driveRoot -ieq 'C:\') {
+                # Fallback to TEMP for safety (prevents polluting C:\ system drive)
+                $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::User)
+                if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                    $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::Process)
+                }
+                if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                    $tempPath = [Path]::GetTempPath()
+                }
+                $runtimeStorageRoot = [Path]::Combine($tempPath, 'PSmediaManager', 'Runtime')
+            } else {
+                $runtimeStorageRoot = $driveRoot
+            }
         }
 
         $this.Root = $runtimeStorageRoot

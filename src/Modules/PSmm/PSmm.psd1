@@ -55,6 +55,7 @@
         'Test-DuplicateSerial'
         'Show-StorageInfo'
         'Export-SafeConfiguration'
+        'Get-PSmmHealth'
         # KeePassXC Secret Management Functions
         'Get-SystemSecret'
         'Initialize-SystemVault'
