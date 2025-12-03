@@ -1,5 +1,14 @@
 # PSmediaManager
 
+## Latest Changes
+
+- Updated core modules: AppConfiguration, AppConfigurationBuilder
+- Improved health checks and main script
+- Enhanced test coverage files
+
+See CHANGELOG.md for details.
+# PSmediaManager
+
 Portable, modular PowerShell-based media management application. PSmediaManager orchestrates external tooling (digiKam, FFmpeg, ImageMagick, MariaDB, ExifTool, KeePassXC, MKVToolNix, Git utilities) via a plugin layer while providing a safe configuration system, structured logging, project management, and an interactive console UI.
 
 [![CI](https://github.com/mosh666/PSmediaManager/actions/workflows/ci.yml/badge.svg)](https://github.com/mosh666/PSmediaManager/actions/workflows/ci.yml)

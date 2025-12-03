@@ -1,3 +1,18 @@
+- Updated AppConfiguration and AppConfigurationBuilder
+- Improved PSmm.psd1 and PSmm.psm1
+- Enhanced Get-PSmmHealth
+- Updated main script and test coverage files
+# PSmediaManager Changelog
+
+## [Unreleased]
+- Updated AppConfiguration and AppConfigurationBuilder
+- Improved PSmm.psd1 and PSmm.psm1
+- Enhanced Get-PSmmHealth
+- Updated main script and test coverage files
+- Updated AppConfiguration and AppConfigurationBuilder
+- Improved PSmm.psd1 and PSmm.psm1
+- Enhanced Get-PSmmHealth
+- Updated main script and test coverage files
 # Changelog
 
 <!-- markdownlint-disable MD024 -->
