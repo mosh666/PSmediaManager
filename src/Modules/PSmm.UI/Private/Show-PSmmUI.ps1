@@ -130,7 +130,7 @@ function Show-Header {
 
     # Display current project information if available and ShowProject is enabled
     if ($ShowProject -and $Config.Projects.ContainsKey('Current') -and $Config.Projects.Current.ContainsKey('Name')) {
-        Write-Output ''
+        Write-Host ''
 
         # Get project name
         $CurrentProjectName = $Config.Projects.Current.Name
@@ -213,7 +213,7 @@ function Show-Header {
     }
     elseif (-not [string]::IsNullOrWhiteSpace($ProjectName)) {
         # Fallback to legacy parameter if no current project is set
-        Write-Output ''
+        Write-Host ''
         $TitleColumns = @(
             @{
                 Text = "$($Title): $ProjectName"
@@ -315,7 +315,7 @@ function Show-MenuMain {
         }
     )
     Format-UI -Columns $FilterOptionColumns -Width $Config.UI.Width -Config $Config
-    Write-Output ''
+    Write-Host ''
 
     # Display current filter status
     if (-not [string]::IsNullOrWhiteSpace($StorageGroup)) {
@@ -329,7 +329,7 @@ function Show-MenuMain {
             }
         )
         Format-UI -Columns $FilterColumns -Width $Config.UI.Width -Config $Config
-        Write-Output ''
+        Write-Host ''
     }
 
     # Action buttons
@@ -349,7 +349,7 @@ function Show-MenuMain {
 
     )
     Format-UI -Columns $Columns -Width $Config.UI.Width -Config $Config
-    Write-Output ''
+    Write-Host ''
 
     Write-PSmmLog -Level NOTICE -Context 'Show-Projects' -Message 'Load available projects' -File
     if ($null -eq $Projects) {
@@ -397,7 +397,7 @@ function Show-MenuMain {
                 }
             )
             Format-UI -Columns $StorageGroupColumns -Width $Config.UI.Width -Config $Config
-            Write-Output ''
+            Write-Host ''
         }
 
         # Collect all drives (Master and Backup) for this storage group
@@ -586,7 +586,7 @@ function Show-MenuMain {
             }
         }
 
-        Write-Output ''
+        Write-Host ''
     }
 }
 
@@ -783,7 +783,7 @@ function Show-UnifiedDrive {
         }
     )
     Format-UI -Columns $ProjectsColumns -Width $Config.UI.Width -Config $Config
-    Write-Output ''
+    Write-Host ''
 
     # Display projects
     $Count = 0
@@ -841,7 +841,7 @@ function Show-UnifiedDrive {
     }
 
     Write-PSmmLog -Level NOTICE -Context 'Show-UnifiedDrive' -Message "Displayed $Count projects for $DriveType : $DriveLabel" -File
-    Write-Output ''
+    Write-Host ''
 }
 
 #endregion ########## Main Menu ##########

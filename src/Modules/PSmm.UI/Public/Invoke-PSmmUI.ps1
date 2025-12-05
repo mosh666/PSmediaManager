@@ -160,7 +160,7 @@ function Invoke-PSmmUI {
             }
             if ($Config.Parameters.Debug -or $Config.Parameters.Dev) { '1234567890' * 10 } # Visual separator for debugging
 
-            Write-Output ''
+            Write-Host ''
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message 'Awaiting user selection' -File
             }
@@ -186,7 +186,7 @@ function Invoke-PSmmUI {
                 }
                 'S' {
                     # Storage Group selector
-                    Write-Output ''
+                    Write-Host ''
                     Write-PSmmHost 'Available Storage Groups:' -ForegroundColor Cyan
 
                     # Display each storage group with Master drive info
@@ -205,7 +205,7 @@ function Invoke-PSmmUI {
                     }
 
                     Write-PSmmHost '  [A] Show All' -ForegroundColor Cyan
-                    Write-Output ''
+                    Write-Host ''
                     $GroupSelection = Read-Host 'Select Storage Group'
 
                     if ($GroupSelection -eq 'A' -or [string]::IsNullOrWhiteSpace($GroupSelection)) {
@@ -450,19 +450,19 @@ function Invoke-SystemInfoMenu {
         Show-Header -Config $Config -ShowStorageErrors $false
         Show-Menu_SysInfo -Config $Config
 
-        Write-Output ''
+        Write-Host ''
         $SubSelection = Read-Host 'Please make a selection'
 
         switch ($SubSelection) {
             '1' {
                 # Show Storage
-                Write-Output ''
+                Write-Host ''
                 Show-StorageInfo -Config $Config -ShowDetails
                 Pause
             }
             '2' {
                 # Show Runtime Config
-                Write-Output ''
+                Write-Host ''
                 try {
                     # Use injected services for path/content operations
                     $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -536,7 +536,7 @@ function Invoke-ProjectMenu {
             Pause
         }
 
-        Write-Output ''
+        Write-Host ''
         $SubSelection = Read-Host 'Please make a selection'
 
         # Check for running processes to control menu actions
@@ -569,7 +569,7 @@ function Invoke-ProjectMenu {
                         Start-PSmmdigiKam -Config $Config -FileSystem $FileSystem -PathProvider $PathProvider -Process $Process
                     }
                     else {
-                        Write-Output ''
+                        Write-Host ''
                         Write-Warning 'Start digiKam function is not yet implemented'
                     }
                     Pause
@@ -588,7 +588,7 @@ function Invoke-ProjectMenu {
                             Stop-PSmmdigiKam -Config $Config -FileSystem $FileSystem -PathProvider $PathProvider -Process $Process
                         }
                         else {
-                            Write-Output ''
+                            Write-Host ''
                             Write-Warning 'Stop digiKam function is not yet implemented'
                         }
                         Pause

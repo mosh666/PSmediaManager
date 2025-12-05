@@ -375,7 +375,8 @@ class AppConfigurationBuilder {
         }
 
         try {
-            $storageContent = Get-Content -Path $storagePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            # Storage definitions are PowerShell data files (PSD1), not JSON
+            $storageContent = Import-PowerShellDataFile -Path $storagePath -ErrorAction Stop
         }
         catch {
             throw [ConfigurationException]::new("Failed to load storage file '$storagePath': $_", $storagePath, $_.Exception)

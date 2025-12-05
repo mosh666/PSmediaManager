@@ -514,7 +514,7 @@ finally {
     }
 
     # Display exit message while module helpers are still available
-    Write-Output ''
+    Write-Host ''
     if ($exitCode -eq 0) {
         Write-PSmmHost "$($appConfig.DisplayName) exited successfully.`n" -ForegroundColor Green
     }

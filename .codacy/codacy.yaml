@@ -21,6 +21,6 @@ exclude_paths:
     - "**/Thumbs.db"
 
 tools:
-    - name: pmd
-    - name: semgrep
-    - name: trivy
+    - pmd
+    - semgrep
+    - trivy
