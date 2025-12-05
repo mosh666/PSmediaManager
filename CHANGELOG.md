@@ -20,6 +20,9 @@ All notable changes to this project will be documented in this file.
 - **Testing**: Added consolidated `Resolve-CommandPath.Tests.ps1` merging plugin and tool command path tests
 - **Testing**: Added `Write-PSmmLog.Uninitialized.Tests.ps1` for logging edge case coverage
 - **Testing**: Added organized `tests/Modules/PSmm/Storage/` directory with `Confirm-Storage.Tests.ps1` and `Get-StorageDrive.Tests.ps1`
+- **Environment**: Added `AddPathEntries()` and `RemovePathEntries()` methods to `IEnvironmentService` interface for batch PATH operations
+- **Environment**: Added optional `$persistUser` parameter to `AddPathEntry()` and `RemovePathEntry()` methods for controlling User-level PATH persistence
+- **Bootstrap**: Enhanced error reporting in `Invoke-PSmm` with stack traces and position information for better diagnostics
 
 ### Security / Container (Unreleased)
 
@@ -27,16 +30,22 @@ All notable changes to this project will be documented in this file.
 - Documented image build/tag/push flow in `docs/container-push.md`
 - Verified Codacy/Trivy scan clean on pinned image (alpine 3.20.5)
 
-### Changed
+### Changed (Unreleased)
 
 - **Testing**: Improved Invoke-Pester.ps1 with smarter CI detection and conditional read-key pauses via `Test-IsCiContext` and `Test-ShouldPauseForExit`
 - **Testing**: Enhanced Initialize-Logging.Tests.ps1 with comprehensive error branch coverage and deterministic test cases
 - **Testing**: Improved Import-AllTestHelpers.ps1 to load PSmm.Logging module and filesystem guards automatically
 - **Testing**: Expanded coverage exclusions to skip public UI/Plugin/Project surfaces and Bootstrap functions
 - **Coverage**: Increased line coverage from 68.76% to 68.77% (2571 commands analyzed, 1768 executed)
-- **Plugins/ENV**: RegisterToPath now prepends plugin dirs to both User and Process PATH scopes, tracks pre-existing entries, and cleans them on shutdown unless `-Dev` preserves them.
+- **Environment**: Refactored `EnvironmentService` to use batch PATH operations with `HashSet` for efficient deduplication and ordering
+- **Environment**: Improved PATH management with separate Process and User scope handling - Process scope always updated, User scope only when `$persistUser` is true
+- **Environment**: Enhanced `Register-PluginsToPATH` to batch-register all plugin directories in a single operation instead of multiple sequential calls
+- **Environment**: Modified `-Dev` mode to persist PATH changes to User scope, allowing plugin commands to remain available after session exit
+- **Plugins**: Changed `Register-PluginsToPATH` to check for existing PATH entries upfront using a `HashSet` for O(1) lookups, avoiding redundant registrations
+- **Core**: Updated `PSmediaManager.ps1` cleanup logic to use batch `RemovePathEntries()` for efficient PATH restoration on exit (non-Dev mode)
+- **Secrets**: Updated `Get-SystemSecret` and related functions to use non-persistent PATH additions (`$persistUser = $false`) for KeePassXC CLI discovery
 
-### Removed
+### Removed (Unreleased)
 
 - **Testing**: Removed duplicate test files: `Resolve-PluginCommandPath.Tests.ps1`, old `Confirm-Storage.Tests.ps1`, `Get-StorageDrive.Tests.ps1`, and `Write-PSmmLog.Tests.ps1` (replaced by consolidated/organized versions)
 

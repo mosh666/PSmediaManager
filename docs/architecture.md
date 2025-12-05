@@ -89,6 +89,33 @@ Paths are derived from configuration objects to support relocating the repo or r
 5. Commands are validated (hash/exists) before being registered for use.
 6. Plugin start/stop helpers (e.g., `Start-PSmmdigiKam`) initialize environment variables and launch processes with explicit working directories.
 
+## Environment & PATH Management
+
+PSmediaManager implements intelligent PATH management through the `EnvironmentService` to make plugin tools available without polluting the system:
+
+**Batch Operations**: Plugin directories are registered to PATH in a single batch operation using `AddPathEntries()` instead of multiple sequential calls. This improves performance and ensures atomic updates with proper ordering.
+
+**Scope Control**: PATH modifications support two scopes:
+- **Process Scope**: Always updated for immediate command availability in the current session
+- **User Scope**: Optionally persisted when `$persistUser = true`, allowing commands to remain available after session exit
+
+**Development Mode**: When PSmediaManager is launched with `-Dev`:
+- Plugin PATH entries persist to User scope (`$persistUser = true`)
+- Tools remain available in new terminal sessions without re-launching PSmediaManager
+- Useful for development workflows and debugging
+
+**Normal Mode**: In standard operation:
+- Plugin PATH entries are Process-scoped only (`$persistUser = false`)
+- All registered paths are automatically cleaned up on application exit
+- Ensures zero host system pollution
+
+**Deduplication**: The service uses `HashSet<string>` for O(1) lookups and prevents duplicate entries across multiple registration attempts. Existing PATH entries are detected upfront to avoid redundant operations.
+
+**Implementation Details**:
+- `Register-PluginsToPATH` collects all plugin directories, checks for pre-existing entries, and batch-registers new paths
+- `BootstrapServices.ps1` provides early environment service access before module imports
+- Cleanup logic in `PSmediaManager.ps1` uses `RemovePathEntries()` for efficient batch removal
+
 ## Configuration & Secrets
 
 - `AppConfigurationBuilder` pulls defaults, environment info (drive roots), and user overrides (future persisted files).

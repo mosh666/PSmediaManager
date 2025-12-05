@@ -42,6 +42,31 @@ Harness pauses now honor `MEDIA_MANAGER_SKIP_READKEY`. CI and any local automati
 
 Add new test files under the matching `tests/Modules/<ModuleName>` path. Keep one `Describe` block per function family and narrow `Context` blocks for edge cases.
 
+### Development Mode (-Dev)
+
+When developing PSmediaManager, use the `-Dev` parameter to enable persistent PATH changes:
+
+```pwsh
+./Start-PSmediaManager.ps1 -Dev
+```
+
+**Development Mode Behavior**:
+- Plugin directories are registered to both Process and User PATH scopes
+- PATH entries persist after application exit, remaining available in new terminal sessions
+- Useful for iterative development where you need plugin tools accessible without re-launching
+- Eliminates the need to manually configure PATH for testing plugin integrations
+
+**Normal Mode** (without `-Dev`):
+- Plugin directories are registered to Process PATH only
+- All PATH modifications are automatically cleaned up on exit
+- Ensures zero pollution of the host system's environment
+- Recommended for production usage and CI testing
+
+**Testing Implications**:
+- Tests always run in isolated mode with temporary PATH modifications
+- Test mode (`MEDIA_MANAGER_TEST_MODE=1`) ensures PATH cleanup regardless of `-Dev`
+- When testing PATH registration logic, mock the `EnvironmentService` to verify behavior without affecting the host
+
 ### Test Environment Isolation
 
 Tests run in an isolated environment with the `MEDIA_MANAGER_TEST_MODE` environment variable set to `'1'`. This ensures:

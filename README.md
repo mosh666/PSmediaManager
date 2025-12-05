@@ -52,11 +52,14 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 - Secret management powered by KeePassXC CLI helpers.
 - Pester test suite & coverage baseline scripts.
 - PowerShell 7.5.4+ only (Core, cross-platform focus).
+- Intelligent PATH management with batch operations and optional User-level persistence.
 
 ### New in 0.9.0
 
 - Health overview: `Get-PSmmHealth` summarizes environment status (PowerShell version, modules, plugins, storage, vault). Use `-Format` for readable output.
 - Early bootstrap services (`src/Core/BootstrapServices.ps1`) provide path, filesystem, environment, and process helpers before module import.
+- Enhanced environment service with batch PATH operations (`AddPathEntries`, `RemovePathEntries`) for efficient plugin registration.
+- Development mode (`-Dev`) now persists PATH changes to User scope, keeping plugin tools available after session exit.
 
 ## Quick Start
 
@@ -225,8 +228,8 @@ Tip: Run `Confirm-Plugins` after pulling new changes to ensure newly added tools
 The repository is designed for side-by-side usage without system-level installation:
 
 - **External-drive first:** PSmediaManager is intended to live on a removable/external drive so it can travel with your media projects. Clone or extract the repo directly onto the target portable volume and run it from there to keep host machines clean.
-- Opt-in PATH registration: plugins flagged `RegisterToPath` prepend their install dirs to User + Process PATH and are cleaned up on exit (except when `-Dev` preserves them). Default flows still resolve tools via explicit paths.
-- All writable state lives under a designated root (projects, logs, temp, config snapshots).
+- **Smart PATH management:** Plugins flagged `RegisterToPath` are batch-registered to the Process PATH during startup for immediate availability. In normal mode, these entries are automatically cleaned up on exit. In development mode (`-Dev`), changes persist to the User PATH scope for convenience across sessions.
+- **Minimal host impact:** All writable state lives under a designated root (projects, logs, temp, config snapshots). No system-wide registry changes or global configuration modifications.
 - To "move" PSmediaManager: copy the entire folder to another location or machine; ensure external tool archives are re-confirmed if paths change.
 
 Optional: Add a wrapper script or shortcut pointing to `Start-PSmediaManager.ps1` for convenience.
