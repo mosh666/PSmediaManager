@@ -382,8 +382,8 @@ class AppConfigurationBuilder {
             throw [ConfigurationException]::new("Storage file is invalid. Expected a hashtable with 'Storage' root.", $storagePath)
         }
 
-        foreach ($groupKey in $storageData.Storage.Keys) {
-            $groupTable = $storageData.Storage[$groupKey]
+        foreach ($groupKey in $storageContent.Storage.Keys) {
+            $groupTable = $storageContent.Storage[$groupKey]
             $group = [StorageGroupConfig]::new([string]$groupKey)
             if ($groupTable.ContainsKey('DisplayName')) { $group.DisplayName = $groupTable.DisplayName }
 

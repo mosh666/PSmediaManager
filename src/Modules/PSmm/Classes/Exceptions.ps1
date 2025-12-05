@@ -277,8 +277,9 @@ class LoggingException : MediaManagerException {
         $this.RecoverySuggestion = "Verify log path is writable: $logPath"
     }
 
-    LoggingException([string]$message, [Exception]$innerException) : base($message, 'Logging', $innerException) {
-        $this.RecoverySuggestion = 'Check logging configuration and file system permissions.'
+    LoggingException([string]$message, [string]$logPath, [Exception]$innerException) : base($message, 'Logging', $innerException) {
+        $this.LogPath = $logPath
+        $this.RecoverySuggestion = "Check logging configuration and file system permissions at: $logPath"
     }
 }
 
