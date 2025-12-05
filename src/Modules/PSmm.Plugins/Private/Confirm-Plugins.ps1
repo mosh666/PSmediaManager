@@ -226,6 +226,14 @@ function Register-PluginsToPATH {
             -Message "Found $($pluginGroups.Count) plugin groups to process" -Console -File
 
         $registeredDirs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $pathsToRegister = [System.Collections.Generic.List[string]]::new()
+        $persistUserPath = [bool]($Config.Parameters -and $Config.Parameters.Dev)
+
+        $existingPathEntries = $Environment.GetPathEntries()
+        $pathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $existingPathEntries) {
+            $pathSet.Add($entry) | Out-Null
+        }
 
         foreach ($group in $pluginGroups) {
             try {
@@ -304,18 +312,18 @@ function Register-PluginsToPATH {
                             $Config.AddedPathEntries = $pathEntries.ToArray()
                         }
 
-                        $currentPath = $Environment.GetVariable('PATH')
-                        if ($currentPath -like "*${resolvedDir}*") {
+                        if ($pathSet.Contains($resolvedDir)) {
                             Write-Verbose "$resolvedDir already in PATH - tracked for cleanup"
                             continue
                         }
 
-                        $Environment.AddPathEntry($resolvedDir)
+                        $pathsToRegister.Add($resolvedDir)
+                        $pathSet.Add($resolvedDir) | Out-Null
                         $registeredDirs.Add($resolvedDir) | Out-Null
 
-                        Write-Verbose "Registered $($plugin.Name) to PATH: $resolvedDir"
+                        Write-Verbose "Queued $($plugin.Name) for PATH registration: $resolvedDir"
                         Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
-                            -Message "Registered $($plugin.Name) to PATH: $resolvedDir" -Console -File
+                            -Message "Queued $($plugin.Name) for PATH registration: $resolvedDir" -Console -File
                     }
                     catch {
                         Write-Verbose "Failed to register plugin $($plugin.Name) to PATH: $_"
@@ -329,6 +337,11 @@ function Register-PluginsToPATH {
                 Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
                     -Message "Failed to process plugin group $($group.Name): $_" -Console -File
             }
+        }
+
+        if ($pathsToRegister.Count -gt 0) {
+            $Environment.AddPathEntries($pathsToRegister.ToArray(), $persistUserPath)
+            Write-Verbose "Registered $($pathsToRegister.Count) new PATH entries in batch"
         }
 
         if ($registeredDirs.Count -gt 0) {

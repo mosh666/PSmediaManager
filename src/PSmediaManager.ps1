@@ -492,15 +492,8 @@ finally {
     if (-not $Dev -and $appConfig.AddedPathEntries -and $appConfig.AddedPathEntries.Count -gt 0) {
         Write-Verbose "Cleaning up $($appConfig.AddedPathEntries.Count) PATH entries (non-Dev mode)"
         try {
-            foreach ($pathEntry in $appConfig.AddedPathEntries) {
-                try {
-                    $script:Services.Environment.RemovePathEntry($pathEntry)
-                    Write-Verbose "Removed from PATH: $pathEntry"
-                }
-                catch {
-                    Write-Verbose "Failed to remove PATH entry '$pathEntry': $_"
-                }
-            }
+            $script:Services.Environment.RemovePathEntries($appConfig.AddedPathEntries, $false)
+            Write-Verbose "Removed PATH entries: $($appConfig.AddedPathEntries -join ', ')"
             Write-PSmmLog -Level NOTICE -Context 'PATH Cleanup' `
                 -Message "Removed $($appConfig.AddedPathEntries.Count) plugin PATH entries" -File
         }
