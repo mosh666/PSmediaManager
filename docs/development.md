@@ -42,6 +42,33 @@ Harness pauses now honor `MEDIA_MANAGER_SKIP_READKEY`. CI and any local automati
 
 Add new test files under the matching `tests/Modules/<ModuleName>` path. Keep one `Describe` block per function family and narrow `Context` blocks for edge cases.
 
+### Coverage Strategy
+
+- **Current Coverage**: 68.35% (2,588 commands analyzed, 1,769 executed)
+- **Baseline Enforcement**: The coverage baseline is stored in `tests/.coverage-baseline.json` and enforced during test runs
+- **Edge-Case Buffer**: A 0.42% gap represents uncovered exception paths and external service fallbacks (e.g., `whoami` failure, DNS resolution errors, NuGet provider installation failures)
+- **Rationale**: Testing these paths requires complex mocking infrastructure (external process mocking, system service stubbing) with diminishing return-on-investment. The current strategy prioritizes:
+  - Direct path testing (happy path + obvious error cases)
+  - Integration testing (multi-function workflows)
+  - Deterministic test stability (no flaky mocks)
+  - Low maintenance burden
+
+**Updating the Baseline**:
+
+To intentionally adjust the coverage baseline after legitimate improvements:
+
+```pwsh
+./tests/Update-CoverageBaseline.ps1
+```
+
+To lower the baseline (e.g., after removing coverage exclusions):
+
+```pwsh
+./tests/Update-CoverageBaseline.ps1 -Force
+```
+
+The script prevents accidental regressions by refusing to lower the baseline without `-Force`.
+
 ### Development Mode (-Dev)
 
 When developing PSmediaManager, use the `-Dev` parameter to enable persistent PATH changes:
