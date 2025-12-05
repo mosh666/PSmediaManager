@@ -266,7 +266,19 @@ function Invoke-PSmm {
             Write-Verbose "Bootstrap completed successfully"
         }
         catch {
+            $stack = $_.ScriptStackTrace
+            $invocation = $null
+            if ($_.InvocationInfo) {
+                $invocation = $_.InvocationInfo.PositionMessage
+            }
+
             $ErrorMessage = "Bootstrap failed: $_"
+            if ($stack) {
+                $ErrorMessage += "`nStack:`n$stack"
+            }
+            if ($invocation) {
+                $ErrorMessage += "`nPosition:`n$invocation"
+            }
 
             # Only log if Write-PSmmLog is available (logging may not be initialized yet)
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {

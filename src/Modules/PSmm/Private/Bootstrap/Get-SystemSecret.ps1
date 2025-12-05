@@ -172,7 +172,7 @@ function Resolve-KeePassCliCommand {
         Write-Verbose "Resolved keepassxc-cli.exe at: $resolvedCli"
         $currentPath = $Environment.GetVariable('PATH')
         if ($currentPath -notlike "*${resolvedDir}*") {
-            $Environment.AddPathEntry($resolvedDir)
+            $Environment.AddPathEntry($resolvedDir, $false)
             Write-Verbose 'Added KeePassXC directory to PATH for current session.'
 
             # Track in config if available (for centralized cleanup)
@@ -499,7 +499,7 @@ function Get-SystemSecretMetadata {
                         $dir = Split-Path -Parent $exe.FullName
                         $currentPath = $Environment.GetVariable('PATH')
                         if ($currentPath -notlike "*${dir}*") {
-                            $Environment.AddPathEntry($dir)
+                            $Environment.AddPathEntry($dir, $false)
 
                             # Track in config if available (for centralized cleanup)
                             if (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
