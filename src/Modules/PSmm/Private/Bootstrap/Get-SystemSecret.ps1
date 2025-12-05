@@ -174,6 +174,24 @@ function Resolve-KeePassCliCommand {
         if ($currentPath -notlike "*${resolvedDir}*") {
             $Environment.AddPathEntry($resolvedDir)
             Write-Verbose 'Added KeePassXC directory to PATH for current session.'
+
+            # Track in config if available (for centralized cleanup)
+            if (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
+                try {
+                    $config = Get-AppConfiguration
+                    if ($config -and $config.PSObject.Properties.Name -contains 'AddedPathEntries') {
+                        if ($config.AddedPathEntries -notcontains $resolvedDir) {
+                            [System.Collections.ArrayList]$pathEntries = $config.AddedPathEntries
+                            $pathEntries.Add($resolvedDir) | Out-Null
+                            $config.AddedPathEntries = $pathEntries.ToArray()
+                            Write-Verbose "Tracked KeePassXC PATH entry for cleanup: $resolvedDir"
+                        }
+                    }
+                }
+                catch {
+                    Write-Verbose "Could not track PATH entry in config: $_"
+                }
+            }
         }
         $result.ResolvedExecutable = $resolvedCli
         if ($Process.TestCommand('keepassxc-cli.exe')) {
@@ -482,6 +500,23 @@ function Get-SystemSecretMetadata {
                         $currentPath = $Environment.GetVariable('PATH')
                         if ($currentPath -notlike "*${dir}*") {
                             $Environment.AddPathEntry($dir)
+
+                            # Track in config if available (for centralized cleanup)
+                            if (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
+                                try {
+                                    $config = Get-AppConfiguration
+                                    if ($config -and $config.PSObject.Properties.Name -contains 'AddedPathEntries') {
+                                        if ($config.AddedPathEntries -notcontains $dir) {
+                                            [System.Collections.ArrayList]$pathEntries = $config.AddedPathEntries
+                                            $pathEntries.Add($dir) | Out-Null
+                                            $config.AddedPathEntries = $pathEntries.ToArray()
+                                        }
+                                    }
+                                }
+                                catch {
+                                    Write-Verbose "Could not track PATH entry in config: $_"
+                                }
+                            }
                         }
                     }
                 }

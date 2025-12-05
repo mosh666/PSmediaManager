@@ -225,7 +225,7 @@ Tip: Run `Confirm-Plugins` after pulling new changes to ensure newly added tools
 The repository is designed for side-by-side usage without system-level installation:
 
 - **External-drive first:** PSmediaManager is intended to live on a removable/external drive so it can travel with your media projects. Clone or extract the repo directly onto the target portable volume and run it from there to keep host machines clean.
-- No mandatory `$env:PATH` mutation – tools are invoked via resolved explicit paths.
+- Opt-in PATH registration: plugins flagged `RegisterToPath` prepend their install dirs to User + Process PATH and are cleaned up on exit (except when `-Dev` preserves them). Default flows still resolve tools via explicit paths.
 - All writable state lives under a designated root (projects, logs, temp, config snapshots).
 - To "move" PSmediaManager: copy the entire folder to another location or machine; ensure external tool archives are re-confirmed if paths change.
 

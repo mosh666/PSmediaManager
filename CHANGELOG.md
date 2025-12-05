@@ -43,6 +43,7 @@ All notable changes to this project will be documented in this file.
 - **Testing**: Improved Import-AllTestHelpers.ps1 to load PSmm.Logging module and filesystem guards automatically
 - **Testing**: Expanded coverage exclusions to skip public UI/Plugin/Project surfaces and Bootstrap functions
 - **Coverage**: Increased line coverage from 68.76% to 68.77% (2571 commands analyzed, 1768 executed)
+- **Plugins/ENV**: RegisterToPath now prepends plugin dirs to both User and Process PATH scopes, tracks pre-existing entries, and cleans them on shutdown unless `-Dev` preserves them.
 
 ### Removed
 

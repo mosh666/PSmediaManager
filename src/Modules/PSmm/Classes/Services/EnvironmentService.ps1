@@ -74,11 +74,15 @@ class EnvironmentService : IEnvironmentService {
         $currentPaths = $this.GetPathEntries()
 
         # Check if already exists (case-insensitive)
-        if ($currentPaths -contains $path) {
+        if ($currentPaths | Where-Object { $_ -ieq $path }) {
             return
         }
 
-        $newPath = ($currentPaths + $path) -join [IO.Path]::PathSeparator
+        # Prepend path to beginning for priority over system paths
+        $newPath = (@($path) + $currentPaths) -join [IO.Path]::PathSeparator
+
+        # Update both User scope (for persistence) and Process scope (for immediate availability)
+        $this.SetVariable('PATH', $newPath, 'User')
         $this.SetVariable('PATH', $newPath, 'Process')
     }
 
@@ -93,8 +97,8 @@ class EnvironmentService : IEnvironmentService {
 
         $currentPaths = $this.GetPathEntries()
 
-        # Filter out the path (case-insensitive)
-        $filteredPaths = $currentPaths | Where-Object { $_ -ne $path }
+        # Filter out the path (case-insensitive comparison)
+        $filteredPaths = $currentPaths | Where-Object { $_ -ine $path }
 
         if ($filteredPaths.Count -eq $currentPaths.Count) {
             # Path was not in the list
@@ -102,6 +106,9 @@ class EnvironmentService : IEnvironmentService {
         }
 
         $newPath = $filteredPaths -join [IO.Path]::PathSeparator
+
+        # Update both User scope (for persistence) and Process scope (for immediate removal)
+        $this.SetVariable('PATH', $newPath, 'User')
         $this.SetVariable('PATH', $newPath, 'Process')
     }
 

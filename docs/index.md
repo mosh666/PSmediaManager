@@ -26,7 +26,7 @@ Welcome to the PSmediaManager documentation portal. This site expands on the hig
 ## Design Goals
 
 - Portable: zero mandatory global installs; side-by-side versioning.
-- Deterministic: asset patterns & explicit paths (no PATH pollution).
+- Deterministic: asset patterns & explicit paths with opt-in PATH registration (RegisterToPath adds User + Process entries, cleaned unless `-Dev`).
 - Inspectable: configuration export & redaction tooling.
 - Testable: comprehensive Pester coverage for core behaviors.
 - Extensible: plugin shell for external tooling & future integrations.

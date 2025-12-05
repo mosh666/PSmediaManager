@@ -587,6 +587,8 @@ class AppConfiguration {
     [hashtable]$Projects
     # Internal, structured error tracking persisted with configuration
     [hashtable]$InternalErrorMessages
+    # Tracks PATH directories added during runtime for cleanup (unless -Dev mode)
+    [string[]]$AddedPathEntries = @()
 
     # Service dependencies for DI
     hidden [object]$FileSystem
@@ -601,6 +603,7 @@ class AppConfiguration {
         $this.InternalErrorMessages = @{
             Storage = @{}
         }
+        $this.AddedPathEntries = @()
     }
 
     AppConfiguration([string]$rootPath, [RuntimeParameters]$parameters) {
@@ -624,6 +627,7 @@ class AppConfiguration {
         $this.InternalErrorMessages = @{
             Storage = @{}
         }
+        $this.AddedPathEntries = @()
     }
 
     [void] Initialize() {

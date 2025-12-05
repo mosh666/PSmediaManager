@@ -488,8 +488,34 @@ finally {
         }
     }
 
-    # Temporary environment path tracking removed; no-op for unregister.
-    Write-Verbose 'Temporary environment path tracking removed; skipping unregister.'
+    # Unregister plugin PATH entries (unless -Dev mode)
+    if (-not $Dev -and $appConfig.AddedPathEntries -and $appConfig.AddedPathEntries.Count -gt 0) {
+        Write-Verbose "Cleaning up $($appConfig.AddedPathEntries.Count) PATH entries (non-Dev mode)"
+        try {
+            foreach ($pathEntry in $appConfig.AddedPathEntries) {
+                try {
+                    $script:Services.Environment.RemovePathEntry($pathEntry)
+                    Write-Verbose "Removed from PATH: $pathEntry"
+                }
+                catch {
+                    Write-Verbose "Failed to remove PATH entry '$pathEntry': $_"
+                }
+            }
+            Write-PSmmLog -Level NOTICE -Context 'PATH Cleanup' `
+                -Message "Removed $($appConfig.AddedPathEntries.Count) plugin PATH entries" -File
+        }
+        catch {
+            Write-Warning "Failed to clean up PATH entries: $_"
+        }
+    }
+    elseif ($Dev) {
+        Write-Verbose 'Development mode (-Dev) - keeping plugin PATH entries registered'
+        Write-PSmmLog -Level INFO -Context 'PATH Cleanup' `
+            -Message "Development mode: preserved $($appConfig.AddedPathEntries.Count) PATH entries" -File
+    }
+    else {
+        Write-Verbose 'No PATH entries to clean up'
+    }
 
     # Display exit message while module helpers are still available
     Write-Output ''

@@ -167,6 +167,184 @@ function Resolve-PluginCommandPath {
 .DESCRIPTION
     Executes constructor in global scope where PSmm classes are defined via ScriptsToProcess.
 #>
+<#
+.SYNOPSIS
+    Registers plugin executables to PATH based on opt-in metadata.
+
+.DESCRIPTION
+    Iterates through all plugins with RegisterToPath=$true and adds their
+    executable directories to $env:PATH for the current session. Tracks
+    added paths in $Config.AddedPathEntries for later cleanup.
+
+.PARAMETER Config
+    Application configuration with Requirements.Plugins and AddedPathEntries.
+
+.PARAMETER Environment
+    Environment service for PATH manipulation.
+
+.PARAMETER PathProvider
+    Path provider service for path resolution.
+
+.PARAMETER FileSystem
+    File system service for path validation.
+#>
+function Register-PluginsToPATH {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Config,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
+    )
+
+    try {
+        Write-Verbose 'Registering plugin executables to PATH (opt-in only)'
+        Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
+            -Message 'Starting plugin PATH registration (opt-in only)' -Console -File
+
+        if (-not $Config.Requirements -or -not $Config.Requirements.Plugins) {
+            Write-Verbose 'No plugin requirements found in configuration'
+            Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
+                -Message 'No plugin requirements found in configuration' -Console -File
+            return
+        }
+
+        $pluginGroups = @($Config.Requirements.Plugins.GetEnumerator())
+        Write-Verbose "Found $($pluginGroups.Count) plugin groups"
+        Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
+            -Message "Found $($pluginGroups.Count) plugin groups to process" -Console -File
+
+        $registeredDirs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
+        foreach ($group in $pluginGroups) {
+            try {
+                Write-Verbose "Processing plugin group: $($group.Name)"
+
+                $pluginEntries = @($group.Value.GetEnumerator())
+
+                foreach ($pluginEntry in $pluginEntries) {
+                    try {
+                        $pluginKey = $pluginEntry.Key
+                        $plugin = $pluginEntry.Value
+
+                        # Check RegisterToPath from the original Requirements data
+                        $requirementsPlugin = $Config.Requirements.Plugins[$group.Name][$pluginKey]
+                        if (-not $requirementsPlugin) {
+                            Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
+                                -Message "Could not find requirements data for $($plugin.Name) at path Plugins[$($group.Name)][$pluginKey]" -Console -File
+                            continue
+                        }
+
+                        $hasRegisterToPath = $requirementsPlugin.ContainsKey('RegisterToPath')
+
+                        # Skip if RegisterToPath is not explicitly set to $true
+                        if (-not $hasRegisterToPath) {
+                            Write-Verbose "Plugin $($plugin.Name) does not have RegisterToPath property - skipping"
+                            continue
+                        }
+                        if (-not $requirementsPlugin.RegisterToPath) {
+                            Write-Verbose "Plugin $($plugin.Name) has RegisterToPath=$($requirementsPlugin.RegisterToPath) - skipping"
+                            continue
+                        }
+
+                        Write-Verbose "Plugin $($plugin.Name) is marked for PATH registration"
+
+                        # Skip if plugin doesn't have State (not installed)
+                        $hasState = $requirementsPlugin.ContainsKey('State')
+                        if (-not $hasState) {
+                            Write-Verbose "Plugin $($plugin.Name) marked for PATH but not installed (no State property) - skipping"
+                            continue
+                        }
+
+                        # Resolve plugin installation directory
+                        $pluginRoot = $Config.Paths.App.Plugins.Root
+                        $pluginDirs = $FileSystem.GetChildItem($pluginRoot, $null, 'Directory') | Where-Object { $_.Name -match $plugin.Name }
+
+                        if (-not $pluginDirs) {
+                            Write-Verbose "Plugin $($plugin.Name) directory not found under $pluginRoot - skipping PATH registration"
+                            continue
+                        }
+
+                        $pluginDir = $pluginDirs | Select-Object -First 1
+                        $commandPath = if ($requirementsPlugin.CommandPath) { $requirementsPlugin.CommandPath } else { '' }
+                        $executableDir = if ($commandPath) {
+                            $PathProvider.CombinePath(@($pluginDir.FullName, $commandPath))
+                        } else {
+                            $pluginDir.FullName
+                        }
+
+                        if (-not $FileSystem.TestPath($executableDir)) {
+                            Write-Verbose "Executable directory not found: $executableDir - skipping PATH registration"
+                            continue
+                        }
+
+                        # Resolve to full path and add to PATH if not already present
+                        $resolvedDir = (Resolve-Path -LiteralPath $executableDir).Path
+
+                        if ($registeredDirs.Contains($resolvedDir)) {
+                            Write-Verbose "Already registered $resolvedDir to PATH in this session - skipping duplicate"
+                            continue
+                        }
+
+                        # Track for cleanup regardless of whether we add it now (store in config for access during shutdown)
+                        [System.Collections.ArrayList]$pathEntries = $Config.AddedPathEntries
+                        if (-not $pathEntries.Contains($resolvedDir)) {
+                            $pathEntries.Add($resolvedDir) | Out-Null
+                            $Config.AddedPathEntries = $pathEntries.ToArray()
+                        }
+
+                        $currentPath = $Environment.GetVariable('PATH')
+                        if ($currentPath -like "*${resolvedDir}*") {
+                            Write-Verbose "$resolvedDir already in PATH - tracked for cleanup"
+                            continue
+                        }
+
+                        $Environment.AddPathEntry($resolvedDir)
+                        $registeredDirs.Add($resolvedDir) | Out-Null
+
+                        Write-Verbose "Registered $($plugin.Name) to PATH: $resolvedDir"
+                        Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
+                            -Message "Registered $($plugin.Name) to PATH: $resolvedDir" -Console -File
+                    }
+                    catch {
+                        Write-Verbose "Failed to register plugin $($plugin.Name) to PATH: $_"
+                        Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
+                            -Message "Failed to register plugin $($plugin.Name) to PATH: $_" -Console -File
+                    }
+                }
+            }
+            catch {
+                Write-Verbose "Failed to process plugin group $($group.Name): $_"
+                Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
+                    -Message "Failed to process plugin group $($group.Name): $_" -Console -File
+            }
+        }
+
+        if ($registeredDirs.Count -gt 0) {
+            Write-PSmmLog -Level NOTICE -Context 'Register-PluginsToPATH' `
+                -Message "Registered $($registeredDirs.Count) plugin(s) to PATH for current session" -Console -File
+        } else {
+            Write-Verbose 'No plugins opted in for PATH registration'
+        }
+    }
+    catch {
+        Write-PSmmLog -Level ERROR -Context 'Register-PluginsToPATH' `
+            -Message "Failed to register plugins to PATH: $_" -ErrorRecord $_ -Console -File
+        # Non-fatal - continue execution
+    }
+}
+
 function New-PSmmServiceInstance {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidGlobalVars', '', Justification = 'Temporary global variable is used to execute constructor in global scope where PSmm types are defined')]
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Low')]
@@ -332,6 +510,9 @@ function Confirm-Plugins {
                     -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
             }
         }
+
+        # Register plugin executables to PATH (opt-in via RegisterToPath metadata)
+        Register-PluginsToPATH -Config $Config -Environment $Environment -PathProvider $PathProvider -FileSystem $FileSystem
 
         # Cleanup temporary files
         #$tempPath = Join-Path -Path $paths._Temp -ChildPath '*'

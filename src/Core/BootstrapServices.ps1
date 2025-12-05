@@ -116,15 +116,17 @@ class EnvironmentService : IEnvironmentService {
     }
     [void] AddPathEntry([string]$path) {
         if ([string]::IsNullOrWhiteSpace($path)) { throw [ArgumentException]::new('Path cannot be empty','path') }
-        $current = $this.GetPathEntries(); if ($current -contains $path) { return }
-        $newPath = ($current + $path) -join [IO.Path]::PathSeparator
+        $current = $this.GetPathEntries(); if ($current | Where-Object { $_ -ieq $path }) { return }
+        $newPath = (@($path) + $current) -join [IO.Path]::PathSeparator
+        $this.SetVariable('PATH',$newPath,'User')
         $this.SetVariable('PATH',$newPath,'Process')
     }
     [void] RemovePathEntry([string]$path) {
         if ([string]::IsNullOrWhiteSpace($path)) { throw [ArgumentException]::new('Path cannot be empty','path') }
-        $current = $this.GetPathEntries(); $filtered = @($current | Where-Object { $_ -ne $path })
+        $current = $this.GetPathEntries(); $filtered = @($current | Where-Object { $_ -ine $path })
         if ($filtered.Count -eq $current.Count) { return }
         $newPath = $filtered -join [IO.Path]::PathSeparator
+        $this.SetVariable('PATH',$newPath,'User')
         $this.SetVariable('PATH',$newPath,'Process')
     }
 }
