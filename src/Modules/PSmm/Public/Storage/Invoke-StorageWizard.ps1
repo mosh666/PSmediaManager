@@ -46,10 +46,10 @@ function Invoke-StorageWizard {
     # Validate parameters
     if ($Mode -eq 'Edit') {
         if ([string]::IsNullOrWhiteSpace($GroupId)) {
-            throw "GroupId is required when Mode is 'Edit'"
+            throw [ValidationException]::new("GroupId is required when Mode is 'Edit'", "GroupId")
         }
         if (-not $Config.Storage.ContainsKey($GroupId)) {
-            throw "Storage group '$GroupId' not found in configuration"
+            throw [StorageException]::new("Storage group '$GroupId' not found in configuration", $GroupId)
         }
     }
 

@@ -61,7 +61,7 @@ function New-PSmmProject {
         # Get storage drive for projects
         $storageDrive = Get-StorageDrive | Where-Object { $_.Label -eq $Config.Storage['1'].Master.Label }
         if (-not $storageDrive) {
-            throw "Master storage drive not found. Cannot create project."
+            throw [StorageException]::new("Master storage drive not found. Cannot create project.", $Config.Storage['1'].Master.Label)
         }
 
         $projectsBasePath = $PathProvider.CombinePath("$($storageDrive.DriveLetter)\", 'Projects')

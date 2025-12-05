@@ -139,20 +139,20 @@ function Select-PSmmProject {
 
         if (-not $FoundProject) {
             $serialMsg = if (-not [string]::IsNullOrWhiteSpace($SerialNumber)) { " on disk with SerialNumber '$SerialNumber'" } else { "" }
-            throw "Project '$pName' not found in any storage location$serialMsg."
+            throw [ProjectException]::new("Project '$pName' not found in any storage location$serialMsg", "Project lookup failure")
         }
 
         # Get the actual storage drive information
         $storageDrive = Get-StorageDrive | Where-Object { $_.SerialNumber -eq $FoundProject.SerialNumber } | Select-Object -First 1
         if (-not $storageDrive) {
-            throw "Storage drive for project '$pName' not found or not mounted."
+            throw [StorageException]::new("Storage drive for project '$pName' not found or not mounted", $FoundProject.SerialNumber)
         }
 
         $projectBasePath = $FoundProject.Path
 
         # Verify project exists
         if (-not $FileSystem.TestPath($projectBasePath)) {
-            throw "Project '$pName' does not exist at: $projectBasePath"
+            throw [ProjectException]::new("Project '$pName' does not exist at: $projectBasePath", $projectBasePath)
         }
 
         # Initialize Current project structure if it doesn't exist

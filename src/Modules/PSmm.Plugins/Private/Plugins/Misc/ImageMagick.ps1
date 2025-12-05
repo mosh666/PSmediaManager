@@ -30,13 +30,13 @@ function Get-LatestUrlFromUrl-ImageMagick {
         $Response = Invoke-WebRequest -Uri $Plugin.Config.VersionUrl -TimeoutSec 10
     }
     catch {
-        throw "Failed to retrieve version information from $($Plugin.Config.VersionUrl): $($_.Exception.Message)"
+        throw [PluginRequirementException]::new("Failed to retrieve version information from $($Plugin.Config.VersionUrl)", "ImageMagick", $_)
     }
     # Do not format output; we need raw string parsing
     $ZipMatches = [System.Text.RegularExpressions.Regex]::Matches($Response.Content, $Plugin.Config.AssetPattern, 'IgnoreCase')
 
     if ($ZipMatches.Count -eq 0) {
-        throw "No matching 'portable-Q16-HDRI-x64.zip' downloads found on $($Plugin.Config.VersionUrl)."
+        throw [PluginRequirementException]::new("No matching 'portable-Q16-HDRI-x64.zip' downloads found on $($Plugin.Config.VersionUrl)", "ImageMagick")
     }
 
     $Candidates = foreach ($m in $ZipMatches) {
@@ -65,7 +65,7 @@ function Get-LatestUrlFromUrl-ImageMagick {
         Select-Object -First 1
 
     if (-not $Latest) {
-        throw 'Could not determine latest version.'
+        throw [PluginRequirementException]::new('Could not determine latest version', 'ImageMagick')
     }
 
 

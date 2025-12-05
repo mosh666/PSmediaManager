@@ -70,7 +70,7 @@ class AppConfigurationBuilder {
         $this.EnsureNotBuilt()
 
         if ([string]::IsNullOrWhiteSpace($pathHint)) {
-            throw "Root path cannot be null or empty"
+            throw [ValidationException]::new("Root path cannot be null or empty", "rootPath")
         }
 
         $resolvedPath = [System.IO.Path]::GetFullPath($pathHint)
@@ -251,8 +251,8 @@ class AppConfigurationBuilder {
     [AppConfigurationBuilder] LoadConfigurationFile([string]$configPath) {
         $this.EnsureNotBuilt()
 
-        if (-not (Test-Path -Path $configPath)) {
-            throw "Configuration file not found: $configPath"
+        if (-not (Test-Path -Path $configPath -PathType Leaf)) {
+            throw [ConfigurationException]::new("Configuration file not found: $configPath", $configPath)
         }
 
         try {
@@ -340,7 +340,7 @@ class AppConfigurationBuilder {
             }
         }
         catch {
-            throw "Failed to load configuration file '$configPath': $_"
+            throw [ConfigurationException]::new("Failed to load configuration file '$configPath': $_", $configPath, $_)
         }
 
         return $this
@@ -350,14 +350,14 @@ class AppConfigurationBuilder {
         $this.EnsureNotBuilt()
 
         if (-not (Test-Path -Path $requirementsPath)) {
-            throw "Requirements file not found: $requirementsPath"
+            throw [ConfigurationException]::new("Requirements file not found: $requirementsPath", $requirementsPath)
         }
 
         try {
-            $this._config.Requirements = Import-PowerShellDataFile -Path $requirementsPath
+            $requirementsContent = Get-Content -Path $requirementsPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
         }
         catch {
-            throw "Failed to load requirements file '$requirementsPath': $_"
+            throw [ConfigurationException]::new("Failed to load requirements file '$requirementsPath': $_", $requirementsPath, $_)
         }
 
         return $this
@@ -372,14 +372,14 @@ class AppConfigurationBuilder {
         }
 
         try {
-            $storageData = Import-PowerShellDataFile -Path $storagePath
+            $storageContent = Get-Content -Path $storagePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
         }
         catch {
-            throw "Failed to load storage file '$storagePath': $_"
+            throw [ConfigurationException]::new("Failed to load storage file '$storagePath': $_", $storagePath, $_)
         }
 
-        if (-not ($storageData -is [hashtable]) -or -not $storageData.ContainsKey('Storage')) {
-            throw "Storage file is invalid. Expected a hashtable with 'Storage' root."
+        if (-not ($storageContent -is [System.Collections.IDictionary] -or $storageContent.PSObject.Properties -ne $null)) {
+            throw [ConfigurationException]::new("Storage file is invalid. Expected a hashtable with 'Storage' root.", $storagePath)
         }
 
         foreach ($groupKey in $storageData.Storage.Keys) {
@@ -498,11 +498,11 @@ class AppConfigurationBuilder {
 
         # Validate required properties
         if ($null -eq $this._config.Paths) {
-            throw "Root path must be set before building"
+            throw [ValidationException]::new("Root path must be set before building", "Paths")
         }
 
         if ($null -eq $this._config.Parameters) {
-            throw "Runtime parameters must be set before building"
+            throw [ValidationException]::new("Runtime parameters must be set before building", "Parameters")
         }
 
         # Ensure initialization is complete
@@ -516,7 +516,7 @@ class AppConfigurationBuilder {
 
     hidden [void] EnsureNotBuilt() {
         if ($this._built) {
-            throw "Configuration has already been built and cannot be modified"
+            throw [ValidationException]::new("Configuration has already been built and cannot be modified", "_built")
         }
     }
 

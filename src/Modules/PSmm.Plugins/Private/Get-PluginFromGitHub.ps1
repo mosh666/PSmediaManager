@@ -302,13 +302,13 @@ function Get-LatestUrlFromGitHub {
     try {
         # Validate required plugin configuration
         if (-not $Plugin.ContainsKey('Config')) {
-            throw "Plugin hashtable missing required 'Config' key"
+            throw [PluginRequirementException]::new("Plugin hashtable missing required 'Config' key", "Plugin")
         }
         if (-not $Plugin.Config.ContainsKey('Repo')) {
-            throw "Plugin.Config missing required 'Repo' key"
+            throw [PluginRequirementException]::new("Plugin.Config missing required 'Repo' key", $Plugin.Config.Name)
         }
         if (-not $Plugin.Config.ContainsKey('AssetPattern')) {
-            throw "Plugin.Config missing required 'AssetPattern' key"
+            throw [PluginRequirementException]::new("Plugin.Config missing required 'AssetPattern' key", $Plugin.Config.Name)
         }
 
         $pluginName = $Plugin.Config.Name

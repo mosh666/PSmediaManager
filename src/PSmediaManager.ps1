@@ -173,7 +173,7 @@ try {
     }
 
     if ($loadedModules -eq 0) {
-        throw [System.Exception]::new("No modules were loaded from: $modulesPath")
+        throw "No modules were loaded from: $modulesPath"
     }
 
     Write-Verbose "Successfully imported $loadedModules module(s)"
@@ -241,7 +241,8 @@ try {
     $repositoryRoot = Split-Path -Path $script:ModuleRoot -Parent
 
     if (-not (Test-Path -Path $repositoryRoot -PathType Container)) {
-        throw "Unable to resolve repository root from: $script:ModuleRoot"
+        $configEx = [ConfigurationException]::new("Unable to resolve repository root from: $script:ModuleRoot", $repositoryRoot)
+        throw $configEx
     }
 
     # Create builder with repository-aware paths

@@ -32,7 +32,7 @@ function Resolve-ToolCommandPath {
     }
 
     if (-not $resolved) {
-        throw "Unable to resolve tool command '$CommandName'. Ensure it exists on PATH or provide an absolute path."
+        throw [ProcessException]::new("Unable to resolve tool command '$CommandName'. Ensure it exists on PATH or provide an absolute path.", $CommandName)
     }
 
     $commands[$CommandName] = $resolved

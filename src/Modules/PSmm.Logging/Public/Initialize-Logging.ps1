@@ -75,7 +75,8 @@ function Initialize-Logging {
         }
 
         if (-not $hasParameters -or -not $hasLogging) {
-            throw "Invalid configuration object: missing 'Parameters' or 'Logging' members"
+            $ex = [ConfigurationException]::new("Invalid configuration object: missing 'Parameters' or 'Logging' members")
+            throw $ex
         }
 
         $nonInteractive = [bool]$Config.Parameters.NonInteractive
@@ -85,7 +86,8 @@ function Initialize-Logging {
         $loggingSource = $Config.Logging
 
         if ($null -eq $loggingSource) {
-            throw "Logging configuration is null. Run.App.Logging was not properly initialized."
+            $ex = [ConfigurationException]::new("Logging configuration is null. Run.App.Logging was not properly initialized.")
+            throw $ex
         }
 
         $loggingSettings = $null
@@ -96,7 +98,8 @@ function Initialize-Logging {
         }
         elseif ($loggingSource -is [string] -or $loggingSource.GetType().IsValueType) {
             $sourceTypeName = $loggingSource.GetType().FullName
-            throw "Logging configuration is not a hashtable. Type: $sourceTypeName"
+            $ex = [ConfigurationException]::new("Logging configuration is not a hashtable. Type: $sourceTypeName")
+            throw $ex
         }
         else {
             # Convert objects (PSCustomObject or typed) to hashtable for easier merging
@@ -113,7 +116,8 @@ function Initialize-Logging {
 
         if ($null -eq $loggingSettings) {
             $sourceTypeName = $loggingSource.GetType().FullName
-            throw "Failed to convert logging configuration to hashtable. Source type: $sourceTypeName"
+            $ex = [ConfigurationException]::new("Failed to convert logging configuration to hashtable. Source type: $sourceTypeName")
+            throw $ex
         }
 
             $loggingSettingsType = $loggingSettings.GetType().FullName
@@ -128,7 +132,8 @@ function Initialize-Logging {
             Write-Verbose 'DEBUG: Assigned logging settings to script:Logging'
         }
         catch {
-            throw "Failed assigning logging settings to script:Logging: $_"
+            $ex = [ConfigurationException]::new("Failed assigning logging settings to script:Logging: $_", $_)
+            throw $ex
         }
 
             $scriptLoggingType = $script:Logging.GetType().FullName
@@ -152,28 +157,33 @@ function Initialize-Logging {
         }
 
         if ($null -eq $script:Logging) {
-            throw "Logging configuration could not be initialized - settings are null after processing."
+            $ex = [ConfigurationException]::new("Logging configuration could not be initialized - settings are null after processing.")
+            throw $ex
         }
 
             if ($script:Logging -isnot [System.Collections.IDictionary]) {
                 $scriptLoggingType = $script:Logging.GetType().FullName
-                throw "Logging configuration is not a hashtable after conversion. Type: $scriptLoggingType"
+                $ex = [ConfigurationException]::new("Logging configuration is not a hashtable after conversion. Type: $scriptLoggingType")
+                throw $ex
             }
 
         try {
             $containsPath = $script:Logging.ContainsKey('Path')
         }
         catch {
-            throw "Failed checking Logging.ContainsKey('Path'): $_"
+            $ex = [ConfigurationException]::new("Failed checking Logging.ContainsKey('Path'): $_", $_)
+            throw $ex
         }
         if (-not $containsPath) {
             $keysCount = @($script:Logging.Keys).Count
             $loggingKeys = if ($script:Logging.Keys -and $keysCount -gt 0) { $script:Logging.Keys -join ', ' } else { '(no keys)' }
-            throw "Logging configuration is missing required 'Path' property. Available keys: $loggingKeys."
+            $ex = [ConfigurationException]::new("Logging configuration is missing required 'Path' property. Available keys: $loggingKeys.")
+            throw $ex
         }
 
         if ([string]::IsNullOrWhiteSpace($script:Logging.Path)) {
-            throw "Logging Path property is empty or whitespace. Value: '$($script:Logging.Path)'"
+            $ex = [ConfigurationException]::new("Logging Path property is empty or whitespace. Value: '$($script:Logging.Path)'")
+            throw $ex
         }
 
         if (-not $script:Logging.ContainsKey('DefaultLevel') -or [string]::IsNullOrWhiteSpace($script:Logging.DefaultLevel)) {
@@ -288,12 +298,14 @@ function Initialize-Logging {
                     }
                 }
                 catch {
-                    throw "Failed to create log directory '$logDir': $_"
+                    $ex = [LoggingException]::new("Failed to create log directory '$logDir'", $logDir, $_)
+                    throw $ex
                 }
             }
         }
         catch {
-            throw "Log directory check failed: $_"
+            $ex = [LoggingException]::new("Log directory check failed: $_", $_)
+            throw $ex
         }
             Write-Verbose 'DEBUG: Log directory check complete'
 
@@ -306,7 +318,8 @@ function Initialize-Logging {
                 Write-Verbose 'DEBUG: Set-LoggingCallerScope OK'
             }
             catch {
-                throw "PSLogs default setup failed at Set-LoggingCallerScope: $_"
+                $ex = [LoggingException]::new("PSLogs default setup failed at Set-LoggingCallerScope: $_", $_)
+                throw $ex
             }
 
             try {
@@ -315,7 +328,8 @@ function Initialize-Logging {
                 Write-Verbose 'DEBUG: Set-LoggingDefaultLevel OK'
             }
             catch {
-                throw "PSLogs default setup failed at Set-LoggingDefaultLevel: $_"
+                $ex = [LoggingException]::new("PSLogs default setup failed at Set-LoggingDefaultLevel: $_", $_)
+                throw $ex
             }
 
             try {
@@ -324,7 +338,8 @@ function Initialize-Logging {
                 Write-Verbose 'DEBUG: Set-LoggingDefaultFormat OK'
             }
             catch {
-                throw "PSLogs default setup failed at Set-LoggingDefaultFormat: $_"
+                $ex = [LoggingException]::new("PSLogs default setup failed at Set-LoggingDefaultFormat: $_", $_)
+                throw $ex
             }
 
             Write-Verbose 'DEBUG: PSLogs defaults configured'
@@ -347,7 +362,9 @@ function Initialize-Logging {
                         $FileSystem.SetContent($logFilePath, '')
                     }
                     else {
-                        throw "FileSystem service is required to clear log file: $logFilePath"
+                        $ex = [ValidationException]::new("FileSystem service is required to clear log file", "FileSystem")
+                        $ex.AddData("LogFilePath", $logFilePath)
+                        throw $ex
                     }
                 }
                 catch {

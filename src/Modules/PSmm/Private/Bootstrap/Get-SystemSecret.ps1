@@ -482,7 +482,7 @@ function Get-SystemSecretMetadata {
         $dbPath = $PathProvider.CombinePath(@($VaultPath, 'PSmm_System.kdbx'))
 
         if (-not $FileSystem.TestPath($dbPath)) {
-            throw "KeePass database not found: $dbPath"
+            throw [ConfigurationException]::new("KeePass database not found", $dbPath)
         }
 
         if (-not $Process.TestCommand('keepassxc-cli.exe')) {
@@ -522,7 +522,9 @@ function Get-SystemSecretMetadata {
                 }
             }
         }
-        if (-not $Process.TestCommand('keepassxc-cli.exe')) { throw 'keepassxc-cli.exe not found (after auto-resolution attempt)' }
+        if (-not $Process.TestCommand('keepassxc-cli.exe')) { 
+            throw [PluginRequirementException]::new('keepassxc-cli.exe not found after auto-resolution attempt', 'KeePassXC')
+        }
 
         if ($AttributeName) {
             # Get specific attribute
@@ -532,7 +534,9 @@ function Get-SystemSecretMetadata {
                 return $result
             }
             else {
-                throw "Failed to retrieve attribute '$AttributeName' (exit code: $LASTEXITCODE)"
+                $ex = [ProcessException]::new("Failed to retrieve attribute '$AttributeName'", "keepassxc-cli.exe")
+                $ex.SetExitCode($LASTEXITCODE)
+                throw $ex
             }
         }
         else {
@@ -543,7 +547,9 @@ function Get-SystemSecretMetadata {
                 return $result
             }
             else {
-                throw "Failed to retrieve entry information (exit code: $LASTEXITCODE)"
+                $ex = [ProcessException]::new("Failed to retrieve entry information", "keepassxc-cli.exe")
+                $ex.SetExitCode($LASTEXITCODE)
+                throw $ex
             }
         }
     }

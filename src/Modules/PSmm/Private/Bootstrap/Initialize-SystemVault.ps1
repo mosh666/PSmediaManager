@@ -79,7 +79,7 @@ function Initialize-SystemVault {
                 $null = $FileSystem.NewItem($VaultPath, 'Directory')
             }
             else {
-                throw "FileSystem service is required to create vault directory: $VaultPath"
+                throw [ValidationException]::new("FileSystem service is required to create vault directory", "FileSystem")
             }
         }
 
@@ -129,7 +129,7 @@ function Initialize-SystemVault {
             } while ($attempt -lt $maxAttempts)
 
             if (-not $resolvedPw) {
-                throw "Master password setup aborted after $maxAttempts failed attempts."
+                throw [ConfigurationException]::new("Master password setup aborted after $maxAttempts failed attempts")
             }
         }
 
@@ -145,7 +145,9 @@ function Initialize-SystemVault {
                 [System.IO.File]::WriteAllText($tempFile, "$plainMaster`n$plainMaster`n", [System.Text.Encoding]::ASCII)
                 $process = Start-Process -FilePath 'keepassxc-cli.exe' -ArgumentList 'db-create', '-p', $dbPath -NoNewWindow -Wait -PassThru -RedirectStandardInput $tempFile
                 if ($process.ExitCode -ne 0) {
-                    throw "Failed to create KeePass database (exit code: $($process.ExitCode))"
+                    $ex = [ProcessException]::new("Failed to create KeePass database", "keepassxc-cli.exe")
+                    $ex.SetExitCode($process.ExitCode)
+                    throw $ex
                 }
             }
             finally {
@@ -270,7 +272,9 @@ function Save-SystemSecret {
                         Write-Verbose "Could not retrieve vault path from app configuration: $_"
                     }
             }
-            if (-not $VaultPath) { throw 'VaultPath is not set. Provide -VaultPath or set PSMM_VAULT_PATH.' }
+            if (-not $VaultPath) { 
+                throw [ConfigurationException]::new('VaultPath is not set. Provide -VaultPath or set PSMM_VAULT_PATH.')
+            }
         }
 
         $dbPath = Join-Path $VaultPath 'PSmm_System.kdbx'
@@ -278,10 +282,12 @@ function Save-SystemSecret {
         # Ensure vault exists
         if (-not (Test-Path $dbPath)) {
             Write-Warning "System vault not found. Creating it now..."
-            if (-not $FileSystem) { throw "FileSystem service is required to initialize vault" }
+            if (-not $FileSystem) { 
+                throw [ValidationException]::new("FileSystem service is required to initialize vault", "FileSystem")
+            }
             $initialized = Initialize-SystemVault -VaultPath $VaultPath -FileSystem $FileSystem
             if (-not $initialized) {
-                throw "Failed to initialize system vault"
+                throw [ConfigurationException]::new("Failed to initialize system vault")
             }
         }
 

@@ -637,7 +637,7 @@ function Get-ProjectsFromDrive {
                 $null = $FileSystem.NewItem($projectsPath, 'Directory')
             }
             else {
-                throw "FileSystem service is required to create Projects folder: $projectsPath"
+                throw [ValidationException]::new("FileSystem service is required to create Projects folder", "FileSystem service", $projectsPath)
             }
 
             Write-PSmmLog -Level SUCCESS -Context 'Get-ProjectsFromDrive' `
@@ -822,7 +822,7 @@ function Initialize-GlobalProject {
                 $null = $FileSystem.NewItem($AssetsFullPath, 'Directory')
             }
             else {
-                throw "FileSystem service is required to create Assets folder: $AssetsFullPath"
+                throw [ValidationException]::new("FileSystem service is required to create Assets folder", "FileSystem service", $AssetsFullPath)
             }
 
             Write-PSmmLog -Level INFO -Context 'Initialize-GlobalProject' `

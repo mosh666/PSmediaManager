@@ -32,10 +32,10 @@ function New-FileSystemService {
         $wrapper = $wrapper | Add-Member -MemberType ScriptMethod -Name NewItem -Value {
             param([string]$path, [string]$itemType)
             if ([string]::IsNullOrWhiteSpace($path)) {
-                throw "Path cannot be empty"
+                throw [ValidationException]::new("Path cannot be empty", "path")
             }
             if ([string]::IsNullOrWhiteSpace($itemType)) {
-                throw "ItemType cannot be empty"
+                throw [ValidationException]::new("ItemType cannot be empty", "itemType")
             }
             $null = New-Item -Path $path -ItemType $itemType -Force -ErrorAction Stop
         } -PassThru
@@ -43,7 +43,7 @@ function New-FileSystemService {
         $wrapper = $wrapper | Add-Member -MemberType ScriptMethod -Name GetChildItem -Value {
             param([string]$path, [string]$filter, [string]$itemType)
             if ([string]::IsNullOrWhiteSpace($path)) {
-                throw "Path cannot be empty"
+                throw [ValidationException]::new("Path cannot be empty", "path")
             }
 
             $params = @{ Path = $path; ErrorAction = 'SilentlyContinue' }
@@ -66,7 +66,7 @@ function New-FileSystemService {
         $wrapper = $wrapper | Add-Member -MemberType ScriptMethod -Name RemoveItem -Value {
             param([string]$path, [bool]$recurse)
             if ([string]::IsNullOrWhiteSpace($path)) {
-                throw "Path cannot be empty"
+                throw [ValidationException]::new("Path cannot be empty", "path")
             }
             if (-not (Test-Path -Path $path -ErrorAction SilentlyContinue)) {
                 return
@@ -80,7 +80,7 @@ function New-FileSystemService {
         $wrapper = $wrapper | Add-Member -MemberType ScriptMethod -Name SetContent -Value {
             param([string]$path, [string]$content)
             if ([string]::IsNullOrWhiteSpace($path)) {
-                throw "Path cannot be empty"
+                throw [ValidationException]::new("Path cannot be empty", "path")
             }
 
             $directory = Split-Path -Path $path -Parent

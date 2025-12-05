@@ -158,7 +158,7 @@ function Resolve-PluginCommandPath {
         return $resolvedPath
     }
 
-    throw "Command '$CommandName' not found in PATH or under $($Paths.Root)"
+    throw [PluginRequirementException]::new("Command '$CommandName' not found in PATH or under $($Paths.Root)", $CommandName)
 }
 
 <#
@@ -381,7 +381,7 @@ function New-PSmmServiceInstance {
         Remove-Variable -Name __tempConstructor -Scope Global -ErrorAction SilentlyContinue
 
         if ($null -eq $instance) {
-            throw "Constructor returned null"
+            throw [ProcessException]::new("Constructor returned null for type instantiation")
         }
 
         return $instance
@@ -389,7 +389,8 @@ function New-PSmmServiceInstance {
     catch {
         $psmmInfo = Get-Module -Name 'PSmm'
         $psmmStatus = if ($psmmInfo) { "loaded v$($psmmInfo.Version)" } else { "not loaded" }
-        throw "Unable to instantiate [$TypeName]. PSmm module is $psmmStatus. Error: $_"
+        $ex = [ModuleLoadException]::new("Unable to instantiate [$TypeName]. PSmm module is $psmmStatus", $TypeName, $_)
+        throw $ex
     }
 }
 
@@ -629,7 +630,7 @@ function Invoke-PluginConfirmation {
     )
 
     if (-not ($Config | Get-Member -Name 'Paths' -ErrorAction SilentlyContinue)) {
-        throw 'Invoke-PluginConfirmation requires a configuration object exposing Paths; received incompatible type.'
+        throw [ValidationException]::new("Invoke-PluginConfirmation requires a configuration object exposing Paths; received incompatible type", "Config")
     }
 
     $pluginName = $Plugin.Config.Name
@@ -849,7 +850,9 @@ function Get-LatestDownloadUrl {
         $source = $Plugin.Config.Source
 
         # Ensure State bucket exists to store version metadata
-        if (-not $Plugin.ContainsKey('Config')) { throw "Plugin hashtable missing 'Config' key" }
+        if (-not $Plugin.ContainsKey('Config')) { 
+            throw [PluginRequirementException]::new("Plugin hashtable missing required 'Config' key", "Plugin")
+        }
         if (-not $Plugin.Config.ContainsKey('State') -or $null -eq $Plugin.Config.State) {
             $Plugin.Config.State = @{}
         }
@@ -1039,14 +1042,18 @@ function Invoke-Installer {
                 Write-Verbose 'Launching MSI installer...'
                 $result = $Process.StartProcess('msiexec.exe', @('/i', "`"$InstallerPath`""))
                 if (-not $result.Success) {
-                    throw "MSI installer failed with exit code: $($result.ExitCode)"
+                    $ex = [ProcessException]::new("MSI installer failed", "msiexec.exe")
+                    $ex.SetExitCode($result.ExitCode)
+                    throw $ex
                 }
             }
             '.exe' {
                 Write-Verbose 'Launching EXE installer...'
                 $result = $Process.StartProcess($InstallerPath, @())
                 if (-not $result.Success) {
-                    throw "EXE installer failed with exit code: $($result.ExitCode)"
+                    $ex = [ProcessException]::new("EXE installer failed", [System.IO.Path]::GetFileNameWithoutExtension($InstallerPath))
+                    $ex.SetExitCode($result.ExitCode)
+                    throw $ex
                 }
             }
             '.zip' {
@@ -1075,25 +1082,29 @@ function Invoke-Installer {
                     $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -Process $Process
                 }
                 catch {
-                    throw "7z is required to extract .7z archives: $($_)"
+                    throw [PluginRequirementException]::new("7z is required to extract .7z archives: $($_)", "7z", $_)
                 }
 
                 # First, test archive integrity for clearer diagnostics (let PowerShell handle quoting)
                 $testResult = $Process.InvokeCommand($sevenZipCmd, @('t', $InstallerPath))
                 if (-not $testResult.Success) {
                     $details = if ($null -ne $testResult.Output) { ($testResult.Output | Out-String).Trim() } else { '' }
-                    throw "7z archive test failed (exit $($testResult.ExitCode)). $details"
+                    $ex = [ProcessException]::new("7z archive test failed", "7z", $_)
+                    $ex.SetExitCode($testResult.ExitCode)
+                    throw $ex
                 }
 
                 # Extract archive
                 $result = $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$extractPath", '-y'))
                 if (-not $result.Success) {
                     $details = if ($null -ne $result.Output) { ($result.Output | Out-String).Trim() } else { '' }
-                    throw "7z extraction failed with exit code: $($result.ExitCode). $details"
+                    $ex = [ProcessException]::new("7z extraction failed", "7z", $_)
+                    $ex.SetExitCode($result.ExitCode)
+                    throw $ex
                 }
             }
             default {
-                throw "Unsupported installer type: $extension"
+                throw [PluginRequirementException]::new("Unsupported installer type: $extension", "Installer")
             }
         }
 
