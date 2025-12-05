@@ -382,7 +382,7 @@ class AppConfigurationBuilder {
             throw [ConfigurationException]::new("Failed to load storage file '$storagePath': $_", $storagePath, $_.Exception)
         }
 
-        if (-not ($storageContent -is [System.Collections.IDictionary] -or $storageContent.PSObject.Properties -ne $null)) {
+        if (-not ($storageContent -is [System.Collections.IDictionary] -or $null -ne $storageContent.PSObject.Properties)) {
             throw [ConfigurationException]::new("Storage file is invalid. Expected a hashtable with 'Storage' root.", $storagePath)
         }
 

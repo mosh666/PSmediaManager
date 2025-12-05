@@ -13,8 +13,8 @@ Write-Host "✓ Bootstrap services loaded" -ForegroundColor Green
 # Instantiate early services
 Write-Host "Instantiating early services..." -ForegroundColor Cyan
 try {
-    $fileSystemService = [FileSystemService]::new()
-    $pathProvider = [PathProviderService]::new()
+    [void][FileSystemService]::new()
+    [void][PathProviderService]::new()
     Write-Host "✓ Early services instantiated" -ForegroundColor Green
 } catch {
     Write-Host "✗ Failed to instantiate early services:" -ForegroundColor Red
@@ -23,7 +23,7 @@ try {
 }
 
 Write-Host "Loading modules..." -ForegroundColor Cyan
-cd src
+Set-Location src
 try {
     # Try to load the PSmm module
     Import-Module ./Modules/PSmm/PSmm.psd1 -Force -ErrorAction Stop

@@ -7,7 +7,7 @@ Write-Host "Testing standard .NET exception constructors..." -ForegroundColor Cy
 
 try {
     Write-Host "  Testing WebException(msg, Exception)" -ForegroundColor Cyan
-    $ex = [WebException]::new("test", [System.Exception]::new("inner"))
+    [void][WebException]::new("test", [System.Exception]::new("inner"))
     Write-Host "  ✓ WebException works" -ForegroundColor Green
 } catch {
     Write-Host "  ✗ WebException failed: $_" -ForegroundColor Red
@@ -15,7 +15,7 @@ try {
 
 try {
     Write-Host "  Testing CimException(msg, Exception)" -ForegroundColor Cyan
-    $ex = [CimException]::new("test", [System.Exception]::new("inner"))
+    [void][CimException]::new("test", [System.Exception]::new("inner"))
     Write-Host "  ✓ CimException works" -ForegroundColor Green
 } catch {
     Write-Host "  ✗ CimException failed: $_" -ForegroundColor Red
@@ -23,7 +23,7 @@ try {
 
 try {
     Write-Host "  Testing ArgumentException(msg, string)" -ForegroundColor Cyan
-    $ex = [ArgumentException]::new("test", "paramname")
+    [void][ArgumentException]::new("test", "paramname")
     Write-Host "  ✓ ArgumentException works" -ForegroundColor Green
 } catch {
     Write-Host "  ✗ ArgumentException failed: $_" -ForegroundColor Red
@@ -31,7 +31,7 @@ try {
 
 try {
     Write-Host "  Testing InvalidOperationException(msg, Exception)" -ForegroundColor Cyan
-    $ex = [InvalidOperationException]::new("test", [System.Exception]::new("inner"))
+    [void][InvalidOperationException]::new("test", [System.Exception]::new("inner"))
     Write-Host "  ✓ InvalidOperationException works" -ForegroundColor Green
 } catch {
     Write-Host "  ✗ InvalidOperationException failed: $_" -ForegroundColor Red

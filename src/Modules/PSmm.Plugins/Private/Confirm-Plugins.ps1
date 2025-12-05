@@ -1088,7 +1088,6 @@ function Invoke-Installer {
                 # First, test archive integrity for clearer diagnostics (let PowerShell handle quoting)
                 $testResult = $Process.InvokeCommand($sevenZipCmd, @('t', $InstallerPath))
                 if (-not $testResult.Success) {
-                    $details = if ($null -ne $testResult.Output) { ($testResult.Output | Out-String).Trim() } else { '' }
                     $ex = [ProcessException]::new("7z archive test failed", "7z", $_.Exception)
                     $ex.SetExitCode($testResult.ExitCode)
                     throw $ex
@@ -1097,7 +1096,6 @@ function Invoke-Installer {
                 # Extract archive
                 $result = $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$extractPath", '-y'))
                 if (-not $result.Success) {
-                    $details = if ($null -ne $result.Output) { ($result.Output | Out-String).Trim() } else { '' }
                     $ex = [ProcessException]::new("7z extraction failed", "7z", $_.Exception)
                     $ex.SetExitCode($result.ExitCode)
                     throw $ex

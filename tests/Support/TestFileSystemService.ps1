@@ -89,7 +89,7 @@ class TestFileSystemService {
         try {
             return [System.IO.Path]::GetFullPath($Path)
         }
-        catch {
+        catch [System.Exception] {
             return $Path
         }
     }
