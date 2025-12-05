@@ -3,36 +3,36 @@ using namespace System
 using namespace System.Net
 using namespace Microsoft.Management.Infrastructure
 
-Write-Host "Testing standard .NET exception constructors..." -ForegroundColor Cyan
+Write-PSmmHost "Testing standard .NET exception constructors..." -ForegroundColor Cyan
 
 try {
-    Write-Host "  Testing WebException(msg, Exception)" -ForegroundColor Cyan
+    Write-PSmmHost "  Testing WebException(msg, Exception)" -ForegroundColor Cyan
     [void][WebException]::new("test", [System.Exception]::new("inner"))
-    Write-Host "  ✓ WebException works" -ForegroundColor Green
+    Write-PSmmHost "  ✓ WebException works" -ForegroundColor Green
 } catch {
-    Write-Host "  ✗ WebException failed: $_" -ForegroundColor Red
+    Write-PSmmHost "  ✗ WebException failed: $_" -ForegroundColor Red
 }
 
 try {
-    Write-Host "  Testing CimException(msg, Exception)" -ForegroundColor Cyan
+    Write-PSmmHost "  Testing CimException(msg, Exception)" -ForegroundColor Cyan
     [void][CimException]::new("test", [System.Exception]::new("inner"))
-    Write-Host "  ✓ CimException works" -ForegroundColor Green
+    Write-PSmmHost "  ✓ CimException works" -ForegroundColor Green
 } catch {
-    Write-Host "  ✗ CimException failed: $_" -ForegroundColor Red
+    Write-PSmmHost "  ✗ CimException failed: $_" -ForegroundColor Red
 }
 
 try {
-    Write-Host "  Testing ArgumentException(msg, string)" -ForegroundColor Cyan
+    Write-PSmmHost "  Testing ArgumentException(msg, string)" -ForegroundColor Cyan
     [void][ArgumentException]::new("test", "paramname")
-    Write-Host "  ✓ ArgumentException works" -ForegroundColor Green
+    Write-PSmmHost "  ✓ ArgumentException works" -ForegroundColor Green
 } catch {
-    Write-Host "  ✗ ArgumentException failed: $_" -ForegroundColor Red
+    Write-PSmmHost "  ✗ ArgumentException failed: $_" -ForegroundColor Red
 }
 
 try {
-    Write-Host "  Testing InvalidOperationException(msg, Exception)" -ForegroundColor Cyan
+    Write-PSmmHost "  Testing InvalidOperationException(msg, Exception)" -ForegroundColor Cyan
     [void][InvalidOperationException]::new("test", [System.Exception]::new("inner"))
-    Write-Host "  ✓ InvalidOperationException works" -ForegroundColor Green
+    Write-PSmmHost "  ✓ InvalidOperationException works" -ForegroundColor Green
 } catch {
-    Write-Host "  ✗ InvalidOperationException failed: $_" -ForegroundColor Red
+    Write-PSmmHost "  ✗ InvalidOperationException failed: $_" -ForegroundColor Red
 }

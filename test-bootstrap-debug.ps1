@@ -6,13 +6,13 @@ $VerbosePreference = 'Continue'
 
 # Load classes
 . 'd:\PSmediaManager\src\Modules\PSmm\Classes\Interfaces.ps1'
-Write-Host "✓ Interfaces loaded"
+Write-PSmmHost "✓ Interfaces loaded"
 
 . 'd:\PSmediaManager\src\Modules\PSmm\Classes\Exceptions.ps1'
-Write-Host "✓ Exceptions loaded"
+Write-PSmmHost "✓ Exceptions loaded"
 
 . 'd:\PSmediaManager\src\Core\BootstrapServices.ps1'
-Write-Host "✓ BootstrapServices loaded"
+Write-PSmmHost "✓ BootstrapServices loaded"
 
 . 'd:\PSmediaManager\src\Modules\PSmm\Classes\Services\FileSystemService.ps1'
 . 'd:\PSmediaManager\src\Modules\PSmm\Classes\Services\EnvironmentService.ps1'
@@ -22,34 +22,34 @@ Write-Host "✓ BootstrapServices loaded"
 . 'd:\PSmediaManager\src\Modules\PSmm\Classes\Services\ProcessService.ps1'
 . 'd:\PSmediaManager\src\Modules\PSmm\Classes\Services\CryptoService.ps1'
 . 'd:\PSmediaManager\src\Modules\PSmm\Classes\Services\StorageService.ps1'
-Write-Host "✓ Services loaded"
+Write-PSmmHost "✓ Services loaded"
 
 . 'd:\PSmediaManager\src\Modules\PSmm\Classes\AppConfiguration.ps1'
-Write-Host "✓ AppConfiguration loaded"
+Write-PSmmHost "✓ AppConfiguration loaded"
 
 . 'd:\PSmediaManager\src\Modules\PSmm\Classes\AppConfigurationBuilder.ps1'
-Write-Host "✓ AppConfigurationBuilder loaded"
+Write-PSmmHost "✓ AppConfigurationBuilder loaded"
 
 # Now try the actual bootstrap steps
 try {
-    Write-Host "`nTesting AppConfigurationBuilder instantiation..."
+    Write-PSmmHost "`nTesting AppConfigurationBuilder instantiation..."
     $configBuilder = [AppConfigurationBuilder]::new('D:\PSmediaManager')
-    Write-Host "✓ AppConfigurationBuilder created"
+    Write-PSmmHost "✓ AppConfigurationBuilder created"
     
-    Write-Host "`nTesting WithRootPath..."
+    Write-PSmmHost "`nTesting WithRootPath..."
     $configBuilder = $configBuilder.WithRootPath('D:\PSmediaManager')
-    Write-Host "✓ WithRootPath succeeded"
+    Write-PSmmHost "✓ WithRootPath succeeded"
     
-    Write-Host "`nTesting WithParameters..."
+    Write-PSmmHost "`nTesting WithParameters..."
     $params = [RuntimeParameters]::new(@{})
     $configBuilder = $configBuilder.WithParameters($params)
-    Write-Host "✓ WithParameters succeeded"
+    Write-PSmmHost "✓ WithParameters succeeded"
     
-    Write-Host "`nTesting WithVersion..."
+    Write-PSmmHost "`nTesting WithVersion..."
     $configBuilder = $configBuilder.WithVersion([version]'1.0.0')
-    Write-Host "✓ WithVersion succeeded"
+    Write-PSmmHost "✓ WithVersion succeeded"
     
-    Write-Host "`nTesting InitializeDirectories..."
+    Write-PSmmHost "`nTesting InitializeDirectories..."
     # Create mock services first
     $mockFileSystem = [FileSystemService]::new()
     $mockEnvironment = [EnvironmentService]::new()
@@ -57,16 +57,16 @@ try {
     $mockProcess = [ProcessService]::new()
     
     $configBuilder = $configBuilder.WithServices($mockFileSystem, $mockEnvironment, $mockPathProvider, $mockProcess).InitializeDirectories()
-    Write-Host "✓ InitializeDirectories succeeded"
+    Write-PSmmHost "✓ InitializeDirectories succeeded"
     
-    Write-Host "`n✓ All bootstrap steps successful!"
+    Write-PSmmHost "`n✓ All bootstrap steps successful!"
 }
 catch {
-    Write-Host -ForegroundColor Red "`n✗ Error: $($_.Exception.GetType().FullName)"
-    Write-Host -ForegroundColor Red "Message: $($_.Exception.Message)"
-    Write-Host -ForegroundColor Red "At line: $($_.InvocationInfo.ScriptLineNumber)"
+    Write-PSmmHost -ForegroundColor Red "`n✗ Error: $($_.Exception.GetType().FullName)"
+    Write-PSmmHost -ForegroundColor Red "Message: $($_.Exception.Message)"
+    Write-PSmmHost -ForegroundColor Red "At line: $($_.InvocationInfo.ScriptLineNumber)"
     if($_.Exception.InnerException) {
-        Write-Host -ForegroundColor Red "Inner: $($_.Exception.InnerException.Message)"
+        Write-PSmmHost -ForegroundColor Red "Inner: $($_.Exception.InnerException.Message)"
     }
-    Write-Host -ForegroundColor Red "`nFull error:`n$_"
+    Write-PSmmHost -ForegroundColor Red "`nFull error:`n$_"
 }
