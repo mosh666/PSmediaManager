@@ -340,7 +340,7 @@ class AppConfigurationBuilder {
             }
         }
         catch {
-            throw [ConfigurationException]::new("Failed to load configuration file '$configPath': $_", $configPath, $_)
+                throw [ConfigurationException]::new("Failed to load configuration file '$configPath': $_", $configPath, $_.Exception)
         }
 
         return $this
@@ -354,13 +354,16 @@ class AppConfigurationBuilder {
         }
 
         try {
-            $requirementsContent = Get-Content -Path $requirementsPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                $requirementsContent = Import-PowerShellDataFile -Path $requirementsPath -ErrorAction Stop
         }
         catch {
-            throw [ConfigurationException]::new("Failed to load requirements file '$requirementsPath': $_", $requirementsPath, $_)
+            throw [ConfigurationException]::new("Failed to load requirements file '$requirementsPath': $_", $requirementsPath, $_.Exception)
         }
 
-        return $this
+            # Store the loaded requirements in the configuration
+            $this._config.Requirements = $requirementsContent
+        
+            return $this
     }
 
     [AppConfigurationBuilder] LoadStorageFile([string]$storagePath) {
@@ -375,7 +378,7 @@ class AppConfigurationBuilder {
             $storageContent = Get-Content -Path $storagePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
         }
         catch {
-            throw [ConfigurationException]::new("Failed to load storage file '$storagePath': $_", $storagePath, $_)
+            throw [ConfigurationException]::new("Failed to load storage file '$storagePath': $_", $storagePath, $_.Exception)
         }
 
         if (-not ($storageContent -is [System.Collections.IDictionary] -or $storageContent.PSObject.Properties -ne $null)) {

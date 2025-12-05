@@ -198,6 +198,11 @@ class PluginRequirementException : MediaManagerException {
         $this.RecoverySuggestion = "Install $pluginName version $requiredVersion or higher."
     }
 
+        PluginRequirementException([string]$message, [string]$pluginName, [Exception]$innerException) : base($message, 'Plugin Requirement', $innerException) {
+            $this.PluginName = $pluginName
+            $this.RecoverySuggestion = "Check $pluginName is installed, accessible, and meets version requirements."
+        }
+
     PluginRequirementException([string]$message, [string]$pluginName, [version]$requiredVersion, [version]$foundVersion) : base($message, 'Plugin Requirement') {
         $this.PluginName = $pluginName
         $this.RequiredVersion = $requiredVersion

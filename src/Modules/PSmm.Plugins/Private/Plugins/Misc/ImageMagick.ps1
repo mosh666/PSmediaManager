@@ -30,7 +30,7 @@ function Get-LatestUrlFromUrl-ImageMagick {
         $Response = Invoke-WebRequest -Uri $Plugin.Config.VersionUrl -TimeoutSec 10
     }
     catch {
-        throw [PluginRequirementException]::new("Failed to retrieve version information from $($Plugin.Config.VersionUrl)", "ImageMagick", $_)
+        throw [PluginRequirementException]::new("Failed to retrieve version information from $($Plugin.Config.VersionUrl)", "ImageMagick", $_.Exception)
     }
     # Do not format output; we need raw string parsing
     $ZipMatches = [System.Text.RegularExpressions.Regex]::Matches($Response.Content, $Plugin.Config.AssetPattern, 'IgnoreCase')

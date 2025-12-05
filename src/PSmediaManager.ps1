@@ -345,9 +345,11 @@ try {
 
     # Now build the final configuration with all loaded data
     # Note: Secrets will be loaded AFTER logging is initialized in Invoke-PSmm
-    $appConfig = $configBuilder.
-    UpdateStorageStatus().
-    Build()
+    Write-Verbose "Calling UpdateStorageStatus..."
+    $configBuilder = $configBuilder.UpdateStorageStatus()
+    Write-Verbose "Calling Build..."
+    $appConfig = $configBuilder.Build()
+    Write-Verbose "Configuration built successfully"
 
     # Bootstrap using modern AppConfiguration approach
     # All bootstrap functions now support AppConfiguration natively

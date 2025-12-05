@@ -389,7 +389,7 @@ function New-PSmmServiceInstance {
     catch {
         $psmmInfo = Get-Module -Name 'PSmm'
         $psmmStatus = if ($psmmInfo) { "loaded v$($psmmInfo.Version)" } else { "not loaded" }
-        $ex = [ModuleLoadException]::new("Unable to instantiate [$TypeName]. PSmm module is $psmmStatus", $TypeName, $_)
+        $ex = [ModuleLoadException]::new("Unable to instantiate [$TypeName]. PSmm module is $psmmStatus", $TypeName, $_.Exception)
         throw $ex
     }
 }
@@ -1082,14 +1082,14 @@ function Invoke-Installer {
                     $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -Process $Process
                 }
                 catch {
-                    throw [PluginRequirementException]::new("7z is required to extract .7z archives: $($_)", "7z", $_)
+                    throw [PluginRequirementException]::new("7z is required to extract .7z archives: $($_)", "7z", $_.Exception)
                 }
 
                 # First, test archive integrity for clearer diagnostics (let PowerShell handle quoting)
                 $testResult = $Process.InvokeCommand($sevenZipCmd, @('t', $InstallerPath))
                 if (-not $testResult.Success) {
                     $details = if ($null -ne $testResult.Output) { ($testResult.Output | Out-String).Trim() } else { '' }
-                    $ex = [ProcessException]::new("7z archive test failed", "7z", $_)
+                    $ex = [ProcessException]::new("7z archive test failed", "7z", $_.Exception)
                     $ex.SetExitCode($testResult.ExitCode)
                     throw $ex
                 }
@@ -1098,7 +1098,7 @@ function Invoke-Installer {
                 $result = $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$extractPath", '-y'))
                 if (-not $result.Success) {
                     $details = if ($null -ne $result.Output) { ($result.Output | Out-String).Trim() } else { '' }
-                    $ex = [ProcessException]::new("7z extraction failed", "7z", $_)
+                    $ex = [ProcessException]::new("7z extraction failed", "7z", $_.Exception)
                     $ex.SetExitCode($result.ExitCode)
                     throw $ex
                 }

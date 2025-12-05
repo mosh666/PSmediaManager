@@ -132,7 +132,7 @@ function Initialize-Logging {
             Write-Verbose 'DEBUG: Assigned logging settings to script:Logging'
         }
         catch {
-            $ex = [ConfigurationException]::new("Failed assigning logging settings to script:Logging: $_", $_)
+                $ex = [ConfigurationException]::new("Failed assigning logging settings to script:Logging: $_")
             throw $ex
         }
 
@@ -171,7 +171,7 @@ function Initialize-Logging {
             $containsPath = $script:Logging.ContainsKey('Path')
         }
         catch {
-            $ex = [ConfigurationException]::new("Failed checking Logging.ContainsKey('Path'): $_", $_)
+                $ex = [ConfigurationException]::new("Failed checking Logging.ContainsKey('Path'): $_")
             throw $ex
         }
         if (-not $containsPath) {
@@ -298,13 +298,13 @@ function Initialize-Logging {
                     }
                 }
                 catch {
-                    $ex = [LoggingException]::new("Failed to create log directory '$logDir'", $logDir, $_)
+                    $ex = [LoggingException]::new("Failed to create log directory '$logDir'", $logDir, $_.Exception)
                     throw $ex
                 }
             }
         }
         catch {
-            $ex = [LoggingException]::new("Log directory check failed: $_", $_)
+              $ex = [LoggingException]::new("Log directory check failed: $_", $logDir, $_.Exception)
             throw $ex
         }
             Write-Verbose 'DEBUG: Log directory check complete'
@@ -318,7 +318,7 @@ function Initialize-Logging {
                 Write-Verbose 'DEBUG: Set-LoggingCallerScope OK'
             }
             catch {
-                $ex = [LoggingException]::new("PSLogs default setup failed at Set-LoggingCallerScope: $_", $_)
+                $ex = [LoggingException]::new("PSLogs default setup failed at Set-LoggingCallerScope: $_", $_.Exception)
                 throw $ex
             }
 
@@ -328,7 +328,7 @@ function Initialize-Logging {
                 Write-Verbose 'DEBUG: Set-LoggingDefaultLevel OK'
             }
             catch {
-                $ex = [LoggingException]::new("PSLogs default setup failed at Set-LoggingDefaultLevel: $_", $_)
+                    $ex = [LoggingException]::new("PSLogs default setup failed at Set-LoggingDefaultLevel: $_", $loggingPath, $_.Exception)
                 throw $ex
             }
 
@@ -338,7 +338,7 @@ function Initialize-Logging {
                 Write-Verbose 'DEBUG: Set-LoggingDefaultFormat OK'
             }
             catch {
-                $ex = [LoggingException]::new("PSLogs default setup failed at Set-LoggingDefaultFormat: $_", $_)
+                    $ex = [LoggingException]::new("PSLogs default setup failed at Set-LoggingDefaultFormat: $_", $loggingPath, $_.Exception)
                 throw $ex
             }
 
