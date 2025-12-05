@@ -100,11 +100,19 @@ class IEnvironmentService {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 
-    [void] AddPathEntry([string]$path) {
+    [void] AddPathEntry([string]$path, [bool]$persistUser = $false) {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 
-    [void] RemovePathEntry([string]$path) {
+    [void] RemovePathEntry([string]$path, [bool]$persistUser = $false) {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+
+    [void] AddPathEntries([string[]]$paths, [bool]$persistUser = $false) {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+
+    [void] RemovePathEntries([string[]]$paths, [bool]$persistUser = $false) {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 

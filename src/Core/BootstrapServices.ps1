@@ -39,8 +39,10 @@ class IEnvironmentService {
     [string] GetVariable([string]$name) { throw [NotImplementedException]::new('Method must be implemented by derived class') }
     [void] SetVariable([string]$name, [string]$value, [string]$scope) { throw [NotImplementedException]::new('Method must be implemented by derived class') }
     [string[]] GetPathEntries() { throw [NotImplementedException]::new('Method must be implemented by derived class') }
-    [void] AddPathEntry([string]$path) { throw [NotImplementedException]::new('Method must be implemented by derived class') }
-    [void] RemovePathEntry([string]$path) { throw [NotImplementedException]::new('Method must be implemented by derived class') }
+    [void] AddPathEntry([string]$path, [bool]$persistUser = $false) { throw [NotImplementedException]::new('Method must be implemented by derived class') }
+    [void] RemovePathEntry([string]$path, [bool]$persistUser = $false) { throw [NotImplementedException]::new('Method must be implemented by derived class') }
+    [void] AddPathEntries([string[]]$paths, [bool]$persistUser = $false) { throw [NotImplementedException]::new('Method must be implemented by derived class') }
+    [void] RemovePathEntries([string[]]$paths, [bool]$persistUser = $false) { throw [NotImplementedException]::new('Method must be implemented by derived class') }
 }
 
 class IProcessService {
@@ -114,20 +116,99 @@ class EnvironmentService : IEnvironmentService {
         $path = $this.GetVariable('PATH'); if ([string]::IsNullOrWhiteSpace($path)) { return @() }
         return @($path -split [IO.Path]::PathSeparator | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
-    [void] AddPathEntry([string]$path) {
+    [void] AddPathEntry([string]$path, [bool]$persistUser = $false) {
         if ([string]::IsNullOrWhiteSpace($path)) { throw [ArgumentException]::new('Path cannot be empty','path') }
-        $current = $this.GetPathEntries(); if ($current | Where-Object { $_ -ieq $path }) { return }
-        $newPath = (@($path) + $current) -join [IO.Path]::PathSeparator
-        $this.SetVariable('PATH',$newPath,'User')
-        $this.SetVariable('PATH',$newPath,'Process')
+        $this.AddPathEntries(@($path), $persistUser)
     }
-    [void] RemovePathEntry([string]$path) {
+    [void] AddPathEntries([string[]]$paths, [bool]$persistUser = $false) {
+        if (-not $paths -or $paths.Count -eq 0) { return }
+        $valid = @($paths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }); if ($valid.Count -eq 0) { return }
+
+        $current = $this.GetPathEntries()
+        $pathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $current) { $pathSet.Add($entry) | Out-Null }
+
+        $ordered = [System.Collections.Generic.List[string]]::new()
+        $added = $false
+        foreach ($candidate in $valid) {
+            if ($pathSet.Add($candidate)) { $ordered.Add($candidate); $added = $true }
+        }
+
+        if (-not $added) {
+            if ($persistUser) { $this.SyncUserPath($current) }
+            return
+        }
+
+        foreach ($entry in $current) { $ordered.Add($entry) }
+        $this.UpdatePathVariables($ordered, $persistUser)
+    }
+    [void] RemovePathEntry([string]$path, [bool]$persistUser = $false) {
         if ([string]::IsNullOrWhiteSpace($path)) { throw [ArgumentException]::new('Path cannot be empty','path') }
-        $current = $this.GetPathEntries(); $filtered = @($current | Where-Object { $_ -ine $path })
-        if ($filtered.Count -eq $current.Count) { return }
-        $newPath = $filtered -join [IO.Path]::PathSeparator
-        $this.SetVariable('PATH',$newPath,'User')
-        $this.SetVariable('PATH',$newPath,'Process')
+        $this.RemovePathEntries(@($path), $persistUser)
+    }
+    [void] RemovePathEntries([string[]]$paths, [bool]$persistUser = $false) {
+        if (-not $paths -or $paths.Count -eq 0) { return }
+        $valid = @($paths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }); if ($valid.Count -eq 0) { return }
+
+        $current = $this.GetPathEntries()
+        if (-not $current -or $current.Count -eq 0) {
+            if ($persistUser) { $this.RemoveFromUserPath($valid) }
+            return
+        }
+
+        $pathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $current) { $pathSet.Add($entry) | Out-Null }
+
+        $removed = $false
+        foreach ($candidate in $valid) { if ($pathSet.Remove($candidate)) { $removed = $true } }
+        if (-not $removed) {
+            if ($persistUser) { $this.RemoveFromUserPath($valid) }
+            return
+        }
+
+        $ordered = [System.Collections.Generic.List[string]]::new()
+        foreach ($entry in $current) { if ($pathSet.Contains($entry)) { $ordered.Add($entry) } }
+        if ($persistUser) { $this.RemoveFromUserPath($valid) }
+        $this.UpdatePathVariables($ordered, $persistUser)
+    }
+
+    hidden [string[]] GetPathEntriesForTarget([EnvironmentVariableTarget]$target) {
+        $path = [Environment]::GetEnvironmentVariable('PATH', $target)
+        if ([string]::IsNullOrWhiteSpace($path)) { return @() }
+        return @($path -split [IO.Path]::PathSeparator | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+
+    hidden [void] UpdatePathVariables([System.Collections.Generic.List[string]]$paths, [bool]$persistUser) {
+        $newPath = $paths.ToArray() -join [IO.Path]::PathSeparator
+        $this.SetVariable('PATH', $newPath, 'Process')
+        if ($persistUser) { $this.SyncUserPath($paths) }
+    }
+
+    hidden [void] SyncUserPath([System.Collections.Generic.IEnumerable[string]]$orderedProcessPaths) {
+        $userEntries = $this.GetPathEntriesForTarget([EnvironmentVariableTarget]::User)
+        $pathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $ordered = [System.Collections.Generic.List[string]]::new()
+
+        foreach ($path in $orderedProcessPaths) { if ($pathSet.Add($path)) { $ordered.Add($path) } }
+        foreach ($entry in $userEntries) { if ($pathSet.Add($entry)) { $ordered.Add($entry) } }
+
+        $userPath = $ordered.ToArray() -join [IO.Path]::PathSeparator
+        $this.SetVariable('PATH', $userPath, 'User')
+    }
+
+    hidden [void] RemoveFromUserPath([string[]]$paths) {
+        $userEntries = $this.GetPathEntriesForTarget([EnvironmentVariableTarget]::User)
+        if (-not $userEntries -or $userEntries.Count -eq 0) { return }
+
+        $pathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $userEntries) { $pathSet.Add($entry) | Out-Null }
+
+        $removed = $false
+        foreach ($candidate in $paths) { if ($pathSet.Remove($candidate)) { $removed = $true } }
+        if (-not $removed) { return }
+
+        $newUserPath = $pathSet.ToArray() -join [IO.Path]::PathSeparator
+        $this.SetVariable('PATH', $newUserPath, 'User')
     }
 }
 
