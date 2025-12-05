@@ -1,19 +1,4 @@
-- Updated AppConfiguration and AppConfigurationBuilder
-- Improved PSmm.psd1 and PSmm.psm1
-- Enhanced Get-PSmmHealth
-- Updated main script and test coverage files
 # PSmediaManager Changelog
-
-## [Unreleased]
-- Updated AppConfiguration and AppConfigurationBuilder
-- Improved PSmm.psd1 and PSmm.psm1
-- Enhanced Get-PSmmHealth
-- Updated main script and test coverage files
-- Updated AppConfiguration and AppConfigurationBuilder
-- Improved PSmm.psd1 and PSmm.psm1
-- Enhanced Get-PSmmHealth
-- Updated main script and test coverage files
-# Changelog
 
 <!-- markdownlint-disable MD024 -->
 
@@ -22,12 +7,12 @@ All notable changes to this project will be documented in this file.
 <!-- markdownlint-disable MD024 -->
 ## [Unreleased Details]
 
-### Fixed
+### Fixed (Unreleased)
 
 - **Code Quality**: Fixed 13 PSScriptAnalyzer issues in `AppConfiguration.ps1` and `AppConfigurationBuilder.ps1` - added verbose logging to empty catch blocks and removed trailing whitespace
 - **Core**: Corrected run configuration filename format in `PSmediaManager.ps1` to include missing dot between `InternalName` and `Run` (e.g., `PSmm.Run.psd1` instead of `PSmmRun.psd1`)
 
-### Added
+### Added (Unreleased)
 
 - **Documentation**: Added comprehensive container deployment guide (`docs/deployment.md`) covering Docker, Compose, Kubernetes hardening, security scanning, and CI/CD integration
 - **Testing**: Added `GlobalFilesystemGuards.ps1` helper to prevent accidental writes to system paths during tests
@@ -35,6 +20,12 @@ All notable changes to this project will be documented in this file.
 - **Testing**: Added consolidated `Resolve-CommandPath.Tests.ps1` merging plugin and tool command path tests
 - **Testing**: Added `Write-PSmmLog.Uninitialized.Tests.ps1` for logging edge case coverage
 - **Testing**: Added organized `tests/Modules/PSmm/Storage/` directory with `Confirm-Storage.Tests.ps1` and `Get-StorageDrive.Tests.ps1`
+
+### Security / Container (Unreleased)
+
+- Switched container base to PowerShell 7.5 Alpine 3.20 (pinned digest) and retained explicit zlib install (apk) for defense in depth
+- Documented image build/tag/push flow in `docs/container-push.md`
+- Verified Codacy/Trivy scan clean on pinned image (alpine 3.20.5)
 
 ### Changed
 
@@ -66,58 +57,6 @@ All notable changes to this project will be documented in this file.
 - **CI/Linting**: Added `.markdownlint-cli2.jsonc` to configure markdownlint-cli2 with glob patterns and SARIF formatter output.
 - **CI/Security**: Added separate SARIF upload step for markdownlint results in Codacy workflow.
 
-### Removed (Previous)
-
-- **Configuration**: Removed legacy root `.codacy.yml` (replaced by `.codacy/codacy.yaml` for CLI v2).
-
-<!-- markdownlint-enable MD024 -->
-
-## 0.9.0 - 2025-12-01
-
-### Added (Features)
-- `Get-PSmmHealth`: health summary command aggregating PowerShell version, required modules, plugin states, storage, and vault status. Supports `-Format` for readable output.
-- Core bootstrap services in `src/Core/BootstrapServices.ps1` to enable early dependency injection before module import (path, filesystem, environment, process services).
-- Codacy/markdown linting config: `.codacy.yml`, `.markdownlint.yml`, and `.trivyignore` for upstream base image CVE suppression tracking.
-
-### Changed (Tests)
-- Tests updated to align with new service injection patterns (FileSystem, PathProvider, Process services) and to remove stray BOM characters.
-- Coverage baseline improved; latest coverage recorded in `tests/.coverage-latest.json`.
-
-### Notes
-- Security rationale for `.trivyignore` entries documented in `SECURITY.md`.
-
-This project adheres to "Keep a Changelog" ([Keep a Changelog](https://keepachangelog.com/en/1.0.0/)) and uses Semantic Versioning ([SemVer](https://semver.org/)).
-
-The format below is designed for clear GitHub Releases and PowerShell module maintenance.
-
-## [Unreleased]
-
-Use this section for in-progress changes that will be included in the next release.
-
-When preparing a release, move the items into a new versioned section and update the date.
-
-### Added
-
-- CI/Security: Introduced `.github/workflows/codacy.yml` to run Codacy Analysis CLI on pushes, pull requests, and a weekly schedule so fresh findings flow into GitHub code scanning automatically.
-- Docs/Quality: Added Codacy MCP instructions file (`.github/instructions/codacy.instructions.md`) and un-ignored it in `.gitignore` so required local/AI analysis workflow guidance is versioned.
-- **Storage**: Introduced `StorageService` class (`src/Modules/PSmm/Classes/Services/StorageService.ps1`) implementing `IStorageService` interface for testable storage drive operations.
-- **Storage**: Added comprehensive storage documentation (`docs/storage.md`) covering architecture, configuration, usage patterns, and testing strategies.
-- **Interfaces**: Added `IStorageService` interface to `Classes/Interfaces.ps1` for dependency injection and testability.
-- **UI**: Added detailed logging for project loading operations with master/backup drive counts.
-- **Storage Wizard**: Added visual wizard header with decorative borders showing mode (Add/Edit) and group ID.
-- **Storage Wizard**: Added step-by-step progress indicators (Step 1/2/3 of 3) with descriptive guidance text.
-- **Storage Management**: Added numbered menu system with dynamic option mapping based on available storage groups.
-- **Logging**: Added `New-FileSystemService` helper under `PSmm.Logging` so file system operations can be resolved without importing the full PSmm class graph; keeps logging usable in analyzer runs and partial module imports.
-- **Tests**: Added `Initialize-Logging.Tests.ps1` and `Invoke-LogRotation.Tests.ps1` to cover the helper, rotation workflow, and configuration validation scenarios.
-- **Tests (UI)**: Added comprehensive `Invoke-MultiOptionPrompt.Tests.ps1` validating parameter handling, option parsing, default index logic, verbose logging, and integration scenarios.
-- **Tests (Logging)**: Expanded `Write-PSmmLog.Tests.ps1` to cover Body, ErrorRecord, log level mapping, target clearing, and context initialization paths.
-- **Coverage**: Increased line coverage baseline to **68.67%** (from 65.43%) and updated `.coverage-baseline.json` & `.coverage-latest.json` artifacts.
-
-#### Internal Improvements (2025-11-30)
-
-- **refactor(codacy)**: Enhanced `.codacy/Invoke-CodacyWSL.ps1` with distro/tool availability diagnostics, safer Docker image scan scheduling (post-analysis), and verbose reporting for missing tools.
-- **refactor(ui)**: Improved `Invoke-MultiOptionPrompt` to use a strongly typed `ChoiceDescription` collection, mock-friendly command invocation, and consistent verbose messaging for test reliability.
-- **refactor(secrets)**: Added verbose fallback logging when vault path or GitHub token resolution via `Get-AppConfiguration` / `Get-SystemSecret` / `Save-SystemSecret` fails instead of silently ignoring exceptions.
 - **refactor(plugins)**: Expanded try/catch blocks in plugin GitHub and confirmation helpers to provide diagnostic messages when system vault token retrieval fails.
 - **refactor(build)**: Replaced non-interactive `Write-Host` calls in `Build-ScanImage.ps1` with `Write-Information` for proper stream usage.
 - **chore(coverage)**: Updated coverage baseline JSON to reflect new executed command set (68.67%).

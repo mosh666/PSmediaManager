@@ -2,9 +2,9 @@
 
 ## Latest Changes
 
-- Updated core modules: AppConfiguration, AppConfigurationBuilder
-- Improved health checks and main script
-- Enhanced test coverage files
+- Switched container base to pinned PowerShell 7.5 Alpine (patched zlib), with apk-based zlib install
+- Added container push helper doc (`docs/container-push.md`) with build/tag/push guidance
+- Clean Codacy/Trivy scan on pinned image (alpine 3.20.5)
 
 See CHANGELOG.md for details.
 # PSmediaManager

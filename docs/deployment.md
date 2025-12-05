@@ -6,16 +6,20 @@ This guide covers secure deployment of PSmediaManager using containers, includin
 
 ## Container Image
 
-The project provides a minimal Debian-based container image optimized for security scanning:
+The project provides a minimal, pinned Alpine-based container image optimized for security scanning:
 
 ```dockerfile
-FROM mcr.microsoft.com/powershell:7.4-debian-12
+FROM mcr.microsoft.com/powershell:7.5-alpine-3.20@sha256:a6beeddb2fcf45547c9099fba091ce231e51aa374fe62ecc182f7c28b69a6cbf
+# zlib patched via apk to keep CVE-2023-45853 addressed
+RUN apk update \
+  && apk upgrade \
+  && apk add --no-cache zlib
 ```
 
 ### Security Features
-- **Base Image**: Debian 12 (Bookworm) minimal distro with reduced package footprint
-- **Updates Applied**: `apt-get upgrade` ensures latest security patches during build
-- **Minimized Packages**: OpenSSH client and other non-essential packages purged
+- **Base Image**: Alpine 3.20 (pinned digest) with PowerShell 7.5
+- **Updates Applied**: `apk upgrade` plus explicit `zlib` install to keep zlib patched
+- **Minimized Packages**: No extra packages beyond zlib; apk cache removed via `--no-cache`
 - **Non-Root User**: Runs as `psmm` (UID 1000) to limit privilege escalation
 
 ---
@@ -93,6 +97,7 @@ services:
 ```
 
 Run with:
+
 ```bash
 docker-compose up -d
 ```
@@ -156,6 +161,7 @@ spec:
 ```
 
 Apply with:
+
 ```bash
 kubectl apply -f deployment.yaml
 ```
@@ -262,7 +268,8 @@ Before deploying to production:
 If the application fails due to read-only constraints:
 1. Identify writable paths required at runtime
 2. Mount them as `tmpfs` or persistent volumes:
-   ```bash
+
+  ```bash
    --tmpfs /app/cache:rw,noexec,nosuid,size=50m
    ```
 
@@ -276,6 +283,7 @@ If the application requires specific capabilities:
 ### Permission Denied
 
 Ensure volume mounts have correct ownership:
+
 ```bash
 sudo chown -R 1000:1000 /path/to/data
 ```
