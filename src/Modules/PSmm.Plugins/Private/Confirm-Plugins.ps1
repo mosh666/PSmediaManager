@@ -850,7 +850,7 @@ function Get-LatestDownloadUrl {
         $source = $Plugin.Config.Source
 
         # Ensure State bucket exists to store version metadata
-        if (-not $Plugin.ContainsKey('Config')) { 
+        if (-not $Plugin.ContainsKey('Config')) {
             throw [PluginRequirementException]::new("Plugin hashtable missing required 'Config' key", "Plugin")
         }
         if (-not $Plugin.Config.ContainsKey('State') -or $null -eq $Plugin.Config.State) {

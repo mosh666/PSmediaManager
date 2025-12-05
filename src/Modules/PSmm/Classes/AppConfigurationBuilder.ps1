@@ -362,7 +362,7 @@ class AppConfigurationBuilder {
 
             # Store the loaded requirements in the configuration
             $this._config.Requirements = $requirementsContent
-        
+
             return $this
     }
 

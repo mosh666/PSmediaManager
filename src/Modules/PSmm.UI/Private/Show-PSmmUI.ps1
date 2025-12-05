@@ -8,7 +8,7 @@ Set-StrictMode -Version Latest
 .DESCRIPTION
     Contains functions to display various UI components of the PSmediaManager application,
     including headers, footers, and menu options.
-    
+
     Uses Write-Host for UI rendering because:
     - UI output must go directly to console, not pipeline (prevents blank line artifacts)
     - Interactive menu operations require direct host communication

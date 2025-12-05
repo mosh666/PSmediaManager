@@ -522,7 +522,7 @@ function Get-SystemSecretMetadata {
                 }
             }
         }
-        if (-not $Process.TestCommand('keepassxc-cli.exe')) { 
+        if (-not $Process.TestCommand('keepassxc-cli.exe')) {
             throw [PluginRequirementException]::new('keepassxc-cli.exe not found after auto-resolution attempt', 'KeePassXC')
         }
 

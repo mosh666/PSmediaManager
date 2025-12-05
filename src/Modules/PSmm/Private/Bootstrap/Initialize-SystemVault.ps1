@@ -272,7 +272,7 @@ function Save-SystemSecret {
                         Write-Verbose "Could not retrieve vault path from app configuration: $_"
                     }
             }
-            if (-not $VaultPath) { 
+            if (-not $VaultPath) {
                 throw [ConfigurationException]::new('VaultPath is not set. Provide -VaultPath or set PSMM_VAULT_PATH.')
             }
         }
@@ -282,7 +282,7 @@ function Save-SystemSecret {
         # Ensure vault exists
         if (-not (Test-Path $dbPath)) {
             Write-Warning "System vault not found. Creating it now..."
-            if (-not $FileSystem) { 
+            if (-not $FileSystem) {
                 throw [ValidationException]::new("FileSystem service is required to initialize vault", "FileSystem")
             }
             $initialized = Initialize-SystemVault -VaultPath $VaultPath -FileSystem $FileSystem

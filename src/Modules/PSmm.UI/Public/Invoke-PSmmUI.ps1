@@ -20,7 +20,7 @@
 .NOTES
     This function runs in an interactive loop until the user chooses to quit (Q).
     Requires all Show-* menu functions to be available.
-    
+
     Uses Write-Host for UI rendering because:
     - UI output must go directly to console, not pipeline (prevents blank line artifacts)
     - Interactive menu operations require direct host communication
