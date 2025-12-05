@@ -55,6 +55,10 @@
                        - FFmpeg 8.0 or higher
                        - ImageMagick 7.1.2 or higher
                        - Git LFS 3.7.1 or higher
+    
+    Uses Write-Host for exit message because application output must go directly to console,
+    not the pipeline (prevents blank line artifacts). This is intentional and not a violation
+    of best practices for console applications with UI components.
 #>
 
 #Requires -Version 7.5.4
