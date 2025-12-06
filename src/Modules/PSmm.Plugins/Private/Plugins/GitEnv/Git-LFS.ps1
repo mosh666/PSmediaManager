@@ -19,7 +19,7 @@ function Get-CurrentVersion-Git-LFS {
     else {
         $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
     }
-    
+
     if ($CurrentVersion) {
         return 'v' + $CurrentVersion.BaseName.Split('-')[2]
     }

@@ -62,6 +62,7 @@
     [ProjectInfo] A new ProjectInfo instance with validated properties.
 #>
 function New-ProjectInfo {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification='Factory function creates objects but does not modify system state')]
     [CmdletBinding()]
     [OutputType([object])]
     param(
@@ -120,12 +121,12 @@ function New-ProjectInfo {
                 Location = $Location
                 Metadata = $Metadata ?? @{}
             }
-            
+
             # Add ScriptMethod to provide GetDisplayName() functionality
             $project | Add-Member -MemberType ScriptMethod -Name GetDisplayName -Value {
                 return "$($this.Name) [$($this.Type)]"
             }
-            
+
             return $project
         }
         catch {
@@ -174,6 +175,7 @@ function New-ProjectInfo {
     [PortInfo] A new PortInfo instance with validated port number.
 #>
 function New-PortInfo {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification='Factory function creates objects but does not modify system state')]
     [CmdletBinding()]
     [OutputType([object])]
     param(
@@ -220,12 +222,12 @@ function New-PortInfo {
                 IsActive = $IsActive
                 Metadata = $Metadata ?? @{}
             }
-            
+
             # Add ScriptMethod to provide GetDisplayName() functionality
             $portInfo | Add-Member -MemberType ScriptMethod -Name GetDisplayName -Value {
                 return "$($this.ProjectName):$($this.Port)/$($this.Protocol)"
             }
-            
+
             return $portInfo
         }
         catch {

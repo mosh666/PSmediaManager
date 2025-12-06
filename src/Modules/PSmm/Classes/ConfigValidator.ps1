@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Configuration validation and security hardening for PSmediaManager.
 
@@ -34,7 +34,7 @@ class ValidationIssue {
     [string]$Message       # Human-readable description
     [object]$ActualValue   # Current value that failed validation
     [object]$ExpectedValue # Expected value or constraint
-    
+
     ValidationIssue([string]$severity, [string]$category, [string]$property, [string]$message) {
         $this.Severity = $severity
         $this.Category = $category
@@ -55,7 +55,7 @@ class ConfigSchema {
     [object]$MaxValue      # For numeric types
     [string]$Pattern       # Regex pattern for string validation
     [scriptblock]$CustomValidator  # Custom validation logic
-    
+
     ConfigSchema([string]$path, [string]$type, [bool]$required) {
         $this.PropertyPath = $path
         $this.ExpectedType = $type
@@ -73,7 +73,7 @@ class ConfigDrift {
     [object]$DiskValue
     [bool]$IsDifferent
     [string]$DriftType     # 'Modified', 'Added', 'Removed'
-    
+
     ConfigDrift([string]$path, [object]$runtime, [object]$disk, [bool]$different, [string]$type) {
         $this.PropertyPath = $path
         $this.RuntimeValue = $runtime
@@ -92,14 +92,14 @@ class ConfigValidator {
     hidden [List[ValidationIssue]]$_issues
     hidden [object]$_fileSystem
     hidden [bool]$_useDefaultSchemas
-    
+
     ConfigValidator() {
         $this._schemas = [List[ConfigSchema]]::new()
         $this._issues = [List[ValidationIssue]]::new()
         $this._useDefaultSchemas = $true
         $this.InitializeDefaultSchemas()
     }
-    
+
     ConfigValidator([object]$fileSystem) {
         $this._schemas = [List[ConfigSchema]]::new()
         $this._issues = [List[ValidationIssue]]::new()
@@ -107,7 +107,7 @@ class ConfigValidator {
         $this._useDefaultSchemas = $true
         $this.InitializeDefaultSchemas()
     }
-    
+
     ConfigValidator([bool]$useDefaultSchemas) {
         $this._schemas = [List[ConfigSchema]]::new()
         $this._issues = [List[ValidationIssue]]::new()
@@ -116,7 +116,7 @@ class ConfigValidator {
             $this.InitializeDefaultSchemas()
         }
     }
-    
+
     ConfigValidator([object]$fileSystem, [bool]$useDefaultSchemas) {
         $this._schemas = [List[ConfigSchema]]::new()
         $this._issues = [List[ValidationIssue]]::new()
@@ -126,7 +126,7 @@ class ConfigValidator {
             $this.InitializeDefaultSchemas()
         }
     }
-    
+
     <#
     .SYNOPSIS
         Initialize default validation schemas for known config properties.
@@ -136,22 +136,22 @@ class ConfigValidator {
         $this.AddSchema([ConfigSchema]::new('DisplayName', 'String', $true))
         $this.AddSchema([ConfigSchema]::new('InternalName', 'String', $true))
         $this.AddSchema([ConfigSchema]::new('AppVersion', 'String', $false))
-        
+
         # Paths
         $this.AddSchema([ConfigSchema]::new('Paths.Root', 'String', $true))
         $this.AddSchema([ConfigSchema]::new('Paths.RepositoryRoot', 'String', $true))
         $this.AddSchema([ConfigSchema]::new('Paths.Log', 'String', $true))
-        
+
         # UI configuration
         $schema = [ConfigSchema]::new('UI.Width', 'Int', $false)
         $schema.MinValue = 80
         $schema.MaxValue = 300
         $this.AddSchema($schema)
-        
+
         # Storage groups
         $this.AddSchema([ConfigSchema]::new('Storage', 'Dictionary', $false))
     }
-    
+
     <#
     .SYNOPSIS
         Add a schema definition for validation.
@@ -162,7 +162,7 @@ class ConfigValidator {
         }
         $this._schemas.Add($schema)
     }
-    
+
     <#
     .SYNOPSIS
         Validate an AppConfiguration object.
@@ -171,22 +171,22 @@ class ConfigValidator {
         if ($null -eq $config) {
             throw [ArgumentNullException]::new('config')
         }
-        
+
         $this._issues.Clear()
-        
+
         # Validate against schemas
         foreach ($schema in $this._schemas) {
             $this.ValidateProperty($config, $schema)
         }
-        
+
         # Additional validations
         $this.ValidatePaths($config)
         $this.ValidateSecuritySettings($config)
         $this.ValidateStorageConfiguration($config)
-        
+
         return $this._issues.ToArray()
     }
-    
+
     <#
     .SYNOPSIS
         Validate a single property against its schema.
@@ -195,13 +195,13 @@ class ConfigValidator {
         $pathParts = $schema.PropertyPath -split '\.'
         $current = $config
         $found = $true
-        
+
         foreach ($part in $pathParts) {
             if ($null -eq $current) {
                 $found = $false
                 break
             }
-            
+
             if ($current -is [hashtable]) {
                 if (-not $current.ContainsKey($part)) {
                     $found = $false
@@ -218,7 +218,7 @@ class ConfigValidator {
                 $current = $prop.Value
             }
         }
-        
+
         # Check if required property is missing
         if (-not $found) {
             if ($schema.Required) {
@@ -227,7 +227,7 @@ class ConfigValidator {
             }
             return
         }
-        
+
         # Skip validation for null values unless required
         if ($null -eq $current) {
             if ($schema.Required) {
@@ -236,7 +236,7 @@ class ConfigValidator {
             }
             return
         }
-        
+
         # Type validation
         if (-not [string]::IsNullOrWhiteSpace($schema.ExpectedType)) {
             $valid = $this.ValidateType($current, $schema.ExpectedType)
@@ -249,7 +249,7 @@ class ConfigValidator {
                 return
             }
         }
-        
+
         # Range validation for numeric types
         if ($null -ne $schema.MinValue -or $null -ne $schema.MaxValue) {
             if ($current -is [int] -or $current -is [double] -or $current -is [long]) {
@@ -267,7 +267,7 @@ class ConfigValidator {
                 }
             }
         }
-        
+
         # Pattern validation for strings
         if (-not [string]::IsNullOrWhiteSpace($schema.Pattern) -and $current -is [string]) {
             if ($current -notmatch $schema.Pattern) {
@@ -276,7 +276,7 @@ class ConfigValidator {
                 $this._issues.Add($issue)
             }
         }
-        
+
         # Custom validator
         if ($null -ne $schema.CustomValidator) {
             try {
@@ -293,7 +293,7 @@ class ConfigValidator {
             }
         }
     }
-    
+
     <#
     .SYNOPSIS
         Validate type compatibility.
@@ -302,7 +302,7 @@ class ConfigValidator {
         if ($null -eq $value) {
             return $false
         }
-        
+
         # PowerShell class methods require explicit return after switch
         $result = switch ($expectedType) {
             'String' { $value -is [string] }
@@ -316,7 +316,7 @@ class ConfigValidator {
         }
         return $result
     }
-    
+
     <#
     .SYNOPSIS
         Validate path properties exist and are accessible.
@@ -327,24 +327,24 @@ class ConfigValidator {
         if ($null -eq $pathsProperty -or $null -eq $pathsProperty.Value) {
             return
         }
-        
+
         $paths = $pathsProperty.Value
-        
+
         # Helper to safely get value from hashtable or PSObject
         # Implemented inline to avoid scoping issues with script blocks in class methods
         $rootValue = if ($paths -is [hashtable]) { $paths['Root'] } else { $paths.Root }
         $repoValue = if ($paths -is [hashtable]) { $paths['RepositoryRoot'] } else { $paths.RepositoryRoot }
         $logValue = if ($paths -is [hashtable]) { $paths['Log'] } else { $paths.Log }
-        
+
         $pathsToCheck = @(
             @{ Name = 'Root'; Value = $rootValue; MustExist = $false },
             @{ Name = 'RepositoryRoot'; Value = $repoValue; MustExist = $true },
             @{ Name = 'Log'; Value = $logValue; MustExist = $false }
         )
-        
+
         foreach ($pathCheck in $pathsToCheck) {
             $pathValue = $pathCheck.Value
-            
+
             if ([string]::IsNullOrWhiteSpace($pathValue)) {
                 if ($pathCheck.MustExist) {
                     $issue = [ValidationIssue]::new('Error', 'Path', "Paths.$($pathCheck.Name)", "Path is null or empty")
@@ -352,13 +352,13 @@ class ConfigValidator {
                 }
                 continue
             }
-            
+
             if (-not [Path]::IsPathRooted($pathValue)) {
                 $issue = [ValidationIssue]::new('Warning', 'Path', "Paths.$($pathCheck.Name)", "Path is not absolute: $pathValue")
                 $issue.ActualValue = $pathValue
                 $this._issues.Add($issue)
             }
-            
+
             # Check existence using FileSystem service if available
             $exists = $false
             if ($null -ne $this._fileSystem -and ($this._fileSystem | Get-Member -Name 'TestPath' -ErrorAction SilentlyContinue)) {
@@ -373,7 +373,7 @@ class ConfigValidator {
             else {
                 $exists = Test-Path -Path $pathValue -ErrorAction SilentlyContinue
             }
-            
+
             if ($pathCheck.MustExist -and -not $exists) {
                 $issue = [ValidationIssue]::new('Error', 'Path', "Paths.$($pathCheck.Name)", "Required path does not exist: $pathValue")
                 $issue.ActualValue = $pathValue
@@ -381,7 +381,7 @@ class ConfigValidator {
             }
         }
     }
-    
+
     <#
     .SYNOPSIS
         Validate security-related settings.
@@ -400,12 +400,12 @@ class ConfigValidator {
                 }
             }
         }
-        
+
         # Validate KeePassXC vault configuration - safely access Vault property
         $vaultProperty = $config.PSObject.Properties['Vault']
         if ($null -ne $vaultProperty -and $null -ne $vaultProperty.Value) {
             $vault = $vaultProperty.Value
-            
+
             # Get Database value from hashtable or PSObject
             $vaultPath = $null
             if ($vault -is [hashtable]) {
@@ -415,7 +415,7 @@ class ConfigValidator {
                 $vaultDbProperty = $vault.PSObject.Properties['Database']
                 $vaultPath = if ($null -ne $vaultDbProperty) { $vaultDbProperty.Value } else { $null }
             }
-            
+
             if (-not [string]::IsNullOrWhiteSpace($vaultPath)) {
                 $exists = Test-Path -Path $vaultPath -ErrorAction SilentlyContinue
                 if (-not $exists) {
@@ -426,7 +426,7 @@ class ConfigValidator {
             }
         }
     }
-    
+
     <#
     .SYNOPSIS
         Validate storage configuration.
@@ -437,14 +437,14 @@ class ConfigValidator {
         if ($null -eq $storageProperty -or $null -eq $storageProperty.Value -or $storageProperty.Value.Count -eq 0) {
             return
         }
-        
+
         foreach ($groupKey in $storageProperty.Value.Keys) {
             $group = $storageProperty.Value[$groupKey]
-            
+
             if ($null -eq $group) {
                 continue
             }
-            
+
             # Validate Master configuration
             $masterProperty = $group.PSObject.Properties['Master']
             if ($null -ne $masterProperty -and $null -ne $masterProperty.Value) {
@@ -454,7 +454,7 @@ class ConfigValidator {
                     $this._issues.Add($issue)
                 }
             }
-            
+
             # Validate Backup configuration
             $backupProperty = $group.PSObject.Properties['Backup']
             if ($null -ne $backupProperty -and $null -ne $backupProperty.Value) {
@@ -466,7 +466,7 @@ class ConfigValidator {
             }
         }
     }
-    
+
     <#
     .SYNOPSIS
         Detect configuration drift between runtime and disk.
@@ -475,21 +475,21 @@ class ConfigValidator {
         if ($null -eq $runtimeConfig) {
             throw [ArgumentNullException]::new('runtimeConfig')
         }
-        
+
         if ([string]::IsNullOrWhiteSpace($diskConfigPath)) {
             throw [ArgumentException]::new('Disk config path cannot be null or empty', 'diskConfigPath')
         }
-        
+
         $exists = if ($null -ne $this._fileSystem) {
             $this._fileSystem.TestPath($diskConfigPath)
         } else {
             Test-Path -Path $diskConfigPath
         }
-        
+
         if (-not $exists) {
             throw [FileNotFoundException]::new("Configuration file not found: $diskConfigPath")
         }
-        
+
         # Load disk config
         $diskConfig = $null
         try {
@@ -498,14 +498,14 @@ class ConfigValidator {
         catch {
             throw [InvalidOperationException]::new("Failed to load configuration from disk: $_", $_.Exception)
         }
-        
+
         # Compare configurations
         $drifts = [List[ConfigDrift]]::new()
         $this.CompareObjects($runtimeConfig, $diskConfig, '', $drifts)
-        
+
         return $drifts.ToArray()
     }
-    
+
     <#
     .SYNOPSIS
         Recursively compare two configuration objects.
@@ -515,19 +515,19 @@ class ConfigValidator {
         if ($null -eq $runtime -and $null -eq $disk) {
             return
         }
-        
+
         if ($null -eq $runtime) {
             $drift = [ConfigDrift]::new($path, $null, $disk, $true, 'Removed')
             $drifts.Add($drift)
             return
         }
-        
+
         if ($null -eq $disk) {
             $drift = [ConfigDrift]::new($path, $runtime, $null, $true, 'Added')
             $drifts.Add($drift)
             return
         }
-        
+
         # Compare based on type
         if ($runtime -is [hashtable] -and $disk -is [hashtable]) {
             $allKeys = @($runtime.Keys) + @($disk.Keys) | Select-Object -Unique
@@ -564,14 +564,14 @@ class ConfigValidator {
                 # Generic comparison
                 $different = $runtime -ne $disk
             }
-            
+
             if ($different) {
                 $drift = [ConfigDrift]::new($path, $runtime, $disk, $true, 'Modified')
                 $drifts.Add($drift)
             }
         }
     }
-    
+
     <#
     .SYNOPSIS
         Get all validation issues.
@@ -579,7 +579,7 @@ class ConfigValidator {
     [ValidationIssue[]] GetIssues() {
         return $this._issues.ToArray()
     }
-    
+
     <#
     .SYNOPSIS
         Get issues filtered by severity.
@@ -588,7 +588,7 @@ class ConfigValidator {
         $filtered = @($this._issues | Where-Object { $_.Severity -eq $severity })
         return $filtered
     }
-    
+
     <#
     .SYNOPSIS
         Check if validation has any errors.
@@ -597,7 +597,7 @@ class ConfigValidator {
         $errors = @($this._issues | Where-Object { $_.Severity -eq 'Error' })
         return $errors.Count -gt 0
     }
-    
+
     <#
     .SYNOPSIS
         Clear all validation issues.

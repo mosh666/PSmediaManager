@@ -99,7 +99,7 @@ function Get-PSmmProjects {
             # Support both FileSystem abstraction and direct PowerShell cmdlets
             # Verify FileSystem service is available
             $CacheInvalid = $false  # Default: assume valid unless proven otherwise
-            
+
             if (-not $FileSystem) {
                 Write-PSmmLog -Level WARNING -Context 'Get-PSmmProjects' `
                     -Message 'FileSystem service not available, cannot validate cache' -File

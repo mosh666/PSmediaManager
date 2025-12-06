@@ -9,6 +9,11 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed (Unreleased)
 
+- **Code Quality**: Fixed whitespace consistency across multiple plugin files (FFmpeg, ImageMagick, KeePassXC, MKVToolNix, MariaDB, 7-Zip, Git-LFS, GitVersion, PortableGit, digiKam, ExifTool) by removing trailing whitespace
+- **Code Quality**: Fixed whitespace consistency in core files (ConfigValidator, PortInfo, ProjectInfo, Get-PSmmProjects, Invoke-PSmm, New-ClassFactory, PSmediaManager)
+- **Code Quality**: Added UTF-8 BOM to ConfigValidator.ps1 for proper encoding consistency
+- **Code Quality**: Fixed variable naming in PSmediaManager.ps1 (renamed `$error` to `$validationError` to avoid conflict with automatic variable)
+- **Code Quality**: Added PSScriptAnalyzer suppression for `PSUseShouldProcessForStateChangingFunctions` in factory functions (New-ProjectInfo, New-PortInfo) as they create in-memory objects without modifying system state
 - **Bootstrap**: Fixed ConfigValidator parser error caused by incorrect script block scoping that prevented configuration validation from completing
 - **Bootstrap**: Fixed GitHub-Token vault retrieval error (Win32 console mode error 0x57) by wrapping `Read-Host` in try-catch with graceful fallback for optional secrets
 - **Bootstrap**: Fixed ExifTool installer "file already exists" error by replacing fragile string-based path construction with dynamic directory search using wildcard patterns
@@ -41,6 +46,9 @@ All notable changes to this project will be documented in this file.
 
 ### Changed (Unreleased)
 
+- **Cleanup**: Removed obsolete milestone and reference documentation files (INDEX.md, PROJECT_COMPLETE.md, PROJECT_MILESTONE.md, QUICK_REFERENCE.md, PHASE9_COMPLETION_REPORT.md)
+- **Cleanup**: Removed obsolete container push documentation (container-push.md)
+- **Testing**: Removed legacy phase test files (test-phase2 through phase10) and test-classes.ps1 as testing is now consolidated into Pester test suite
 - **Testing**: Improved Invoke-Pester.ps1 with smarter CI detection and conditional read-key pauses via `Test-IsCiContext` and `Test-ShouldPauseForExit`
 - **Testing**: Enhanced Initialize-Logging.Tests.ps1 with comprehensive error branch coverage and deterministic test cases
 - **Testing**: Improved Import-AllTestHelpers.ps1 to load PSmm.Logging module and filesystem guards automatically

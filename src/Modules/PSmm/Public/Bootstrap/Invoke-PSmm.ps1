@@ -240,7 +240,7 @@ function Invoke-PSmm {
                 catch {
                     Write-Verbose "Could not resolve plugins path from Config.Paths: $_"
                 }
-                
+
                 $gitVersionExecutable = Get-LocalPluginExecutablePath -PluginConfig $Config.Requirements.Plugins.b_GitEnv.GitVersion -PluginsRootPath $pluginsPath
             }
             $Config.AppVersion = Get-ApplicationVersion -GitPath $GitPath -GitVersionExecutablePath $gitVersionExecutable
@@ -448,7 +448,7 @@ function Get-LocalPluginExecutablePath {
     param(
         [Parameter(Mandatory)]
         [hashtable]$PluginConfig,
-        
+
         [Parameter()]
         [string]$PluginsRootPath
     )
@@ -459,13 +459,13 @@ function Get-LocalPluginExecutablePath {
 
     # Try to get InstallPath from config; if not present, compute it from plugin name
     $installPath = $PluginConfig.InstallPath
-    
+
     # If InstallPath not in config but we have PluginsRootPath and plugin Name, try to find it
     if ([string]::IsNullOrWhiteSpace($installPath) -and -not [string]::IsNullOrWhiteSpace($PluginsRootPath) -and $PluginConfig.Name) {
         # Search for installed plugin directory matching the name pattern
         try {
-            $pluginDir = Get-ChildItem -Path $PluginsRootPath -Directory -ErrorAction SilentlyContinue | 
-                         Where-Object { $_.Name -like "$($PluginConfig.Name)*" } | 
+            $pluginDir = Get-ChildItem -Path $PluginsRootPath -Directory -ErrorAction SilentlyContinue |
+                         Where-Object { $_.Name -like "$($PluginConfig.Name)*" } |
                          Select-Object -First 1
             if ($pluginDir) {
                 $installPath = $pluginDir.FullName
@@ -475,7 +475,7 @@ function Get-LocalPluginExecutablePath {
             Write-Verbose "Error searching for plugin directory at $PluginsRootPath : $_"
         }
     }
-    
+
     if ([string]::IsNullOrWhiteSpace($installPath)) {
         return $null
     }

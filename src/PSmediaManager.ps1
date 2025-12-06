@@ -382,22 +382,22 @@ try {
     Write-Verbose "Calling ValidateConfiguration..."
     $validationIssues = $validator.ValidateConfiguration($appConfig)
     Write-Verbose "ValidateConfiguration completed"
-    
+
     if ($validationIssues.Count -gt 0) {
         $errors = @($validationIssues | Where-Object { $_.Severity -eq 'Error' })
         $warnings = @($validationIssues | Where-Object { $_.Severity -eq 'Warning' })
-        
+
         if ($warnings.Count -gt 0) {
             Write-Verbose "Configuration validation found $($warnings.Count) warning(s)"
             foreach ($warning in $warnings) {
                 Write-Warning "[$($warning.Category)] $($warning.Property): $($warning.Message)"
             }
         }
-        
+
         if ($errors.Count -gt 0) {
             Write-Error "Configuration validation failed with $($errors.Count) error(s):"
-            foreach ($error in $errors) {
-                Write-Error "[$($error.Category)] $($error.Property): $($error.Message)"
+            foreach ($validationError in $errors) {
+                Write-Error "[$($validationError.Category)] $($validationError.Property): $($validationError.Message)"
             }
             throw [ValidationException]::new("Configuration validation failed", "AppConfiguration", $appConfig)
         }
@@ -473,7 +473,7 @@ try {
             if (-not $httpWrapper) {
                 $httpWrapper = Get-Command -Name Invoke-HttpRestMethod -ErrorAction SilentlyContinue
             }
-            
+
             if ($httpWrapper) {
                 $serviceHealth.Add([pscustomobject]@{ Service = 'Http'; Status = 'OK'; Detail = 'Wrapper available' })
                 Write-ServiceHealthLog -Level 'NOTICE' -Message 'HTTP ready (Invoke-HttpRestMethod available)'
@@ -511,7 +511,7 @@ try {
     Write-ServiceHealthLog -Level 'NOTICE' -Message "Service health summary: $summary" -Console
 
     if ($serviceHealthIssues -gt 0 -and -not $isTestMode) {
-        throw "Service health checks reported $serviceHealthIssues issue(s)." 
+        throw "Service health checks reported $serviceHealthIssues issue(s)."
     }
     elseif ($serviceHealthIssues -gt 0) {
         Write-Warning "Service health checks reported $serviceHealthIssues issue(s) (test mode: continuing)."

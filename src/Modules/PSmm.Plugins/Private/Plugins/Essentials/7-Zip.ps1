@@ -18,7 +18,7 @@ function Get-CurrentVersion-7z {
     else {
         $CurrentVersion = Get-ChildItem -Path $Paths.Root -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like $Plugin.Config.Command }
     }
-    
+
     if ($CurrentVersion) {
         return $CurrentVersion.VersionInfo.FileVersion
     }

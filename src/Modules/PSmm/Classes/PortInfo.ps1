@@ -100,11 +100,11 @@ class PortInfo {
     #>
     [string] GetDisplayName() {
         $displayName = "$($this.ProjectName):$($this.Port)/$($this.Protocol)"
-        
+
         if (-not [string]::IsNullOrWhiteSpace($this.ServiceName)) {
             $displayName += " ($($this.ServiceName))"
         }
-        
+
         return $displayName
     }
 

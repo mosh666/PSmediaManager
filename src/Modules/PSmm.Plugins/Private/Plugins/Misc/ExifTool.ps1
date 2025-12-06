@@ -19,7 +19,7 @@ function Get-CurrentVersion-ExifTool {
     else {
         $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
     }
-    
+
     if ($InstallPath) {
         $bin = Join-Path -Path $InstallPath -ChildPath $Plugin.Config.CommandPath -AdditionalChildPath $Plugin.Config.Command
         $CurrentVersion = (& $bin -ver)
@@ -54,18 +54,18 @@ function Invoke-Installer-ExifTool {
     try {
         $ExtractPath = $Paths.Root
         Expand-Archive -Path $InstallerPath -DestinationPath $ExtractPath -Force
-        
+
         # Find the extracted exiftool directory
         $ExiftoolDir = Get-ChildItem -Path $ExtractPath -Directory -Filter "exiftool-*_64" -ErrorAction SilentlyContinue | Select-Object -First 1
-        
+
         if ($ExiftoolDir) {
             # Find and rename the executable file (handles both formats: exiftool(-k).exe and exiftool.exe)
             $ExeFile = Get-ChildItem -Path $ExiftoolDir.FullName -Filter "exiftool*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-            
+
             if ($ExeFile -and $ExeFile.Name -ne 'exiftool.exe') {
                 Rename-Item -Path $ExeFile.FullName -NewName 'exiftool.exe' -Force -ErrorAction Stop
             }
-            
+
             Write-PSmmLog -Level SUCCESS -Context "Install $($Plugin.Config.Name)" -Message "Installation completed for $($InstallerPath)" -Console -File
         }
         else {

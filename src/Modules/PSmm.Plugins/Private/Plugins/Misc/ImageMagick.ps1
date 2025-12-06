@@ -19,7 +19,7 @@ function Get-CurrentVersion-ImageMagick {
     else {
         $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
     }
-    
+
     if ($CurrentVersion) {
         #$LatestVersion = [System.IO.Path]::GetFileNameWithoutExtension($Latest.FileName).Split("-")[1,2] -join "-"
         return $CurrentVersion.BaseName.Split('-')[1, 2] -join '-'

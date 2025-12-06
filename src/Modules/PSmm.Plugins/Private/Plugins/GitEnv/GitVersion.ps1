@@ -19,7 +19,7 @@ function Get-CurrentVersion-GitVersion {
     else {
         $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
     }
-    
+
     if ($InstallPath) {
         $bin = Join-Path -Path $InstallPath -ChildPath $Plugin.Config.CommandPath -AdditionalChildPath $Plugin.Config.Command
         $CurrentVersion = (& $bin -version)

@@ -28,25 +28,25 @@ class ProjectInfo {
     [string]$Name
 
     [string]$Path
-    
+
     [string]$Type        # e.g., 'Photo', 'Video', 'Mixed'
-    
+
     [DateTime]$CreatedDate
-    
+
     [DateTime]$ModifiedDate
-    
+
     [int64]$SizeBytes     # Total size in bytes
-    
+
     [ValidateNotNullOrEmpty()]
     [string]$DriveLetter  # Which drive it's on (e.g., 'D:')
-    
+
     [string]$DriveLabel   # Human-readable drive label
-    
+
     [string]$SerialNumber # Drive serial number for tracking
-    
+
     [ValidateSet('Master', 'Backup')]
     [string]$Location     # Whether on master or backup drive
-    
+
     [Hashtable]$Metadata  # Additional custom metadata
 
     ProjectInfo([string]$name, [string]$path) {
@@ -105,15 +105,15 @@ class ProjectInfo {
     #>
     [string] GetDisplayName() {
         $displayName = $this.Name
-        
+
         if (-not [string]::IsNullOrWhiteSpace($this.DriveLabel)) {
             $displayName += " @ $($this.DriveLabel)"
         }
-        
+
         if (-not [string]::IsNullOrWhiteSpace($this.Location)) {
             $displayName += " ($($this.Location))"
         }
-        
+
         return $displayName
     }
 

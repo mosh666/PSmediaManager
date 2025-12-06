@@ -21,8 +21,9 @@ function New-FileSystemService {
     .OUTPUTS
         FileSystemService - A new instance of the FileSystemService class
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification='Factory function creates objects but does not modify system state')]
     [CmdletBinding()]
-    [OutputType('FileSystemService')]
+    [OutputType([FileSystemService])]
     param()
 
     # Verify FileSystemService class is available

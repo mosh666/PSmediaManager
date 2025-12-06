@@ -19,7 +19,7 @@ function Get-CurrentVersion-digiKam {
     else {
         $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
     }
-    
+
     if ($CurrentVersion) {
         return $CurrentVersion.BaseName.Split('-')[1]
     }

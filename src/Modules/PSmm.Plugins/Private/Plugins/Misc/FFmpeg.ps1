@@ -19,7 +19,7 @@ function Get-CurrentVersion-ffmpeg {
     else {
         $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
     }
-    
+
     if ($CurrentVersion) {
         return $CurrentVersion.BaseName.Split('-')[1]
     }
@@ -35,7 +35,7 @@ function Get-LatestUrlFromUrl-ffmpeg {
         $FileSystem
     )
     Invoke-RestMethod -Uri $Plugin.Config.VersionUrl -OutFile $Paths._Temp
-    
+
     if ($FileSystem) {
         $tempFiles = @($FileSystem.GetChildItem($Paths._Temp, "$($Plugin.Config.Name)*.7z", 'File'))
         $latestFile = $tempFiles | Select-Object -First 1
@@ -44,7 +44,7 @@ function Get-LatestUrlFromUrl-ffmpeg {
     else {
         $LatestInstaller = Split-Path -Path (Get-ChildItem -Path $Paths._Temp -Name "$($Plugin.Config.Name)*.7z") -Leaf
     }
-    
+
     $LatestVersion = $LatestInstaller.Split('-')[1]
     $Plugin.Config.State.LatestVersion = $LatestVersion
     $Plugin.Config.State.LatestInstaller = $LatestInstaller
