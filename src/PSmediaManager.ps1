@@ -80,6 +80,24 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Write-ServiceHealthLog {
+    param(
+        [Parameter(Mandatory)][string]$Level,
+        [Parameter(Mandatory)][string]$Message,
+        [switch]$Console
+    )
+
+    $logCmd = Get-Command Write-PSmmLog -ErrorAction SilentlyContinue
+    if ($logCmd) {
+        $logParams = @{ Level = $Level; Context = 'ServiceHealth'; Message = $Message; File = $true }
+        if ($Console) { $logParams['Console'] = $true }
+        Write-PSmmLog @logParams
+    }
+    else {
+        Write-Verbose "[ServiceHealth][$Level] $Message"
+    }
+}
+
 # Define module root for path calculations (portable app structure)
 $script:ModuleRoot = $PSScriptRoot
 
@@ -379,6 +397,88 @@ catch {
 }
 
 #endregion ===== Application Bootstrap =====
+
+
+#region ===== Service Health Checks =====
+
+<#
+    Validate readiness of critical services before launching UI or further workflows.
+    Honors MEDIA_MANAGER_TEST_MODE by downgrading failures to warnings and skipping
+    external HTTP reachability checks.
+#>
+$serviceHealthIssues = 0
+$serviceHealth = [System.Collections.Generic.List[object]]::new()
+$isTestMode = -not [string]::IsNullOrWhiteSpace($env:MEDIA_MANAGER_TEST_MODE)
+
+try {
+    # Git
+    try {
+        $repoRoot = Split-Path -Path $script:ModuleRoot -Parent
+        $gitReady = $script:Services.Git.IsRepository($repoRoot)
+        if (-not $gitReady) {
+            throw "Not a git repository: $repoRoot"
+        }
+
+        $branch = $script:Services.Git.GetCurrentBranch($repoRoot)
+        $commit = $script:Services.Git.GetCommitHash($repoRoot)
+        $serviceHealth.Add([pscustomobject]@{ Service = 'Git'; Status = 'OK'; Detail = "Branch=$($branch.Name); Commit=$($commit.Short)" })
+        Write-ServiceHealthLog -Level 'NOTICE' -Message "Git ready ($($branch.Name) @ $($commit.Short))"
+    }
+    catch {
+        $serviceHealthIssues++
+        Write-ServiceHealthLog -Level 'ERROR' -Message "Git check failed: $_" -Console
+        if (-not $isTestMode) { throw }
+    }
+
+    # HTTP (skip network probes in test mode)
+    if ($isTestMode) {
+        $serviceHealth.Add([pscustomobject]@{ Service = 'Http'; Status = 'Skipped'; Detail = 'MEDIA_MANAGER_TEST_MODE set' })
+        Write-ServiceHealthLog -Level 'INFO' -Message 'HTTP check skipped (MEDIA_MANAGER_TEST_MODE set)'
+    }
+    else {
+        try {
+            $httpWrapper = Get-Command -Name Invoke-HttpRestMethod -ErrorAction Stop
+            $null = $httpWrapper # existence ensures wrapper is available
+            $serviceHealth.Add([pscustomobject]@{ Service = 'Http'; Status = 'OK'; Detail = 'Wrapper available' })
+            Write-ServiceHealthLog -Level 'NOTICE' -Message 'HTTP ready (Invoke-HttpRestMethod available)'
+        }
+        catch {
+            $serviceHealthIssues++
+            Write-ServiceHealthLog -Level 'ERROR' -Message "HTTP check failed: $_" -Console
+        }
+    }
+
+    # CIM
+    try {
+        $cimCmdPresent = Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue
+        $cimInstances = $script:Services.Cim.GetInstances('Win32_OperatingSystem', @{})
+        $cimCount = @($cimInstances).Count
+        $cimDetail = if ($cimCmdPresent) { "Instances=$cimCount" } else { 'Get-CimInstance unavailable (returned empty set)' }
+        $serviceHealth.Add([pscustomobject]@{ Service = 'Cim'; Status = 'OK'; Detail = $cimDetail })
+        Write-ServiceHealthLog -Level 'NOTICE' -Message "CIM ready ($cimDetail)"
+    }
+    catch {
+        $serviceHealthIssues++
+        Write-ServiceHealthLog -Level 'ERROR' -Message "CIM check failed: $_" -Console
+        if (-not $isTestMode) { throw }
+    }
+
+    $summary = ($serviceHealth | ForEach-Object { "{0}={1}" -f $_.Service, $_.Status }) -join '; '
+    Write-ServiceHealthLog -Level 'NOTICE' -Message "Service health summary: $summary" -Console
+
+    if ($serviceHealthIssues -gt 0 -and -not $isTestMode) {
+        throw "Service health checks reported $serviceHealthIssues issue(s)." 
+    }
+    elseif ($serviceHealthIssues -gt 0) {
+        Write-Warning "Service health checks reported $serviceHealthIssues issue(s) (test mode: continuing)."
+    }
+}
+catch {
+    Write-Error "Service health verification failed: $_"
+    exit 1
+}
+
+#endregion ===== Service Health Checks =====
 
 
 #region ===== Application Execution =====
