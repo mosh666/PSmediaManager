@@ -2,95 +2,43 @@
 Set-StrictMode -Version Latest
 
 function New-FileSystemService {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseOutputTypeCorrectly', '', Justification = 'FileSystemService type may be unavailable when modules load in isolation.')]
-    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
+    <#
+    .SYNOPSIS
+        Creates a new FileSystemService instance.
+
+    .DESCRIPTION
+        Creates and returns a FileSystemService instance. This function requires that the
+        FileSystemService class has been loaded into the session (typically by importing
+        the PSmm module first).
+
+        NOTE: No fallback mechanism - FileSystemService class must be available.
+        If the class is not available, this indicates a module loading order issue.
+
+    .EXAMPLE
+        $fs = New-FileSystemService
+        $exists = $fs.TestPath('C:\temp')
+
+    .OUTPUTS
+        FileSystemService - A new instance of the FileSystemService class
+    #>
+    [CmdletBinding()]
     [OutputType('FileSystemService')]
-    [OutputType([pscustomobject])]
     param()
 
-    if (-not $PSCmdlet.ShouldProcess('File system service provider', 'Create new instance')) {
-        return
-    }
-
+    # Verify FileSystemService class is available
     try {
         $null = [FileSystemService]
-        return [FileSystemService]::new()
     }
     catch {
-        Write-Verbose 'FileSystemService type unavailable, using native cmdlet wrapper'
-
-        $wrapper = [pscustomobject]@{}
-
-        $wrapper = $wrapper | Add-Member -MemberType ScriptMethod -Name TestPath -Value {
-            param([string]$path)
-            if ([string]::IsNullOrWhiteSpace($path)) {
-                return $false
-            }
-            return Test-Path -Path $path -ErrorAction SilentlyContinue
-        } -PassThru
-
-        $wrapper = $wrapper | Add-Member -MemberType ScriptMethod -Name NewItem -Value {
-            param([string]$path, [string]$itemType)
-            if ([string]::IsNullOrWhiteSpace($path)) {
-                throw [ValidationException]::new("Path cannot be empty", "path")
-            }
-            if ([string]::IsNullOrWhiteSpace($itemType)) {
-                throw [ValidationException]::new("ItemType cannot be empty", "itemType")
-            }
-            $null = New-Item -Path $path -ItemType $itemType -Force -ErrorAction Stop
-        } -PassThru
-
-        $wrapper = $wrapper | Add-Member -MemberType ScriptMethod -Name GetChildItem -Value {
-            param([string]$path, [string]$filter, [string]$itemType)
-            if ([string]::IsNullOrWhiteSpace($path)) {
-                throw [ValidationException]::new("Path cannot be empty", "path")
-            }
-
-            $params = @{ Path = $path; ErrorAction = 'SilentlyContinue' }
-            if (-not [string]::IsNullOrWhiteSpace($filter)) {
-                $params['Filter'] = $filter
-            }
-
-            $items = Get-ChildItem @params
-
-            if (-not [string]::IsNullOrWhiteSpace($itemType)) {
-                switch ($itemType.ToLower()) {
-                    'directory' { $items = $items | Where-Object { $_.PSIsContainer } }
-                    'file' { $items = $items | Where-Object { -not $_.PSIsContainer } }
-                }
-            }
-
-            return @($items)
-        } -PassThru
-
-        $wrapper = $wrapper | Add-Member -MemberType ScriptMethod -Name RemoveItem -Value {
-            param([string]$path, [bool]$recurse)
-            if ([string]::IsNullOrWhiteSpace($path)) {
-                throw [ValidationException]::new("Path cannot be empty", "path")
-            }
-            if (-not (Test-Path -Path $path -ErrorAction SilentlyContinue)) {
-                return
-            }
-
-            $params = @{ Path = $path; Force = $true; ErrorAction = 'Stop' }
-            if ($recurse) { $params['Recurse'] = $true }
-            Remove-Item @params
-        } -PassThru
-
-        $wrapper = $wrapper | Add-Member -MemberType ScriptMethod -Name SetContent -Value {
-            param([string]$path, [string]$content)
-            if ([string]::IsNullOrWhiteSpace($path)) {
-                throw [ValidationException]::new("Path cannot be empty", "path")
-            }
-
-            $directory = Split-Path -Path $path -Parent
-            if (-not (Test-Path -Path $directory -ErrorAction SilentlyContinue)) {
-                $null = New-Item -Path $directory -ItemType Directory -Force -ErrorAction Stop
-            }
-
-            Set-Content -Path $path -Value $content -Force -ErrorAction Stop
-        } -PassThru
-
-        return $wrapper
+        $msg = @(
+            'FileSystemService class is not available in the session.'
+            'This typically indicates a module loading order issue.'
+            'Ensure the PSmm module is imported before using logging functions.'
+            'Error: ' + $_.Exception.Message
+        ) -join ' '
+        throw [InvalidOperationException]::new($msg, $_.Exception)
     }
+
+    # Create and return a new instance
+    return [FileSystemService]::new()
 }

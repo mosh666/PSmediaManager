@@ -46,11 +46,11 @@ secrets/
 #Ignore vscode AI rules
 .refactoring/
 
-UNUSED_CODE_ANALYSIS.md
-UNUSED_CODE_ANALYSIS_REPORT.md
+RESEARCH_*.md
+PHASE*.md
+UNUSED_CODE_ANALYSIS*.md
 CODE_QUALITY_ANALYSIS.md
-REFACTORING_ANALYSIS_DETAILED.md
-REFACTORING_SUMMARY.md
+REFACTORING*.md
 psa_fix_log.txt
 tests/psa_*.ps1
 tests/_tmp

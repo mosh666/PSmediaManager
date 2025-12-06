@@ -10,9 +10,17 @@ Set-StrictMode -Version Latest
 function Get-CurrentVersion-MariaDB {
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths
+        [hashtable]$Paths,
+        $FileSystem
     )
-    if ($CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }) {
+    if ($FileSystem) {
+        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
+    }
+    else {
+        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
+    }
+    
+    if ($CurrentVersion) {
         return $CurrentVersion.BaseName.Split('-')[1]
     }
     else {

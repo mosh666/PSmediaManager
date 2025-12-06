@@ -135,6 +135,10 @@ function Resolve-PluginCommandPath {
         [string]$DefaultCommand,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
@@ -150,7 +154,8 @@ function Resolve-PluginCommandPath {
     }
 
     $exeFilter = "$CommandName.exe"
-    $candidate = Get-ChildItem -LiteralPath $Paths.Root -Recurse -Filter $exeFilter -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $candidates = @($FileSystem.GetChildItem($Paths.Root, $exeFilter, 'File', $true))
+    $candidate = $candidates | Select-Object -First 1
 
     if ($candidate) {
         $resolvedPath = $candidate.FullName
@@ -765,7 +770,7 @@ function Get-InstallState {
 
         if (Test-PluginFunction -Name $versionFunctionName) {
             Write-Verbose "Using custom version detection function: $versionFunctionName"
-            $state.CurrentVersion = & $versionFunctionName -Plugin $Plugin -Paths $Paths
+            $state.CurrentVersion = & $versionFunctionName -Plugin $Plugin -Paths $Paths -FileSystem $FileSystem
         }
         elseif ($installPath) {
             # Fall back to directory name as version
@@ -873,7 +878,7 @@ function Get-LatestDownloadUrl {
 
                 if (Test-PluginFunction -Name $urlFunctionName) {
                     Write-PSmmLog -Level INFO -Context "Check $pluginName" -Message "Using custom URL function: $urlFunctionName" -Console -File
-                    $url = & $urlFunctionName -Plugin $Plugin -Paths $Paths
+                    $url = & $urlFunctionName -Plugin $Plugin -Paths $Paths -FileSystem $FileSystem
                 }
                 else {
                     Write-Warning "No custom URL function found: $urlFunctionName"
@@ -1079,7 +1084,7 @@ function Invoke-Installer {
                 }
 
                 try {
-                    $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -Process $Process
+                    $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
                 }
                 catch {
                     throw [PluginRequirementException]::new("7z is required to extract .7z archives: $($_)", "7z", $_.Exception)

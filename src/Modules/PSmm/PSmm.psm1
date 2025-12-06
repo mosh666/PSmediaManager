@@ -58,15 +58,25 @@ try {
         # 5. Builder classes (use configuration)
         # 6. DI container (uses all above)
         $ClassFiles = @(
-            # Interfaces + core File/Env/Process services moved to Core/BootstrapServices.ps1 (Option B refactor)
+            # Interfaces (required before implementations and exception classes that may inherit from them)
+            'Interfaces.ps1',              # Interface contracts (no dependencies)
             'Exceptions.ps1',              # Exception classes (no dependencies)
+            # Service implementations (in dependency order)
+            'Services\FileSystemService.ps1', # File system service (implements IFileSystemService)
+            'Services\EnvironmentService.ps1', # Environment service (implements IEnvironmentService)
+            'Services\ProcessService.ps1',  # Process service (implements IProcessService)
             'Services\HttpService.ps1',    # HTTP service (implements IHttpService)
             'Services\CimService.ps1',     # CIM service (implements ICimService)
             'Services\GitService.ps1',     # Git service (implements IGitService)
             'Services\CryptoService.ps1',  # Crypto service (implements ICryptoService)
             'Services\StorageService.ps1', # Storage service (implements IStorageService)
+            # Configuration classes (use services and interfaces)
             'AppConfiguration.ps1',        # Configuration classes (uses exceptions and interfaces)
-            'AppConfigurationBuilder.ps1'  # Builder (uses configuration and exceptions)
+            'ConfigValidator.ps1',         # Configuration validator (Phase 10)
+            'AppConfigurationBuilder.ps1', # Builder (uses configuration and exceptions)
+            # Domain model classes
+            'ProjectInfo.ps1',             # Project information (type-safe project data)
+            'PortInfo.ps1'                 # Port allocation information (type-safe port data)
         )
 
         $importDiagnostics = [System.Collections.Generic.List[object]]::new()
@@ -189,7 +199,11 @@ Export-ModuleMember -Function @(
     'Initialize-SystemVault',
     'Save-SystemSecret',
     # Drive Root Launcher
-    'New-DriveRootLauncher'
+    'New-DriveRootLauncher',
+    # Type-safe class factory functions
+    'New-ProjectInfo',
+    'New-PortInfo',
+    'Get-ProjectInfoFromPath'
 )
 
 # Ensure host output helper is exported so scripts (outside the module)

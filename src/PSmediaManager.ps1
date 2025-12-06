@@ -373,6 +373,32 @@ try {
     $appConfig = $configBuilder.Build()
     Write-Verbose "Configuration built successfully"
 
+    # Phase 10: Validate configuration
+    Write-Verbose "Validating configuration..."
+    $validator = [ConfigValidator]::new($script:Services.FileSystem)
+    $validationIssues = $validator.ValidateConfiguration($appConfig)
+    
+    if ($validationIssues.Count -gt 0) {
+        $errors = @($validationIssues | Where-Object { $_.Severity -eq 'Error' })
+        $warnings = @($validationIssues | Where-Object { $_.Severity -eq 'Warning' })
+        
+        if ($warnings.Count -gt 0) {
+            Write-Verbose "Configuration validation found $($warnings.Count) warning(s)"
+            foreach ($warning in $warnings) {
+                Write-Warning "[$($warning.Category)] $($warning.Property): $($warning.Message)"
+            }
+        }
+        
+        if ($errors.Count -gt 0) {
+            Write-Error "Configuration validation failed with $($errors.Count) error(s):"
+            foreach ($error in $errors) {
+                Write-Error "[$($error.Category)] $($error.Property): $($error.Message)"
+            }
+            throw [ValidationException]::new("Configuration validation failed", "AppConfiguration", $appConfig)
+        }
+    }
+    Write-Verbose "Configuration validation passed"
+
     # Bootstrap using modern AppConfiguration approach
     # All bootstrap functions now support AppConfiguration natively
     Invoke-PSmm -Config $appConfig

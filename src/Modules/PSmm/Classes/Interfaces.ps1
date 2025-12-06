@@ -61,7 +61,7 @@ class IFileSystemService {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 
-    [object[]] GetChildItem([string]$path, [string]$filter, [string]$itemType) {
+    [object[]] GetChildItem([string]$path, [string]$filter, [string]$itemType, [bool]$recurse = $false) {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 

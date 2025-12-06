@@ -97,63 +97,83 @@ function Get-PSmmProjects {
 
             # Check if any Projects directories have been modified since last scan
             # Support both FileSystem abstraction and direct PowerShell cmdlets
-            $canTestPath = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'TestPath')
-            $canGetItemProp = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'GetItemProperty')
-            $CacheInvalid = $false
-            $Storage = $Config.Storage
+            # Verify FileSystem service is available
+            $CacheInvalid = $false  # Default: assume valid unless proven otherwise
+            
+            if (-not $FileSystem) {
+                Write-PSmmLog -Level WARNING -Context 'Get-PSmmProjects' `
+                    -Message 'FileSystem service not available, cannot validate cache' -File
+                Write-Verbose 'FileSystem service not available, bypassing cache validation'
+            } else {
+                $Storage = $Config.Storage
 
-            # Only validate cache against storage if storage is configured
-            if ($null -ne $Storage -and $Storage.Count -gt 0) {
-                foreach ($storageGroup in ($Storage.Keys | Sort-Object)) {
-                    $sg = $Storage[$storageGroup]
-                    if ($null -eq $sg) { continue }
+                # Only validate cache against storage if storage is configured
+                if ($null -ne $Storage -and $Storage.Count -gt 0) {
+                    foreach ($storageGroup in ($Storage.Keys | Sort-Object)) {
+                        $sg = $Storage[$storageGroup]
+                        if ($null -eq $sg) { continue }
 
-                    # Check Master drive
-                    if ($null -ne $sg.Master) {
-                        $MasterDisk = $sg.Master
-                        $driveExists = $isTestMode -or (Test-DriveRootPath -DriveLetter $MasterDisk.DriveLetter -FileSystem $FileSystem)
-                        if ($driveExists) {
-                            $ProjectsPath = Join-Path -Path $MasterDisk.DriveLetter -ChildPath 'Projects'
-                            $projectsPathExists = if ($canTestPath) { try { $FileSystem.TestPath($ProjectsPath) } catch { $false } } else { Test-Path -Path $ProjectsPath -ErrorAction SilentlyContinue }
-                            if ($projectsPathExists) {
-                                $ProjectsDirInfo = if ($canGetItemProp) { $FileSystem.GetItemProperty($ProjectsPath) } else { Get-Item -Path $ProjectsPath }
-                                $CurrentWriteTime = $ProjectsDirInfo.LastWriteTime
-                                $CacheKey = "$($MasterDisk.SerialNumber)_Projects"
+                        # Check Master drive
+                        if ($null -ne $sg.Master) {
+                            $MasterDisk = $sg.Master
+                            $driveExists = $isTestMode -or (Test-DriveRootPath -DriveLetter $MasterDisk.DriveLetter -FileSystem $FileSystem)
+                            if ($driveExists) {
+                                $ProjectsPath = Join-Path -Path $MasterDisk.DriveLetter -ChildPath 'Projects'
+                                try {
+                                    $projectsPathExists = $FileSystem.TestPath($ProjectsPath)
+                                    if ($projectsPathExists) {
+                                        $ProjectsDirInfo = $FileSystem.GetItemProperty($ProjectsPath)
+                                        $CurrentWriteTime = $ProjectsDirInfo.LastWriteTime
+                                        $CacheKey = "$($MasterDisk.SerialNumber)_Projects"
 
-                                if (-not $registry.ProjectDirs.ContainsKey($CacheKey) -or
-                                    $registry.ProjectDirs[$CacheKey] -ne $CurrentWriteTime) {
-                                    Write-Verbose "Projects directory modified on Master drive $($MasterDisk.Label)"
+                                        if (-not $registry.ProjectDirs.ContainsKey($CacheKey) -or
+                                            $registry.ProjectDirs[$CacheKey] -ne $CurrentWriteTime) {
+                                            Write-Verbose "Projects directory modified on Master drive $($MasterDisk.Label)"
+                                            $CacheInvalid = $true
+                                            break
+                                        }
+                                    }
+                                }
+                                catch {
+                                    Write-Verbose "Error checking Master drive cache: $_"
                                     $CacheInvalid = $true
                                     break
                                 }
                             }
                         }
-                    }
 
-                    # Check Backup drives
-                    if ($null -ne $sg.Backups -and $sg.Backups.Count -gt 0) {
-                        foreach ($backupId in ($sg.Backups.Keys | Sort-Object)) {
-                            $BackupDisk = $sg.Backups[$backupId]
-                            $backupExists = $isTestMode -or (Test-DriveRootPath -DriveLetter $BackupDisk.DriveLetter -FileSystem $FileSystem)
-                            if ($backupExists) {
-                                $ProjectsPath = Join-Path -Path $BackupDisk.DriveLetter -ChildPath 'Projects'
-                                $projectsPathExists = if ($canTestPath) { try { $FileSystem.TestPath($ProjectsPath) } catch { $false } } else { Test-Path -Path $ProjectsPath -ErrorAction SilentlyContinue }
-                                if ($projectsPathExists) {
-                                    $ProjectsDirInfo = if ($canGetItemProp) { $FileSystem.GetItemProperty($ProjectsPath) } else { Get-Item -Path $ProjectsPath }
-                                    $CurrentWriteTime = $ProjectsDirInfo.LastWriteTime
-                                    $CacheKey = "$($BackupDisk.SerialNumber)_Projects"
+                        # Check Backup drives
+                        if ($null -ne $sg.Backups -and $sg.Backups.Count -gt 0) {
+                            foreach ($backupId in ($sg.Backups.Keys | Sort-Object)) {
+                                $BackupDisk = $sg.Backups[$backupId]
+                                $backupExists = $isTestMode -or (Test-DriveRootPath -DriveLetter $BackupDisk.DriveLetter -FileSystem $FileSystem)
+                                if ($backupExists) {
+                                    $ProjectsPath = Join-Path -Path $BackupDisk.DriveLetter -ChildPath 'Projects'
+                                    try {
+                                        $projectsPathExists = $FileSystem.TestPath($ProjectsPath)
+                                        if ($projectsPathExists) {
+                                            $ProjectsDirInfo = $FileSystem.GetItemProperty($ProjectsPath)
+                                            $CurrentWriteTime = $ProjectsDirInfo.LastWriteTime
+                                            $CacheKey = "$($BackupDisk.SerialNumber)_Projects"
 
-                                    if (-not $registry.ProjectDirs.ContainsKey($CacheKey) -or
-                                        $registry.ProjectDirs[$CacheKey] -ne $CurrentWriteTime) {
-                                        Write-Verbose "Projects directory modified on Backup drive $($BackupDisk.Label)"
+                                            if (-not $registry.ProjectDirs.ContainsKey($CacheKey) -or
+                                                $registry.ProjectDirs[$CacheKey] -ne $CurrentWriteTime) {
+                                                Write-Verbose "Projects directory modified on Backup drive $($BackupDisk.Label)"
+                                                $CacheInvalid = $true
+                                                break
+                                            }
+                                        }
+                                    }
+                                    catch {
+                                        Write-Verbose "Error checking Backup drive cache: $_"
                                         $CacheInvalid = $true
                                         break
                                     }
                                 }
                             }
-                        }
 
-                        if ($CacheInvalid) { break }
+                            if ($CacheInvalid) { break }
+                        }
                     }
                 }
             }

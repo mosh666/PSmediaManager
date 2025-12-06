@@ -10,9 +10,17 @@ Set-StrictMode -Version Latest
 function Get-CurrentVersion-ffmpeg {
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths
+        [hashtable]$Paths,
+        $FileSystem
     )
-    if ($CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }) {
+    if ($FileSystem) {
+        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
+    }
+    else {
+        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
+    }
+    
+    if ($CurrentVersion) {
         return $CurrentVersion.BaseName.Split('-')[1]
     }
     else {
@@ -23,10 +31,20 @@ function Get-CurrentVersion-ffmpeg {
 function Get-LatestUrlFromUrl-ffmpeg {
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths
+        [hashtable]$Paths,
+        $FileSystem
     )
     Invoke-RestMethod -Uri $Plugin.Config.VersionUrl -OutFile $Paths._Temp
-    $LatestInstaller = Split-Path -Path (Get-ChildItem -Path $Paths._Temp -Name "$($Plugin.Config.Name)*.7z") -Leaf
+    
+    if ($FileSystem) {
+        $tempFiles = @($FileSystem.GetChildItem($Paths._Temp, "$($Plugin.Config.Name)*.7z", 'File'))
+        $latestFile = $tempFiles | Select-Object -First 1
+        $LatestInstaller = $latestFile.Name
+    }
+    else {
+        $LatestInstaller = Split-Path -Path (Get-ChildItem -Path $Paths._Temp -Name "$($Plugin.Config.Name)*.7z") -Leaf
+    }
+    
     $LatestVersion = $LatestInstaller.Split('-')[1]
     $Plugin.Config.State.LatestVersion = $LatestVersion
     $Plugin.Config.State.LatestInstaller = $LatestInstaller
@@ -42,16 +60,18 @@ function Get-Installer-ffmpeg {
         $Http,
         $FileSystem
     )
-    $pattern = "$($Paths._Downloads)\$($Plugin.Config.Name)*.7z"
+    $pattern = "$($Plugin.Config.Name)*.7z"
     if ($FileSystem) {
-        Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue |
-            ForEach-Object { $FileSystem.RemoveItem($_.FullName, $false) }
+        $filesToRemove = @($FileSystem.GetChildItem($Paths._Downloads, $pattern, 'File'))
+        foreach ($file in $filesToRemove) {
+            $FileSystem.RemoveItem($file.FullName, $false)
+        }
     }
     else {
-        Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue |
+        Get-ChildItem -Path "$($Paths._Downloads)\$pattern" -ErrorAction SilentlyContinue |
             Remove-Item -Force -ErrorAction SilentlyContinue
     }
-    Move-Item -Path "$($Paths._Temp)\$($Plugin.Config.Name)*.7z" -Destination $Paths._Downloads -Force
+    Move-Item -Path "$($Paths._Temp)\$pattern" -Destination $Paths._Downloads -Force
     $InstallerPath = Join-Path -Path $Paths._Downloads -ChildPath $Plugin.Config.State.LatestInstaller
     return $InstallerPath
 }

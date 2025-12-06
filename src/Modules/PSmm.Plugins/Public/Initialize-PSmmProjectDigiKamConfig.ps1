@@ -122,13 +122,13 @@ function Initialize-PSmmProjectDigiKamConfig {
             $databasePort = Get-PSmmAvailablePort -Config $Config -ProjectName $ProjectName -Force:$Force
 
             # Get plugin paths
-            $digiKamInstallations = $FileSystem.GetChildItem($Config.Paths.App.Plugins.Root,'Directory','digiKam-*')
+            $digiKamInstallations = $FileSystem.GetChildItem($Config.Paths.App.Plugins.Root, 'digiKam-*', 'Directory')
             if (-not $digiKamInstallations) {
                 throw [PluginRequirementException]::new('digiKam installation not found in Plugins directory', 'digiKam')
             }
             $digiKamPluginsPath = $digiKamInstallations[0].FullName
 
-            $mariaDbInstallations = $FileSystem.GetChildItem($Config.Paths.App.Plugins.Root,'Directory','mariadb-*')
+            $mariaDbInstallations = $FileSystem.GetChildItem($Config.Paths.App.Plugins.Root, 'mariadb-*', 'Directory')
             if (-not $mariaDbInstallations) {
                 throw [PluginRequirementException]::new('MariaDB installation not found in Plugins directory', 'MariaDB')
             }

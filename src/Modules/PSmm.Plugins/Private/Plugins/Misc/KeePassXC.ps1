@@ -10,9 +10,17 @@ Set-StrictMode -Version Latest
 function Get-CurrentVersion-KeePassXC {
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths
+        [hashtable]$Paths,
+        $FileSystem
     )
-    if ($InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }) {
+    if ($FileSystem) {
+        $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
+    }
+    else {
+        $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
+    }
+    
+    if ($InstallPath) {
         $bin = Join-Path -Path $InstallPath -ChildPath $Plugin.Config.CommandPath -AdditionalChildPath $Plugin.Config.Command
         $CurrentVersion = (& $bin --version)
         return $CurrentVersion

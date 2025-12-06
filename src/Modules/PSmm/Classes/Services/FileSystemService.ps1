@@ -87,7 +87,7 @@ class FileSystemService : IFileSystemService {
     .SYNOPSIS
         Gets child items from a directory.
     #>
-    [object[]] GetChildItem([string]$path, [string]$filter, [string]$itemType) {
+    [object[]] GetChildItem([string]$path, [string]$filter, [string]$itemType, [bool]$recurse = $false) {
         if ([string]::IsNullOrWhiteSpace($path)) {
             throw [ArgumentException]::new("Path cannot be empty", "path")
         }
@@ -99,6 +99,10 @@ class FileSystemService : IFileSystemService {
 
         if (-not [string]::IsNullOrWhiteSpace($filter)) {
             $params['Filter'] = $filter
+        }
+
+        if ($recurse) {
+            $params['Recurse'] = $true
         }
 
         $items = Get-ChildItem @params

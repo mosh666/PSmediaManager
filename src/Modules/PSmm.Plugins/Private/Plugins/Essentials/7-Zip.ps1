@@ -9,9 +9,17 @@ Set-StrictMode -Version Latest
 function Get-CurrentVersion-7z {
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths
+        [hashtable]$Paths,
+        $FileSystem
     )
-    if ($CurrentVersion = Get-ChildItem -Path $Paths.Root -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Command)" }) {
+    if ($FileSystem) {
+        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, $Plugin.Config.Command, 'File', $true)) | Select-Object -First 1
+    }
+    else {
+        $CurrentVersion = Get-ChildItem -Path $Paths.Root -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like $Plugin.Config.Command }
+    }
+    
+    if ($CurrentVersion) {
         return $CurrentVersion.VersionInfo.FileVersion
     }
     else {

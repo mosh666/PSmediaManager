@@ -268,32 +268,35 @@ function Initialize-Logging {
         }
             Write-Verbose 'DEBUG: FileSystemService check complete'
 
-        # Ensure log directory exists (use service if available, else native cmdlets)
+        # Ensure log directory exists (using PathProvider and FileSystem services)
     $scriptLoggingType = $script:Logging.GetType().FullName
     $scriptLoggingKeysCount = @($script:Logging.Keys).Count
     $scriptLoggingKeysJoined = $script:Logging.Keys -join ', '
     Write-Verbose "DEBUG: About to check log directory. script:Logging type: $scriptLoggingType, KeysCount: $scriptLoggingKeysCount, Keys: $scriptLoggingKeysJoined"
-        $logDir = if ($PathProvider -and ($PathProvider | Get-Member -Name 'CombinePath' -ErrorAction SilentlyContinue)) {
-            # Derive parent directory using path provider logic
-            $parent = Split-Path -Path $script:Logging.Path -Parent
-            $PathProvider.CombinePath(@($parent))
+        # Derive parent directory
+        $parent = Split-Path -Path $script:Logging.Path -Parent
+        if ($PathProvider) {
+            $logDir = $PathProvider.CombinePath(@($parent))
         } else {
-            Split-Path -Path $script:Logging.Path -Parent
+            $logDir = $parent
         }
         try {
             Write-Verbose "DEBUG: Checking log directory exists: $logDir"
-            $logDirExists = if ($FileSystem -and ($FileSystem | Get-Member -Name 'TestPath' -ErrorAction SilentlyContinue)) {
-                $FileSystem.TestPath($logDir)
-            } else { Test-Path -Path $logDir }
+            # Use FileSystem service if available, otherwise use native cmdlet
+            if ($FileSystem) {
+                $logDirExists = $FileSystem.TestPath($logDir)
+            } else {
+                $logDirExists = Test-Path -Path $logDir
+            }
             if (-not $logDirExists) {
                 Write-Verbose "Creating log directory: $logDir"
                 try {
-                    if ($FileSystem -and ($FileSystem | Get-Member -Name 'NewItem' -ErrorAction SilentlyContinue)) {
+                    if ($FileSystem) {
                         $FileSystem.NewItem($logDir, 'Directory')
                     }
                     else {
-                        # Fall back to native cmdlet
-                        Write-Verbose 'FileSystem service not available, using native New-Item cmdlet'
+                        # Fallback only during early bootstrap when services may not be loaded
+                        Write-Verbose 'FileSystem service not available during bootstrap, using native New-Item cmdlet'
                         $null = New-Item -Path $logDir -ItemType Directory -Force -ErrorAction Stop
                     }
                 }
@@ -353,18 +356,19 @@ function Initialize-Logging {
         if ($Config.Parameters.Dev) {
             Write-Verbose 'Dev mode: Clearing log file'
             $logFilePath = $script:Logging.Path
-            $logFileExists = if ($FileSystem -and ($FileSystem | Get-Member -Name 'TestPath' -ErrorAction SilentlyContinue)) {
+            $logFileExists = if ($FileSystem) {
                 $FileSystem.TestPath($logFilePath)
-            } else { Test-Path -Path $logFilePath }
+            } else {
+                Test-Path -Path $logFilePath
+            }
             if ($logFileExists) {
                 try {
-                    if ($FileSystem -and ($FileSystem | Get-Member -Name 'SetContent' -ErrorAction SilentlyContinue)) {
+                    if ($FileSystem) {
                         $FileSystem.SetContent($logFilePath, '')
                     }
                     else {
-                        $ex = [ValidationException]::new("FileSystem service is required to clear log file", "FileSystem")
-                        $ex.AddData("LogFilePath", $logFilePath)
-                        throw $ex
+                        # Fallback during early bootstrap
+                        Set-Content -Path $logFilePath -Value '' -Force -ErrorAction Stop
                     }
                 }
                 catch {
