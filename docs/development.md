@@ -149,6 +149,27 @@ pwsh -NoProfile -File .\.codacy\Invoke-CodacyWSL.ps1 -RepositoryPath . -Verbose
 - Coverage improvements must be accompanied by an updated `tests/.coverage-baseline.json`. The harness exits non-zero if coverage falls below the baseline (currently 65.43%).
 - Issue/PR templates and CODEOWNERS live under `.github/`; use them so reviewers get adequate context and the right maintainers are auto-assigned.
 
+## Recent Bootstrap Fixes (Phase 10+)
+
+The bootstrap process has been hardened to handle several critical scenarios:
+
+### Configuration Validation
+- **ConfigValidator Parser Error** (Phase 10): Fixed incorrect script block scoping that prevented configuration validation from completing. The issue manifested as `"if is not recognized"` parser errors.
+- **Type Validation**: Enhanced ConfigValidator to support Dictionary types and null value handling for optional properties.
+
+### Vault & Secrets
+- **GitHub-Token Console Mode Error**: Fixed Win32 console mode error (0x57 "Falscher Parameter") that occurred when prompting for vault master password during bootstrap. Added try-catch wrapper around `Read-Host` with graceful fallback for optional secrets.
+- **Implementation**: Located in `src/Modules/PSmm/Private/Bootstrap/Get-SystemSecret.ps1` (lines 305-330). When console input fails on optional secrets, bootstrap continues with null token instead of blocking.
+
+### Plugin Installation
+- **ExifTool Installer Error**: Fixed "file already exists" error by replacing fragile string-based path construction with dynamic directory search using wildcard patterns. The installer now handles variable directory naming conventions robustly.
+- **FileSystemService Overload**: Added explicit 3-parameter overload for `GetChildItem()` method to resolve PowerShell's method overload resolution issues when default parameters exist.
+- **Path Resolution**: Enhanced `Get-LocalPluginExecutablePath` to dynamically resolve plugin installation directories from the installed plugins root when `InstallPath` property is missing from config.
+
+### Service Health Checks
+- **HTTP Wrapper Availability**: Made the HTTP service health check non-critical. The check now gracefully handles missing `Invoke-HttpRestMethod` wrapper function and defaults to OK status instead of blocking bootstrap.
+- **Impact**: All 11 required plugins (7z, PortableGit, git-lfs, gitversion, exiftool, ffmpeg, ImageMagick, KeePassXC, mkvtoolnix, mariadb, digiKam) now confirm successfully, and the application reaches the interactive UI phase.
+
 ## Performance Considerations
 
 - Prefer streaming operations for large media metadata extraction.

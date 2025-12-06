@@ -230,7 +230,18 @@ function Invoke-PSmm {
             $GitPath = Join-Path -Path $Config.Paths.RepositoryRoot -ChildPath '.git'
             $gitVersionExecutable = $null
             if ($Config.Requirements -and $Config.Requirements.Plugins -and $Config.Requirements.Plugins.b_GitEnv -and $Config.Requirements.Plugins.b_GitEnv.GitVersion) {
-                $gitVersionExecutable = Get-LocalPluginExecutablePath -PluginConfig $Config.Requirements.Plugins.b_GitEnv.GitVersion
+                # Try to resolve plugins path for GitVersion lookup
+                $pluginsPath = $null
+                try {
+                    if ($Config.Paths -and $Config.Paths.App -and $Config.Paths.App.Plugins -and $Config.Paths.App.Plugins.Root) {
+                        $pluginsPath = $Config.Paths.App.Plugins.Root
+                    }
+                }
+                catch {
+                    Write-Verbose "Could not resolve plugins path from Config.Paths: $_"
+                }
+                
+                $gitVersionExecutable = Get-LocalPluginExecutablePath -PluginConfig $Config.Requirements.Plugins.b_GitEnv.GitVersion -PluginsRootPath $pluginsPath
             }
             $Config.AppVersion = Get-ApplicationVersion -GitPath $GitPath -GitVersionExecutablePath $gitVersionExecutable
             Write-PSmmLog -Level NOTICE -Context 'Get-AppVersion' -Message "Current PSmediaManager version: $($Config.AppVersion)" -Console -File
@@ -436,14 +447,35 @@ function Get-LocalPluginExecutablePath {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [hashtable]$PluginConfig
+        [hashtable]$PluginConfig,
+        
+        [Parameter()]
+        [string]$PluginsRootPath
     )
 
     if ($null -eq $PluginConfig) {
         return $null
     }
 
+    # Try to get InstallPath from config; if not present, compute it from plugin name
     $installPath = $PluginConfig.InstallPath
+    
+    # If InstallPath not in config but we have PluginsRootPath and plugin Name, try to find it
+    if ([string]::IsNullOrWhiteSpace($installPath) -and -not [string]::IsNullOrWhiteSpace($PluginsRootPath) -and $PluginConfig.Name) {
+        # Search for installed plugin directory matching the name pattern
+        try {
+            $pluginDir = Get-ChildItem -Path $PluginsRootPath -Directory -ErrorAction SilentlyContinue | 
+                         Where-Object { $_.Name -like "$($PluginConfig.Name)*" } | 
+                         Select-Object -First 1
+            if ($pluginDir) {
+                $installPath = $pluginDir.FullName
+            }
+        }
+        catch {
+            Write-Verbose "Error searching for plugin directory at $PluginsRootPath : $_"
+        }
+    }
+    
     if ([string]::IsNullOrWhiteSpace($installPath)) {
         return $null
     }

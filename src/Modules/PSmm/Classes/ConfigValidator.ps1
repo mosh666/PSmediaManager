@@ -149,7 +149,7 @@ class ConfigValidator {
         $this.AddSchema($schema)
         
         # Storage groups
-        $this.AddSchema([ConfigSchema]::new('Storage', 'Hashtable', $false))
+        $this.AddSchema([ConfigSchema]::new('Storage', 'Dictionary', $false))
     }
     
     <#
@@ -228,6 +228,15 @@ class ConfigValidator {
             return
         }
         
+        # Skip validation for null values unless required
+        if ($null -eq $current) {
+            if ($schema.Required) {
+                $issue = [ValidationIssue]::new('Error', 'Type', $schema.PropertyPath, "Required property has null value")
+                $this._issues.Add($issue)
+            }
+            return
+        }
+        
         # Type validation
         if (-not [string]::IsNullOrWhiteSpace($schema.ExpectedType)) {
             $valid = $this.ValidateType($current, $schema.ExpectedType)
@@ -300,6 +309,7 @@ class ConfigValidator {
             'Int' { $value -is [int] -or $value -is [long] }
             'Boolean' { $value -is [bool] }
             'Hashtable' { $value -is [hashtable] }
+            'Dictionary' { $value.GetType().Name -match 'Dictionary`2' }
             'Array' { $value -is [array] }
             'Double' { $value -is [double] -or $value -is [decimal] }
             default { $true }
@@ -321,21 +331,15 @@ class ConfigValidator {
         $paths = $pathsProperty.Value
         
         # Helper to safely get value from hashtable or PSObject
-        $getValue = {
-            param($obj, $key)
-            if ($obj -is [hashtable]) {
-                return $obj[$key]
-            }
-            else {
-                $prop = $obj.PSObject.Properties[$key]
-                return if ($null -ne $prop) { $prop.Value } else { $null }
-            }
-        }
+        # Implemented inline to avoid scoping issues with script blocks in class methods
+        $rootValue = if ($paths -is [hashtable]) { $paths['Root'] } else { $paths.Root }
+        $repoValue = if ($paths -is [hashtable]) { $paths['RepositoryRoot'] } else { $paths.RepositoryRoot }
+        $logValue = if ($paths -is [hashtable]) { $paths['Log'] } else { $paths.Log }
         
         $pathsToCheck = @(
-            @{ Name = 'Root'; Value = (& $getValue $paths 'Root'); MustExist = $false },
-            @{ Name = 'RepositoryRoot'; Value = (& $getValue $paths 'RepositoryRoot'); MustExist = $true },
-            @{ Name = 'Log'; Value = (& $getValue $paths 'Log'); MustExist = $false }
+            @{ Name = 'Root'; Value = $rootValue; MustExist = $false },
+            @{ Name = 'RepositoryRoot'; Value = $repoValue; MustExist = $true },
+            @{ Name = 'Log'; Value = $logValue; MustExist = $false }
         )
         
         foreach ($pathCheck in $pathsToCheck) {

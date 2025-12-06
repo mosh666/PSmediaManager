@@ -322,14 +322,28 @@ function Get-SystemSecret {
         # Resolve from cache if present
         $masterPw = $script:_VaultMasterPasswordCache
         if (-not $masterPw) {
-            Write-PSmmHost "Enter vault master password (input hidden):" -ForegroundColor Yellow
-            # Prompt user explicitly (KeePassXC would otherwise prompt without context)
-            $masterPw = Read-Host 'Vault Master Password' -AsSecureString
-            # Offer to cache for this session
-            $cacheAns = Read-Host 'Cache this master password for this session? [Y/n]'
-            if ([string]::IsNullOrWhiteSpace($cacheAns) -or $cacheAns.Trim().ToLower() -eq 'y') {
-                $script:_VaultMasterPasswordCache = $masterPw
-                Write-Verbose 'Vault master password cached for this session.'
+            try {
+                Write-PSmmHost "Enter vault master password (input hidden):" -ForegroundColor Yellow
+                # Prompt user explicitly (KeePassXC would otherwise prompt without context)
+                # Wrapped in try-catch to handle console mode initialization errors (e.g., Win32 0x57)
+                $masterPw = Read-Host 'Vault Master Password' -AsSecureString -ErrorAction Stop
+                # Offer to cache for this session
+                $cacheAns = Read-Host 'Cache this master password for this session? [Y/n]' -ErrorAction Stop
+                if ([string]::IsNullOrWhiteSpace($cacheAns) -or $cacheAns.Trim().ToLower() -eq 'y') {
+                    $script:_VaultMasterPasswordCache = $masterPw
+                    Write-Verbose 'Vault master password cached for this session.'
+                }
+            }
+            catch {
+                $readHostError = $_
+                $errorMsg = "Failed to read vault master password from console: $($readHostError.Message)"
+                if ($Optional) {
+                    Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
+                    Write-Verbose "Skipping vault access because -Optional was specified and console input failed."
+                    return $null
+                }
+                # If console is unavailable and secret is mandatory, throw the error
+                throw "Cannot prompt for vault master password due to console mode error: $($readHostError.Message)"
             }
         }
         $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($masterPw)
@@ -345,16 +359,23 @@ function Get-SystemSecret {
             [System.IO.File]::WriteAllText($tmpPw, "$plainMaster`n", [System.Text.Encoding]::ASCII)
 
             # Use Start-Process so we can redirect stdin/stdout/stderr to files
+            # Wrapped in try-catch to handle console mode or process execution errors
             $proc = Start-Process -FilePath $cli `
                 -ArgumentList 'show','-s','-a','Password',$dbPath,$entry `
                 -NoNewWindow -Wait -PassThru `
                 -RedirectStandardInput $tmpPw `
                 -RedirectStandardOutput $tmpOut `
-                -RedirectStandardError $tmpErr
+                -RedirectStandardError $tmpErr `
+                -ErrorAction Stop
 
             $secretValue = ''
             if ($proc.ExitCode -eq 0 -and $FileSystem.TestPath($tmpOut)) {
                 $secretValue = ($FileSystem.GetContent($tmpOut)).Trim()
+            }
+            elseif ($proc.ExitCode -ne 0 -and $FileSystem.TestPath($tmpErr)) {
+                # Log keepassxc-cli stderr for debugging
+                $cliStderr = ($FileSystem.GetContent($tmpErr)).Trim()
+                Write-Verbose "KeePassXC CLI stderr: $cliStderr"
             }
         }
         finally {

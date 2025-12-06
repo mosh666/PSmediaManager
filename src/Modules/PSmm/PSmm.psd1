@@ -65,6 +65,8 @@
         'New-DriveRootLauncher'
         # Host output helper exported so scripts can call centralized output
         'Write-PSmmHost'
+        # HTTP wrapper
+        'Invoke-HttpRestMethod'
     )
 
     # Cmdlets to export from this module

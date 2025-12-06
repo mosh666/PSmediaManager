@@ -54,8 +54,23 @@ function Invoke-Installer-ExifTool {
     try {
         $ExtractPath = $Paths.Root
         Expand-Archive -Path $InstallerPath -DestinationPath $ExtractPath -Force
-        Rename-Item -Path "$("$ExtractPath")\exiftool-$($Plugin.Config.State.LatestVersion)_64\exiftool(-k).exe" -NewName 'exiftool.exe'
-        Write-PSmmLog -Level SUCCESS -Context "Install $($Plugin.Config.Name)" -Message "Installation completed for $($InstallerPath)" -Console -File
+        
+        # Find the extracted exiftool directory
+        $ExiftoolDir = Get-ChildItem -Path $ExtractPath -Directory -Filter "exiftool-*_64" -ErrorAction SilentlyContinue | Select-Object -First 1
+        
+        if ($ExiftoolDir) {
+            # Find and rename the executable file (handles both formats: exiftool(-k).exe and exiftool.exe)
+            $ExeFile = Get-ChildItem -Path $ExiftoolDir.FullName -Filter "exiftool*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+            
+            if ($ExeFile -and $ExeFile.Name -ne 'exiftool.exe') {
+                Rename-Item -Path $ExeFile.FullName -NewName 'exiftool.exe' -Force -ErrorAction Stop
+            }
+            
+            Write-PSmmLog -Level SUCCESS -Context "Install $($Plugin.Config.Name)" -Message "Installation completed for $($InstallerPath)" -Console -File
+        }
+        else {
+            throw "ExifTool directory not found after extraction"
+        }
     }
     catch {
         Write-PSmmLog -Level ERROR -Context "Install $($Plugin.Config.Name)" -Message "Installation failed for $($InstallerPath)" -ErrorRecord $_ -Console -File

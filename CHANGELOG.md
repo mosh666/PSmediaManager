@@ -9,6 +9,13 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed (Unreleased)
 
+- **Bootstrap**: Fixed ConfigValidator parser error caused by incorrect script block scoping that prevented configuration validation from completing
+- **Bootstrap**: Fixed GitHub-Token vault retrieval error (Win32 console mode error 0x57) by wrapping `Read-Host` in try-catch with graceful fallback for optional secrets
+- **Bootstrap**: Fixed ExifTool installer "file already exists" error by replacing fragile string-based path construction with dynamic directory search using wildcard patterns
+- **Bootstrap**: Added explicit GetChildItem 3-parameter overload to FileSystemService to resolve method overload resolution failures
+- **Bootstrap**: Enhanced Get-LocalPluginExecutablePath to dynamically resolve plugin paths from installed directories, eliminating hard dependency on InstallPath property
+- **Bootstrap**: Made HTTP service health check non-critical by gracefully handling missing wrapper function; now defaults to OK status instead of blocking bootstrap
+- **Exports**: Added Invoke-HttpRestMethod to PSmm module function exports to ensure HTTP wrapper availability
 - **Code Quality**: Fixed 13 PSScriptAnalyzer issues in `AppConfiguration.ps1` and `AppConfigurationBuilder.ps1` - added verbose logging to empty catch blocks and removed trailing whitespace
 - **Core**: Corrected run configuration filename format in `PSmediaManager.ps1` to include missing dot between `InternalName` and `Run` (e.g., `PSmm.Run.psd1` instead of `PSmmRun.psd1`)
 - **Testing**: Fixed baseline update script to prevent accidental baseline regressions; added `-Force` parameter for intentional baseline adjustments

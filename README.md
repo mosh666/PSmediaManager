@@ -2,12 +2,15 @@
 
 ## Latest Changes
 
-- Switched container base to pinned PowerShell 7.5 Alpine (patched zlib), with apk-based zlib install
-- Added container push helper doc (`docs/container-push.md`) with build/tag/push guidance
-- Clean Codacy/Trivy scan on pinned image (alpine 3.20.5)
+- Fixed critical bootstrap errors: ConfigValidator parser error, GitHub-Token vault console mode error, ExifTool installer error, and HTTP health check
+- Enhanced Get-LocalPluginExecutablePath to dynamically resolve installed plugin directories
+- Fixed FileSystemService GetChildItem method overload resolution
+- Application now successfully bootstraps through all stages and reaches interactive UI
+- All 11 required plugins confirmed and installed (7z, PortableGit, git-lfs, gitversion, exiftool, ffmpeg, ImageMagick, KeePassXC, mkvtoolnix, mariadb, digiKam)
 
 See CHANGELOG.md for details.
-# PSmediaManager
+
+## Overview
 
 Portable, modular PowerShell-based media management application. PSmediaManager orchestrates external tooling (digiKam, FFmpeg, ImageMagick, MariaDB, ExifTool, KeePassXC, MKVToolNix, Git utilities) via a plugin layer while providing a safe configuration system, structured logging, project management, and an interactive console UI.
 
