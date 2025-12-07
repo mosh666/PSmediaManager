@@ -94,7 +94,7 @@ Describe 'Invoke-StorageWizard' {
                     IsRemovable = $false
                     BusType = 'SATA'
                     InterfaceType = 'IDE'
-                    TotalSpace = 500000000000
+                    TotalSpace = 500
                     Status = 'Healthy'
                 }
             )
@@ -119,7 +119,7 @@ Describe 'Invoke-StorageWizard' {
                     IsRemovable = $false
                     BusType = 'SATA'
                     InterfaceType = 'IDE'
-                    TotalSpace = 500000000000
+                    TotalSpace = 500
                     Status = 'Healthy'
                 }
             )
@@ -148,7 +148,7 @@ Describe 'Invoke-StorageWizard' {
                 IsRemovable = $true
                 BusType = 'USB'
                 InterfaceType = 'USB'
-                TotalSpace = 1000000000000
+                TotalSpace = 1000
                 Status = 'Healthy'
             }
             
@@ -176,7 +176,7 @@ Describe 'Invoke-StorageWizard' {
                 IsRemovable = $true
                 BusType = 'USB'
                 InterfaceType = 'USB'
-                TotalSpace = 1000000000000
+                TotalSpace = 1000
                 Status = 'Healthy'
             }
             
@@ -204,7 +204,7 @@ Describe 'Invoke-StorageWizard' {
                     IsRemovable = $true
                     BusType = 'USB'
                     InterfaceType = 'USB'
-                    TotalSpace = 1000000000000
+                    TotalSpace = 1000
                     Status = 'Healthy'
                 },
                 [PSCustomObject]@{
@@ -215,7 +215,7 @@ Describe 'Invoke-StorageWizard' {
                     IsRemovable = $true
                     BusType = 'USB'
                     InterfaceType = 'USB'
-                    TotalSpace = 1000000000000
+                    TotalSpace = 1000
                     Status = 'Healthy'
                 }
             )
@@ -247,7 +247,7 @@ Describe 'Invoke-StorageWizard' {
                     IsRemovable = $true
                     BusType = 'USB'
                     InterfaceType = 'USB'
-                    TotalSpace = 1000000000000
+                    TotalSpace = 1000
                     Status = 'Healthy'
                 }
             )
@@ -273,10 +273,10 @@ Describe 'Invoke-StorageWizard' {
             # When editing group 1, group 2's drive (SN2) should be excluded
             $usbDrives = @(
                 [PSCustomObject]@{
-                    Label = 'Group1_Master'; DriveLetter = 'D:'; SerialNumber = 'SN1'; IsUSB = $true; IsRemovable = $true; BusType = 'USB'; InterfaceType = 'USB'; TotalSpace = 1000000000000; Status = 'Healthy'
+                    Label = 'Group1_Master'; DriveLetter = 'D:'; SerialNumber = 'SN1'; IsUSB = $true; IsRemovable = $true; BusType = 'USB'; InterfaceType = 'USB'; TotalSpace = 1000; Status = 'Healthy'
                 },
                 [PSCustomObject]@{
-                    Label = 'Group2_Master'; DriveLetter = 'E:'; SerialNumber = 'SN2'; IsUSB = $true; IsRemovable = $true; BusType = 'USB'; InterfaceType = 'USB'; TotalSpace = 1000000000000; Status = 'Healthy'
+                    Label = 'Group2_Master'; DriveLetter = 'E:'; SerialNumber = 'SN2'; IsUSB = $true; IsRemovable = $true; BusType = 'USB'; InterfaceType = 'USB'; TotalSpace = 1000; Status = 'Healthy'
                 }
             )
             
@@ -303,7 +303,7 @@ Describe 'Invoke-StorageWizard' {
                 IsRemovable = $false
                 BusType = 'USB'
                 InterfaceType = 'IDE'
-                TotalSpace = 1000000000000
+                TotalSpace = 1000
                 Status = 'Healthy'
             }
             
@@ -329,7 +329,7 @@ Describe 'Invoke-StorageWizard' {
                 IsRemovable = $false
                 BusType = 'SATA'
                 InterfaceType = 'USB'
-                TotalSpace = 1000000000000
+                TotalSpace = 1000
                 Status = 'Healthy'
             }
             
@@ -354,7 +354,7 @@ Describe 'Invoke-StorageWizard' {
                 IsRemovable = $true
                 BusType = 'SATA'
                 InterfaceType = 'IDE'
-                TotalSpace = 1000000000000
+                TotalSpace = 1000
                 Status = 'Healthy'
             }
             
@@ -404,7 +404,7 @@ Describe 'Invoke-StorageWizard' {
                 IsRemovable = $true
                 BusType = 'USB'
                 InterfaceType = 'USB'
-                TotalSpace = 1000000000000
+                TotalSpace = 1000
                 Status = 'Healthy'
             }
             
@@ -430,7 +430,7 @@ Describe 'Invoke-StorageWizard' {
                     IsRemovable = $false
                     BusType = 'SATA'
                     InterfaceType = 'IDE'
-                    TotalSpace = 500000000000
+                    TotalSpace = 500
                     Status = 'Healthy'
                 }
             )
@@ -458,7 +458,7 @@ Describe 'Invoke-StorageWizard' {
                 IsRemovable = $true
                 BusType = 'USB'
                 InterfaceType = 'USB'
-                TotalSpace = 1000000000000
+                TotalSpace = 1000
                 Status = 'Healthy'
             }
             
@@ -485,7 +485,7 @@ Describe 'Invoke-StorageWizard' {
                 IsRemovable = $true
                 BusType = 'USB'
                 InterfaceType = 'USB'
-                TotalSpace = 1000000000000
+                TotalSpace = 1000
                 Status = 'Healthy'
             }
             
