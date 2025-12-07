@@ -9,6 +9,15 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed (Unreleased)
 
+- **PATH Management**: Fixed development mode (`-Dev`) documentation and behavior - PATH entries are now added to Process scope only and NOT cleaned up at exit, keeping plugin tools available in the session. Machine and User scopes are never modified.
+- **FileSystemService**: Enhanced shim fallback with complete method implementations (GetChildItem, RemoveItem, CopyItem, MoveItem, GetItemProperty) to support isolated logging module imports
+- **FileSystemService**: Changed OutputType from `[FileSystemService]` to `[object]` to support shim fallback gracefully
+- **Plugins**: Fixed PATH registration to always use Process scope only (`$persistUser = $false`) - Development mode skips cleanup at exit but does not persist to User scope
+- **Logging**: Fixed test compatibility in `Write-PSmmLog.Uninitialized.Tests.ps1` by preloading PSmm types and ensuring module initialization in BeforeAll
+- **Testing**: Fixed test fixture setup in `Initialize-Logging.Tests.ps1` by rehydrating paths inside BeforeAll block to avoid null references when Pester scopes the file
+- **Testing**: Fixed test helper integration in `Invoke-LogRotation.Tests.ps1` by adding Preload-PSmmTypes.ps1 call and improved module loading
+- **Testing**: Fixed FileSystemService mock signature in multiple test files to accept `$itemType` parameter correctly for GetChildItem method calls
+- **Coverage**: Updated coverage baseline from 68.35% to 68.2% (2,569 commands analyzed, 1,752 executed) reflecting test infrastructure improvements
 - **Code Quality**: Fixed whitespace consistency across multiple plugin files (FFmpeg, ImageMagick, KeePassXC, MKVToolNix, MariaDB, 7-Zip, Git-LFS, GitVersion, PortableGit, digiKam, ExifTool) by removing trailing whitespace
 - **Code Quality**: Fixed whitespace consistency in core files (ConfigValidator, PortInfo, ProjectInfo, Get-PSmmProjects, Invoke-PSmm, New-ClassFactory, PSmediaManager)
 - **Code Quality**: Added UTF-8 BOM to ConfigValidator.ps1 for proper encoding consistency

@@ -44,7 +44,7 @@ Add new test files under the matching `tests/Modules/<ModuleName>` path. Keep on
 
 ### Coverage Strategy
 
-- **Current Coverage**: 68.35% (2,588 commands analyzed, 1,769 executed)
+- **Coverage Strategy**: 68.2% (2,569 commands analyzed, 1,752 executed)
 - **Baseline Enforcement**: The coverage baseline is stored in `tests/.coverage-baseline.json` and enforced during test runs
 - **Edge-Case Buffer**: A 0.42% gap represents uncovered exception paths and external service fallbacks (e.g., `whoami` failure, DNS resolution errors, NuGet provider installation failures)
 - **Rationale**: Testing these paths requires complex mocking infrastructure (external process mocking, system service stubbing) with diminishing return-on-investment. The current strategy prioritizes:

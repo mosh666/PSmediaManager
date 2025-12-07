@@ -1,16 +1,30 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
-$script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
-$script:psmmLoggingManifest = Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
+ $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+ $script:psmmLoggingManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
+ $script:importClassesScript = Join-Path -Path $script:repoRoot -ChildPath 'tests/Support/Import-PSmmClasses.ps1'
+ $script:preloadTypesScript = Join-Path -Path $script:repoRoot -ChildPath 'tests/Preload-PSmmTypes.ps1'
+
+ if (-not (Get-Module -Name PSmm.Logging -ErrorAction SilentlyContinue)) {
+     Import-Module $script:psmmLoggingManifest -Force
+ }
 
 Describe 'Initialize-Logging' {
     BeforeAll {
+        # Rehydrate paths inside BeforeAll to avoid nulls when Pester scopes the file
+        $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+        $script:psmmLoggingManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
+        $script:importClassesScript = Join-Path -Path $script:repoRoot -ChildPath 'tests/Support/Import-PSmmClasses.ps1'
+        $script:preloadTypesScript = Join-Path -Path $script:repoRoot -ChildPath 'tests/Preload-PSmmTypes.ps1'
+
+        if (Test-Path $script:preloadTypesScript) { . $script:preloadTypesScript }
+        . $script:importClassesScript -RepositoryRoot $script:repoRoot
         if (Get-Module -Name PSmm.Logging -ErrorAction SilentlyContinue) { Remove-Module -Name PSmm.Logging -Force }
-        Import-Module $psmmLoggingManifest -Force
+        Import-Module $script:psmmLoggingManifest -Force
         
         # Stub Write-PSmmLog to avoid external logging calls
-        . (Join-Path $repoRoot 'tests/Support/Stub-WritePSmmLog.ps1')
+        . (Join-Path $script:repoRoot 'tests/Support/Stub-WritePSmmLog.ps1')
         Enable-TestWritePSmmLogStub
     }
 

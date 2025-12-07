@@ -14,7 +14,8 @@
     - Structured logging
 
 .PARAMETER Dev
-    Enables development mode, which keeps environment paths registered after exit.
+    Enables development mode, which keeps environment paths registered in the session.
+    PATH entries are added to Process scope only and not cleaned up at exit.
     This is useful for development and debugging purposes.
 
 .PARAMETER Update
@@ -653,9 +654,9 @@ finally {
         }
     }
     elseif ($Dev) {
-        Write-Verbose 'Development mode (-Dev) - keeping plugin PATH entries registered'
+        Write-Verbose 'Development mode (-Dev) - keeping session PATH entries registered'
         Write-PSmmLog -Level INFO -Context 'PATH Cleanup' `
-            -Message "Development mode: preserved $($appConfig.AddedPathEntries.Count) PATH entries" -File
+            -Message "Development mode: preserved $($appConfig.AddedPathEntries.Count) session PATH entries" -File
     }
     else {
         Write-Verbose 'No PATH entries to clean up'

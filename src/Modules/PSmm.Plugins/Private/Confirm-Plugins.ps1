@@ -232,7 +232,8 @@ function Register-PluginsToPATH {
 
         $registeredDirs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         $pathsToRegister = [System.Collections.Generic.List[string]]::new()
-        $persistUserPath = [bool]($Config.Parameters -and $Config.Parameters.Dev)
+        # Always use Process scope only - Dev mode just skips cleanup at exit
+        $persistUserPath = $false
 
         $existingPathEntries = $Environment.GetPathEntries()
         $pathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)

@@ -4,6 +4,8 @@ Set-StrictMode -Version Latest
 Describe 'Invoke-LogRotation' {
     BeforeAll {
         $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+        $script:preloadTypes = Join-Path $script:repoRoot 'tests/Preload-PSmmTypes.ps1'
+        if (Test-Path $script:preloadTypes) { . $script:preloadTypes }
         . (Join-Path $repoRoot 'tests/Support/Import-PSmmClasses.ps1') -RepositoryRoot $repoRoot
         try {
             $script:fileSystemFactory = { [FileSystemService]::new() }

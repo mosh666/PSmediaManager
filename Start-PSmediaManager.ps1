@@ -8,7 +8,8 @@
     in the src directory.
 
 .PARAMETER Dev
-    Enables development mode, which keeps environment paths registered after exit.
+    Enables development mode, which keeps environment paths registered in the session.
+    PATH entries are added to Process scope only and not cleaned up at exit.
     Useful for development and debugging purposes.
 
 .PARAMETER Update

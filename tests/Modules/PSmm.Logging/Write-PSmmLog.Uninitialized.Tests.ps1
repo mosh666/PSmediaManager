@@ -1,10 +1,14 @@
 # Tests for Write-PSmmLog when logging config is not initialized
 
+. (Join-Path -Path $PSScriptRoot -ChildPath '..\..\Preload-PSmmTypes.ps1')
 Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\src\Modules\PSmm\PSmm.psd1') -Force
 Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\src\Modules\PSmm.Logging\PSmm.Logging.psd1') -Force
 
 Describe 'Write-PSmmLog when logging not initialized' {
     BeforeAll {
+        if (-not (Get-Module -Name PSmm.Logging)) {
+            Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\src\Modules\PSmm.Logging\PSmm.Logging.psd1') -Force
+        }
         InModuleScope PSmm.Logging {
             # Ensure logging is uninitialized for all tests in this file
             Remove-Variable -Name Logging -Scope Script -ErrorAction SilentlyContinue

@@ -2,10 +2,13 @@
 
 ## Latest Changes
 
+- Fixed PATH management in development mode (`-Dev`): PATH entries now stay in Process scope only without cleanup, keeping plugin tools available in the session
+- Enhanced FileSystemService shim fallback with complete method implementations for isolated logging imports
+- Fixed test infrastructure: improved fixture setup, test compatibility, and FileSystemService mock signatures
 - Fixed critical bootstrap errors: ConfigValidator parser error, GitHub-Token vault console mode error, ExifTool installer error, and HTTP health check
 - Enhanced Get-LocalPluginExecutablePath to dynamically resolve installed plugin directories
 - Fixed FileSystemService GetChildItem method overload resolution
-- Application now successfully bootstraps through all stages and reaches interactive UI
+- Application successfully bootstraps through all stages and reaches interactive UI
 - All 11 required plugins confirmed and installed (7z, PortableGit, git-lfs, gitversion, exiftool, ffmpeg, ImageMagick, KeePassXC, mkvtoolnix, mariadb, digiKam)
 
 See CHANGELOG.md for details.
@@ -239,7 +242,7 @@ Tip: Run `Confirm-Plugins` after pulling new changes to ensure newly added tools
 The repository is designed for side-by-side usage without system-level installation:
 
 - **External-drive first:** PSmediaManager is intended to live on a removable/external drive so it can travel with your media projects. Clone or extract the repo directly onto the target portable volume and run it from there to keep host machines clean.
-- **Smart PATH management:** Plugins flagged `RegisterToPath` are batch-registered to the Process PATH during startup for immediate availability. In normal mode, these entries are automatically cleaned up on exit. In development mode (`-Dev`), changes persist to the User PATH scope for convenience across sessions.
+- **Smart PATH management:** Plugins flagged `RegisterToPath` are batch-registered to the Process PATH during startup for immediate availability. In normal mode, these entries are automatically cleaned up on exit. In development mode (`-Dev`), PATH entries remain in the session (Process scope only) without cleanup, useful for debugging. Machine and User scopes are never modified.
 - **Minimal host impact:** All writable state lives under a designated root (projects, logs, temp, config snapshots). No system-wide registry changes or global configuration modifications.
 - To "move" PSmediaManager: copy the entire folder to another location or machine; ensure external tool archives are re-confirmed if paths change.
 

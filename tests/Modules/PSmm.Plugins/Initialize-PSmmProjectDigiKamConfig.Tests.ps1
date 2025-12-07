@@ -66,7 +66,13 @@ Port=%%DatabasePort%%
         $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'TestPath' -Value { param($path) Test-Path $path }
         $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'NewDirectory' -Value { param($path) New-Item -Path $path -ItemType Directory -Force }
         $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'CopyItem' -Value { param($src, $dest) Copy-Item -Path $src -Destination $dest -Force }
-        $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'GetChildItem' -Value { param($path, $filter, $pattern) Get-ChildItem -Path $path -Directory -Filter $pattern -ErrorAction SilentlyContinue }
+        $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'GetChildItem' -Value {
+            param($path, $filter, $itemType)
+            $params = @{ Path = $path; ErrorAction = 'SilentlyContinue' }
+            if ($filter) { $params['Filter'] = $filter }
+            if ($itemType -eq 'Directory') { $params['Directory'] = $true }
+            Get-ChildItem @params
+        }
         $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'GetContent' -Value { param($path) Get-Content -Path $path -Raw }
         $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'SetContent' -Value { param($path, $content) Set-Content -Path $path -Value $content -Force }
 

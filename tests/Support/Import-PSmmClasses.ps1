@@ -7,15 +7,17 @@ Set-StrictMode -Version Latest
 
 $classesRoot = Join-Path -Path $RepositoryRoot -ChildPath 'src/Modules/PSmm/Classes'
 
-$needsImport = $false
-try {
-    $null = [AppConfigurationBuilder]
-}
-catch {
-    $needsImport = $true
+$missingTypes = @()
+foreach ($typeName in 'AppConfigurationBuilder','FileSystemService') {
+    try {
+        $null = [type]$typeName
+    }
+    catch {
+        $missingTypes += $typeName
+    }
 }
 
-if (-not $needsImport) {
+if ($missingTypes.Count -eq 0) {
     return
 }
 
