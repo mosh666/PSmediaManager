@@ -188,4 +188,3 @@ function New-MockObject {
 
     return $obj
 }
-
