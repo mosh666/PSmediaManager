@@ -13,8 +13,10 @@ function Get-KeePassCli {
         [Parameter(Mandatory)]$Process
     )
 
-    # Attempt to derive vault path from configuration
+    # Resolve vault path using standard resolution order: Config > Environment > Error
     $vaultPath = $null
+
+    # 1. Try to get from configuration (Config.Paths.App.Vault)
     try {
         if ($Config -and ($Config.PSObject.Properties.Name -contains 'Paths')) {
             $paths = $Config.Paths
@@ -22,29 +24,29 @@ function Get-KeePassCli {
                 $appPaths = $paths.App
                 if ($appPaths -and ($appPaths.PSObject.Properties.Name -contains 'Vault')) {
                     $vaultPath = $appPaths.Vault
+                    Write-Verbose "[Get-KeePassCli] Resolved VaultPath from Config.Paths.App.Vault: $vaultPath"
                 }
             }
         }
     }
     catch {
-        Write-Error -Message "Failed deriving vault path from config: $($_.Exception.Message)" -Category InvalidData
+        Write-Verbose "[Get-KeePassCli] Failed to resolve vault path from config: $($_.Exception.Message)"
     }
 
+    # 2. Try environment variable if not found in config
     if (-not $vaultPath -or [string]::IsNullOrWhiteSpace($vaultPath)) {
-        try {
-            if ($Config -and ($Config.PSObject.Properties.Name -contains 'Paths')) {
-                $rootPath = $Config.Paths.Root
-                if ($rootPath) { $vaultPath = Join-Path -Path $rootPath -ChildPath 'Vault' }
+        if ($Environment -and $Environment.GetVariable) {
+            $envVaultPath = $Environment.GetVariable('PSMM_VAULT_PATH')
+            if (-not [string]::IsNullOrWhiteSpace($envVaultPath)) {
+                $vaultPath = $envVaultPath
+                Write-Verbose "[Get-KeePassCli] Resolved VaultPath from PSMM_VAULT_PATH environment: $vaultPath"
             }
         }
-        catch {
-            Write-Error -Message "Failed deriving default vault path from config: $($_.Exception.Message)" -Category InvalidData
-        }
     }
 
-    if (-not $vaultPath) {
-        # Fallback: relative Vault directory from repo root (assumes standard layout)
-        $vaultPath = (Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Vault')
+    # 3. Error if vault path cannot be resolved
+    if (-not $vaultPath -or [string]::IsNullOrWhiteSpace($vaultPath)) {
+        throw "Unable to resolve vault path. Ensure Config.Paths.App.Vault is set or PSMM_VAULT_PATH environment variable is defined."
     }
 
     # First resolution attempt

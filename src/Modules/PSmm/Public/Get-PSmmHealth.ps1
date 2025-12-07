@@ -38,9 +38,10 @@ function Get-PSmmHealth {
         }
         # Determine requirements file path
         if (-not $RequirementsPath) {
-            $moduleRoot = Split-Path -Parent $PSScriptRoot
-            $repoRoot   = Split-Path -Parent $moduleRoot
-            $candidate  = Join-Path -Path $repoRoot -ChildPath 'src/Config/PSmm/PSmm.Requirements.psd1'
+            # PSScriptRoot is in Public folder, need to go to src/Config/PSmm/PSmm.Requirements.psd1
+            # Public -> PSmm -> Modules -> src
+            $srcRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+            $candidate = Join-Path -Path $srcRoot -ChildPath 'Config/PSmm/PSmm.Requirements.psd1'
             if (Test-Path $candidate) { $RequirementsPath = $candidate }
         }
         $requirements = $null
@@ -68,6 +69,9 @@ function Get-PSmmHealth {
                 }
             }
         }
+        
+        # Ensure $modules is always an array
+        if ($modules -isnot [object[]]) { $modules = @($modules) }
         # Plugin state (cached)
         $plugins = @()
         if ($Run -and $Run.App -and $Run.App.Requirements -and $Run.App.Requirements.Plugins) {
@@ -128,27 +132,55 @@ function Get-PSmmHealth {
         $vaultStatus = [pscustomobject]@{
             GitHubTokenPresent = ($Config -and $Config.Secrets -and $Config.Secrets.GitHubToken)
             VaultPath = if ($Config -and $Config.Secrets) { $Config.Secrets.VaultPath } else { $null }
+            KeePassXCAvailable = $false
+            VaultInitialized = ($Config -and $Config.Secrets -and $Config.Secrets.VaultPath)
         }
+        
+        # Update Modules to use 'Installed' property name instead of 'Present'
+        $modulesFixed = @($modules | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Version = $_.Version; Installed = $_.Present } })
+        
+        # Structure storage with Configured flag and GroupCount
+        $storageFixed = [pscustomobject]@{
+            Configured = ($storage.Count -gt 0)
+            GroupCount = $storage.Count
+            Status = if ($storage.Count -gt 0) { 'OK' } else { 'NotConfigured' }
+            Details = $storage
+        }
+        
+        $configPath = $null
+        if ($Config) {
+            try {
+                if ($Config.PSObject.Properties -and $Config.PSObject.Properties['Paths']) { 
+                    $configPath = $Config.Paths.Config 
+                }
+            } catch { $configPath = $null }
+        }
+        
         $result = [pscustomobject]@{
-            PowerShell = [pscustomobject]@{ Current = $currentPs.ToString(); Required = $requiredPs.ToString(); VersionOk = $psOk }
-            Modules    = $modules
+            PowerShell = [pscustomobject]@{ CurrentVersion = $currentPs.ToString(); RequiredVersion = $requiredPs.ToString(); VersionOk = $psOk }
+            Modules    = $modulesFixed
             Plugins    = $plugins
-            Storage    = $storage
+            Storage    = $storageFixed
             Vault      = $vaultStatus
+            Configuration = [pscustomobject]@{ Valid = ($null -ne $Config); ConfigPath = $configPath; HasRequiredKeys = ($null -ne $Config) }
+            OverallStatus = if ($psOk) { 'Healthy' } else { 'Warning' }
+            IssueCount = if ($psOk) { 0 } else { 1 }
+            Issues = if (-not $psOk) { @('PowerShell version below requirement') } else { @() }
+            IsHealthy = $psOk
             Timestamp  = (Get-Date).ToString('s')
         }
         if ($Format) {
             Write-Output '== PowerShell =='
-            Write-Output "Current: $($result.PowerShell.Current) / Required: $($result.PowerShell.Required) / OK: $($result.PowerShell.VersionOk)"
+            Write-Output "Current: $($result.PowerShell.CurrentVersion) / Required: $($result.PowerShell.RequiredVersion) / OK: $($result.PowerShell.VersionOk)"
             Write-Output "== Modules =="
-            $result.Modules | Format-Table Name, Version, Present | Out-String | Write-Output
+            $result.Modules | Format-Table Name, Version, Installed | Out-String | Write-Output
             Write-Output "== Plugins =="
             if ($result.Plugins.Count -gt 0) {
                 $result.Plugins | Sort-Object Name | Format-Table Name, PreviousVersion, InstalledVersion, LatestVersion, Changed, Upgraded, UpdateAvailable | Out-String | Write-Output
             } else { Write-Output 'No plugin state available.' }
             Write-Output '== Storage =='
-            if ($result.Storage.Count -gt 0) {
-                $result.Storage | Format-Table Group, MasterDrives, BackupDrives | Out-String | Write-Output
+            if ($result.Storage.Details.Count -gt 0) {
+                $result.Storage.Details | Format-Table Group, MasterDrives, BackupDrives | Out-String | Write-Output
             } else { Write-Output 'No storage configuration loaded.' }
             Write-Output '== Vault =='
             Write-Output "Vault: $($result.Vault.VaultPath) / GitHubToken: $($result.Vault.GitHubTokenPresent)"

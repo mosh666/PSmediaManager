@@ -57,7 +57,7 @@
         'Show-StorageInfo'
         'Export-SafeConfiguration'
         'Get-PSmmHealth'
-        # KeePassXC Secret Management Functions
+        # KeePassXC Secret Management Functions (Public API)
         'Get-SystemSecret'
         'Initialize-SystemVault'
         'Save-SystemSecret'
@@ -65,8 +65,6 @@
         'New-DriveRootLauncher'
         # Host output helper exported so scripts can call centralized output
         'Write-PSmmHost'
-        # HTTP wrapper
-        'Invoke-HttpRestMethod'
     )
 
     # Cmdlets to export from this module

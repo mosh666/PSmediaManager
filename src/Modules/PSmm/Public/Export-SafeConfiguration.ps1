@@ -201,7 +201,7 @@ function Export-SafeConfiguration {
                     return $arrCopy
                 }
 
-                if ($Value -isnot [string] -and ($Value | Get-Member -MemberType Properties -ErrorAction SilentlyContinue)) {
+                if ($Value -isnot [string] -and $Value -isnot [System.Collections.IEnumerable] -and ($Value | Get-Member -MemberType Properties -ErrorAction SilentlyContinue)) {
                     $propCopy = @{}
                     $props = $Value | Get-Member -MemberType Properties | Select-Object -ExpandProperty Name
                     foreach ($p in $props) {
@@ -949,6 +949,13 @@ function Export-SafeConfiguration {
                 return $res
             }
 
+            # Enumerable (arrays etc.) but not string
+            if ($Data -is [System.Collections.IEnumerable] -and $Data -isnot [string]) {
+                $arr = @()
+                foreach ($i in $Data) { $arr += _Sanitize -Data $i -Visited $Visited -Level ($Level + 1) -MaxDepth $MaxDepth }
+                return $arr
+            }
+
             # PSCustomObject or other object with properties
             if ($Data -isnot [string] -and ($Data | Get-Member -MemberType Properties -ErrorAction SilentlyContinue)) {
                 $res = @{}
@@ -963,13 +970,6 @@ function Export-SafeConfiguration {
                     }
                 }
                 return $res
-            }
-
-            # Enumerable (arrays etc.) but not string
-            if ($Data -is [System.Collections.IEnumerable] -and $Data -isnot [string]) {
-                $arr = @()
-                foreach ($i in $Data) { $arr += _Sanitize -Data $i -Visited $Visited -Level ($Level + 1) -MaxDepth $MaxDepth }
-                return $arr
             }
 
             # String masking

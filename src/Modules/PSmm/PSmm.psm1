@@ -73,10 +73,7 @@ try {
             # Configuration classes (use services and interfaces)
             'AppConfiguration.ps1',        # Configuration classes (uses exceptions and interfaces)
             'ConfigValidator.ps1',         # Configuration validator (Phase 10)
-            'AppConfigurationBuilder.ps1', # Builder (uses configuration and exceptions)
-            # Domain model classes
-            'ProjectInfo.ps1',             # Project information (type-safe project data)
-            'PortInfo.ps1'                 # Port allocation information (type-safe port data)
+            'AppConfigurationBuilder.ps1'  # Builder (uses configuration and exceptions)
         )
 
         $importDiagnostics = [System.Collections.Generic.List[object]]::new()
@@ -192,20 +189,12 @@ Export-ModuleMember -Function @(
     'Show-StorageInfo',
     'Export-SafeConfiguration',
     'Get-PSmmHealth',
-    # KeePassXC Secret Management Functions
-    'Get-KeePassCli',
+    # KeePassXC Secret Management Functions (Public API)
     'Get-SystemSecret',
-    'Get-SystemSecretMetadata',
     'Initialize-SystemVault',
     'Save-SystemSecret',
     # Drive Root Launcher
     'New-DriveRootLauncher',
-    # Type-safe class factory functions
-    'New-ProjectInfo',
-    'New-PortInfo',
-    'Get-ProjectInfoFromPath'
+    # Host output helper
+    'Write-PSmmHost'
 )
-
-# Ensure host output helper is exported so scripts (outside the module)
-# can call it after importing PSmm. This centralizes host I/O.
-Export-ModuleMember -Function 'Write-PSmmHost'

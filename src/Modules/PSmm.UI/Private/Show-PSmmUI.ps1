@@ -1091,7 +1091,8 @@ function Show-Menu_SysInfo {
         [object]$Config
     )    $StorageColumns = @(
         @{
-            Text = '[1] TODO: Show Storage'
+            Text = '[1] Show Storage Information'
+                        TextColor = $Config.UI.ANSI.FG.Info
             Width = $Config.UI.Width
             Alignment = 'l'
         }
@@ -1100,7 +1101,8 @@ function Show-Menu_SysInfo {
 
     $ConfigColumns = @(
         @{
-            Text = '[2] TODO: Show runtime config'
+            Text = '[2] Show Runtime Configuration'
+                        TextColor = $Config.UI.ANSI.FG.Info
             Width = $Config.UI.Width
             Alignment = 'l'
         }

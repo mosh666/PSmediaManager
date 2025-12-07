@@ -23,7 +23,7 @@ function New-FileSystemService {
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification='Factory function creates objects but does not modify system state')]
     [CmdletBinding()]
-    [OutputType([object])]
+    [OutputType([FileSystemService], [psobject])]
     param()
 
         # Try to use the real class when available; otherwise fall back to a shim so logging stays functional in isolated imports

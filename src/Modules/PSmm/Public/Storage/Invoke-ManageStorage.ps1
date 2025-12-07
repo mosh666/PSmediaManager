@@ -64,11 +64,24 @@ function Invoke-ManageStorage {
         if (-not $testInputs -or $testInputs.Count -eq 0) { return $false }
     }
 
+    # Helper to skip Pause in test mode
+    function Call-PauseIfInteractive {
+        if (-not [string]::Equals($env:MEDIA_MANAGER_TEST_MODE, '1', [System.StringComparison]::OrdinalIgnoreCase)) {
+            if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+        }
+    }
+
     function Read-ManageInput([string]$Prompt) {
-        if ($testInputs -and ($testInputIndex -lt $testInputs.Count)) {
-            $val = [string]$testInputs[$testInputIndex]
-            $testInputIndex++
-            return $val
+        if ($testInputs) {
+            if ($testInputIndex -lt $testInputs.Count) {
+                $val = [string]$testInputs[$testInputIndex]
+                $testInputIndex++
+                return $val
+            }
+            # In test mode and the feed is exhausted, return Back-equivalent to avoid hanging on Read-Host
+            if ([string]::Equals($env:MEDIA_MANAGER_TEST_MODE, '1', [System.StringComparison]::OrdinalIgnoreCase)) {
+                return 'B'
+            }
         }
         return Read-Host -Prompt $Prompt
     }
@@ -112,7 +125,7 @@ function Invoke-ManageStorage {
 
             if ($selection -notmatch '^[0-9]+$' -or -not $optionMap.ContainsKey([int]$selection)) {
                 Write-PSmmHost 'Invalid selection. Please choose a valid number from the menu above.' -ForegroundColor Yellow
-                if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                Call-PauseIfInteractive
                 continue
             }
             $chosen = $optionMap[[int]$selection]
@@ -125,7 +138,7 @@ function Invoke-ManageStorage {
                     # List groups
                     if ($null -eq $Config.Storage -or $Config.Storage.Keys.Count -eq 0) {
                         Write-PSmmHost 'No storage groups configured.' -ForegroundColor Yellow
-                        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                        Call-PauseIfInteractive
                         continue
                     }
 
@@ -162,7 +175,7 @@ function Invoke-ManageStorage {
 
                     if ($groupChoice -notmatch '^[0-9]+$' -or -not $Config.Storage.ContainsKey($groupChoice)) {
                         Write-PSmmHost 'Invalid group selection.' -ForegroundColor Yellow
-                        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                        Call-PauseIfInteractive
                         continue
                     }
 
@@ -181,7 +194,7 @@ function Invoke-ManageStorage {
                         Write-ManageLog -level 'ERROR' -context 'ManageStorage' -msg "Failed to edit group: $_"
                         Write-PSmmHost "Failed to edit group: $_" -ForegroundColor Red
                     }
-                    if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                    Call-PauseIfInteractive
                 }
 
                 '^(?i)a$' {
@@ -202,7 +215,7 @@ function Invoke-ManageStorage {
                         Write-ManageLog -level 'ERROR' -context 'ManageStorage' -msg "Failed to add group: $_"
                         Write-PSmmHost "Failed to add group: $_" -ForegroundColor Red
                     }
-                    if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                    Call-PauseIfInteractive
                 }
 
                 '^(?i)r$' {
@@ -211,7 +224,7 @@ function Invoke-ManageStorage {
 
                     if ($null -eq $Config.Storage -or $Config.Storage.Keys.Count -eq 0) {
                         Write-PSmmHost 'No storage groups configured.' -ForegroundColor Yellow
-                        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                        Call-PauseIfInteractive
                         continue
                     }
 
@@ -256,7 +269,7 @@ function Invoke-ManageStorage {
 
                     if ($groupsToRemove.Count -eq 0) {
                         Write-PSmmHost 'No valid groups selected.' -ForegroundColor Yellow
-                        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                        Call-PauseIfInteractive
                         continue
                     }
 
@@ -272,7 +285,7 @@ function Invoke-ManageStorage {
                     $confirm = Read-ManageInput 'Confirm removal? (Y/N)'
                     if ($confirm -notmatch '^(?i)y$') {
                         Write-PSmmHost 'Removal cancelled.' -ForegroundColor Yellow
-                        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                        Call-PauseIfInteractive
                         continue
                     }
 
@@ -285,7 +298,7 @@ function Invoke-ManageStorage {
                         Write-ManageLog -level 'ERROR' -context 'ManageStorage' -msg "Failed to remove groups: $_"
                         Write-PSmmHost "Failed to remove groups: $_" -ForegroundColor Red
                     }
-                    if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                    Call-PauseIfInteractive
                 }
 
                 '^(?i)b$' {
@@ -296,9 +309,11 @@ function Invoke-ManageStorage {
 
                 default {
                     Write-PSmmHost 'Invalid selection. Please choose E, A, R, or B.' -ForegroundColor Yellow
-                    if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+                    Call-PauseIfInteractive
                 }
             }
+            # In test mode with canned inputs, stop once we've consumed all inputs to avoid waiting for user input
+            if ($testInputs -and $testInputIndex -ge $testInputs.Count) { break }
         }
         else {
             # NonInteractive mode - not supported for manage menu
@@ -306,4 +321,7 @@ function Invoke-ManageStorage {
             return $false
         }
     }
+
+    # If we exit the loop (typically in tests after consuming canned inputs), return $true to signal completion
+    return $true
 }

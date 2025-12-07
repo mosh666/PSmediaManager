@@ -18,7 +18,7 @@
                     - SSL
 
 .PARAMETER VaultPath
-    Path where the KeePass database will be created. Defaults to d:\PSmediaManager\Vault
+    Path where the KeePass database will be created. If not provided, resolved from PSMM_VAULT_PATH or Config.Paths.App.Vault.
 
 .PARAMETER Force
     If specified, recreates the database even if it already exists (use with caution).
@@ -229,7 +229,7 @@ function Save-SystemSecret {
         [hashtable]$Metadata = @{},
 
         [Parameter()]
-        [string]$VaultPath = 'd:\PSmediaManager\Vault',
+        [string]$VaultPath,
 
         [Parameter()]
         [string]$Username = 'system',
@@ -259,14 +259,17 @@ function Save-SystemSecret {
 
         $entry = $entryMap[$SecretType]
         $url = $urlMap[$SecretType]
+
         # Resolve vault path from parameter, environment, or app configuration
         if (-not $VaultPath -or [string]::IsNullOrWhiteSpace($VaultPath)) {
             if ($env:PSMM_VAULT_PATH) {
                 $VaultPath = $env:PSMM_VAULT_PATH
+                Write-Verbose "[Save-SystemSecret] Resolved VaultPath from environment: $VaultPath"
             }
             elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
-                    try {
+                try {
                         $VaultPath = (Get-AppConfiguration).Paths.App.Vault
+                                        Write-Verbose "[Save-SystemSecret] Resolved VaultPath from configuration: $VaultPath"
                     }
                     catch {
                         Write-Verbose "Could not retrieve vault path from app configuration: $_"
