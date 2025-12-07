@@ -37,6 +37,7 @@ All notable changes to this project will be documented in this file.
 - **Core**: Corrected run configuration filename format in `PSmediaManager.ps1` to include missing dot between `InternalName` and `Run` (e.g., `PSmm.Run.psd1` instead of `PSmmRun.psd1`)
 - **Testing**: Fixed baseline update script to prevent accidental baseline regressions; added `-Force` parameter for intentional baseline adjustments
 - **Testing**: Fixed storage wizard test "renumbers and appends next group ID when groups exist" by persisting existing group to disk before wizard execution and using config's actual DriveRoot path instead of hardcoded value
+- **Testing**: Fixed `Confirm-Storage` test to set `MEDIA_MANAGER_TEST_MODE` environment variable, preventing `UpdateStatus()` from calling `Get-PSDrive` on CI environments where test drive letters don't exist
 
 ### Added (Unreleased)
 

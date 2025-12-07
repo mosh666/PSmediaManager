@@ -4,6 +4,8 @@ Set-StrictMode -Version Latest
 Describe 'Confirm-Storage' {
     BeforeAll {
         try {
+            # Set test mode flag to prevent UpdateStatus() from calling Get-PSDrive
+            $env:MEDIA_MANAGER_TEST_MODE = '1'
             # Use shared test helpers to preload classes, stubs, and common setup
             $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
             $helperPath = Resolve-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\Support\Import-AllTestHelpers.ps1')
@@ -31,6 +33,8 @@ Describe 'Confirm-Storage' {
     AfterAll {
         $stubEnabled = Get-Variable -Name TestWritePSmmLog_Enabled -Scope Global -ErrorAction SilentlyContinue
         if ($stubEnabled -and $stubEnabled.Value) { Disable-TestWritePSmmLogStub }
+        # Clean up test mode flag
+        Remove-Item Env:\MEDIA_MANAGER_TEST_MODE -ErrorAction SilentlyContinue
     }
 
     It 'updates Master drive letter when drive is found' {
