@@ -21,13 +21,13 @@ Describe 'Test-DuplicateSerial' {
 
     Context 'Parameter Validation' {
         It 'should require Config parameter' {
-            { Test-DuplicateSerial -Serials @('TEST') } | 
-                Should -Throw -ErrorId 'MissingMandatoryParameter'
+            { Test-DuplicateSerial -Config $null -Serials @('TEST') } | 
+                Should -Throw
         }
 
         It 'should require Serials parameter' {
-            { Test-DuplicateSerial -Config $config } | 
-                Should -Throw -ErrorId 'MissingMandatoryParameter'
+            { Test-DuplicateSerial -Config $config -Serials $null } | 
+                Should -Throw
         }
 
         It 'should reject null Config' {

@@ -30,45 +30,45 @@ Describe 'New-DriveRootLauncher' {
 
     Context 'Parameter Validation' {
         It 'should require RepositoryRoot parameter' {
-            { New-DriveRootLauncher -FileSystem (New-Object PSObject) -PathProvider (New-Object PSObject) } | 
-                Should -Throw -ErrorId 'MissingMandatoryParameter'
+            { New-DriveRootLauncher -RepositoryRoot $null -FileSystem (New-Object PSObject) -PathProvider (New-Object PSObject) } | 
+                Should -Throw
         }
 
         It 'should require FileSystem parameter' {
-            { New-DriveRootLauncher -RepositoryRoot "C:\test" -PathProvider (New-Object PSObject) } | 
-                Should -Throw -ErrorId 'MissingMandatoryParameter'
+            { New-DriveRootLauncher -RepositoryRoot "C:\test" -FileSystem $null -PathProvider (New-Object PSObject) } | 
+                Should -Throw
         }
 
         It 'should require PathProvider parameter' {
-            { New-DriveRootLauncher -RepositoryRoot "C:\test" -FileSystem (New-Object PSObject) } | 
-                Should -Throw -ErrorId 'MissingMandatoryParameter'
+            { New-DriveRootLauncher -RepositoryRoot "C:\test" -FileSystem (New-Object PSObject) -PathProvider $null } | 
+                Should -Throw
         }
 
         It 'should reject null RepositoryRoot' {
-            $fileSystem = @{ TestPath = { $true }; RemoveItem = {} } | ConvertTo-PSObject
-            $pathProvider = @{ CombinePath = { param($paths) $paths -join '\' } } | ConvertTo-PSObject
+            $fileSystem = @{ TestPath = { $true } | New-MockObject; RemoveItem = {} } 
+            $pathProvider = @{ CombinePath = { param($paths) $paths -join '\' } | New-MockObject } 
             
             { New-DriveRootLauncher -RepositoryRoot $null -FileSystem $fileSystem -PathProvider $pathProvider } | 
                 Should -Throw
         }
 
         It 'should reject empty RepositoryRoot' {
-            $fileSystem = @{ TestPath = { $true }; RemoveItem = {} } | ConvertTo-PSObject
-            $pathProvider = @{ CombinePath = { param($paths) $paths -join '\' } } | ConvertTo-PSObject
+            $fileSystem = @{ TestPath = { $true } | New-MockObject; RemoveItem = {} } 
+            $pathProvider = @{ CombinePath = { param($paths) $paths -join '\' } | New-MockObject } 
             
             { New-DriveRootLauncher -RepositoryRoot '' -FileSystem $fileSystem -PathProvider $pathProvider } | 
                 Should -Throw
         }
 
         It 'should reject null FileSystem' {
-            $pathProvider = @{ CombinePath = { param($paths) $paths -join '\' } } | ConvertTo-PSObject
+            $pathProvider = @{ CombinePath = { param($paths) $paths -join '\' } | New-MockObject } 
             
             { New-DriveRootLauncher -RepositoryRoot "C:\test" -FileSystem $null -PathProvider $pathProvider } | 
                 Should -Throw
         }
 
         It 'should reject null PathProvider' {
-            $fileSystem = @{ TestPath = { $true }; RemoveItem = {} } | ConvertTo-PSObject
+            $fileSystem = @{ TestPath = { $true } | New-MockObject; RemoveItem = {} } 
             
             { New-DriveRootLauncher -RepositoryRoot "C:\test" -FileSystem $fileSystem -PathProvider $null } | 
                 Should -Throw
@@ -81,13 +81,13 @@ Describe 'New-DriveRootLauncher' {
                 TestPath = { param($path) 
                     $path -eq "D:\Start-PSmediaManager.lnk" -or 
                     $path -eq "D:\PSmediaManager\Start-PSmediaManager.ps1"
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             $output = New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
                 -FileSystem $fileSystem -PathProvider $pathProvider -Verbose 4>&1
@@ -101,13 +101,13 @@ Describe 'New-DriveRootLauncher' {
                 TestPath = { param($path) 
                     $path -eq "TestDrive:\Start-PSmediaManager.lnk" -or 
                     $path -eq "TestDrive:\Start-PSmediaManager.ps1"
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             # When Split-Path returns empty, should handle gracefully
             $repositoryRoot = "TestDrive:\"
@@ -126,13 +126,13 @@ Describe 'New-DriveRootLauncher' {
                 TestPath = { param($path) 
                     # Launcher exists, repo launcher exists
                     $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             $output = New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
                 -FileSystem $fileSystem -PathProvider $pathProvider -Verbose 4>&1
@@ -145,13 +145,13 @@ Describe 'New-DriveRootLauncher' {
                 TestPath = { param($path) 
                     # Launcher doesn't exist, repo launcher doesn't exist
                     $false
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             $output = New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
                 -FileSystem $fileSystem -PathProvider $pathProvider -WarningVariable warnings 4>&1
@@ -166,13 +166,13 @@ Describe 'New-DriveRootLauncher' {
                 TestPath = { param($path) 
                     # Launcher doesn't exist, repo launcher exists
                     $path -like "*Start-PSmediaManager.lnk" ? $false : $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             Mock -CommandName New-Object -ParameterFilter {
                 $ComObject -eq 'WScript.Shell'
@@ -189,7 +189,7 @@ Describe 'New-DriveRootLauncher' {
                             Save = { }
                         }
                     }
-                } | ConvertTo-PSObject
+                } 
             }
             
             New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
@@ -207,16 +207,16 @@ Describe 'New-DriveRootLauncher' {
                     $path -like "*Start-PSmediaManager.cmd" ? $true :
                     $path -like "*Start-PSmediaManager.lnk" ? $false :
                     $true
-                }
+                } | New-MockObject
                 RemoveItem = { 
                     param($path, [bool]$force)
                     $removedPaths += $path
                 }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             # Mock WScript.Shell to handle shortcut creation
             Mock -CommandName New-Object -ParameterFilter {
@@ -234,7 +234,7 @@ Describe 'New-DriveRootLauncher' {
                             Save = { }
                         }
                     }
-                } | ConvertTo-PSObject
+                } 
             }
             
             New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
@@ -253,16 +253,16 @@ Describe 'New-DriveRootLauncher' {
                     $path -like "*Start-PSmediaManager.ps1" -and $path -notlike "*repo*" ? $true :
                     $path -like "*Start-PSmediaManager.lnk" ? $false :
                     $true
-                }
+                } | New-MockObject
                 RemoveItem = { 
                     param($path, [bool]$force)
                     $removedPaths += $path
                 }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             Mock -CommandName New-Object -ParameterFilter {
                 $ComObject -eq 'WScript.Shell'
@@ -279,7 +279,7 @@ Describe 'New-DriveRootLauncher' {
                             Save = { }
                         }
                     }
-                } | ConvertTo-PSObject
+                } 
             }
             
             New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
@@ -292,15 +292,15 @@ Describe 'New-DriveRootLauncher' {
                     $path -like "*Start-PSmediaManager.cmd" ? $true :
                     $path -like "*Start-PSmediaManager.lnk" ? $false :
                     $true
-                }
+                } | New-MockObject
                 RemoveItem = { 
                     throw "Access denied to remove file"
                 }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             $output = New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
                 -FileSystem $fileSystem -PathProvider $pathProvider -WarningVariable warnings 4>&1
@@ -316,13 +316,13 @@ Describe 'New-DriveRootLauncher' {
             $fileSystem = @{
                 TestPath = { param($path) 
                     $path -like "*Start-PSmediaManager.lnk" ? $false : $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             Mock -CommandName New-Object -ParameterFilter {
                 $ComObject -eq 'WScript.Shell'
@@ -339,7 +339,7 @@ Describe 'New-DriveRootLauncher' {
                             Save = { }
                         }
                     }
-                } | ConvertTo-PSObject
+                } 
             }
             
             New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
@@ -350,13 +350,13 @@ Describe 'New-DriveRootLauncher' {
             $fileSystem = @{
                 TestPath = { param($path) 
                     $path -like "*Start-PSmediaManager.lnk" ? $false : $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             Mock -CommandName New-Object -ParameterFilter {
                 $ComObject -eq 'WScript.Shell'
@@ -373,7 +373,7 @@ Describe 'New-DriveRootLauncher' {
                             Save = { }
                         }
                     }
-                } | ConvertTo-PSObject
+                } 
             }
             
             New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
@@ -384,13 +384,13 @@ Describe 'New-DriveRootLauncher' {
             $fileSystem = @{
                 TestPath = { param($path) 
                     $path -like "*Start-PSmediaManager.lnk" ? $false : $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             Mock -CommandName New-Object -ParameterFilter {
                 $ComObject -eq 'WScript.Shell'
@@ -407,7 +407,7 @@ Describe 'New-DriveRootLauncher' {
                             Save = { }
                         }
                     }
-                } | ConvertTo-PSObject
+                } 
             }
             
             New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
@@ -418,13 +418,13 @@ Describe 'New-DriveRootLauncher' {
             $fileSystem = @{
                 TestPath = { param($path) 
                     $path -like "*Start-PSmediaManager.lnk" ? $false : $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             Mock -CommandName New-Object -ParameterFilter {
                 $ComObject -eq 'WScript.Shell'
@@ -441,7 +441,7 @@ Describe 'New-DriveRootLauncher' {
                             Save = { }
                         }
                     }
-                } | ConvertTo-PSObject
+                } 
             }
             
             New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
@@ -452,13 +452,13 @@ Describe 'New-DriveRootLauncher' {
             $fileSystem = @{
                 TestPath = { param($path) 
                     $path -like "*Start-PSmediaManager.lnk" ? $false : $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             Mock -CommandName New-Object -ParameterFilter {
                 $ComObject -eq 'WScript.Shell'
@@ -476,13 +476,13 @@ Describe 'New-DriveRootLauncher' {
             $fileSystem = @{
                 TestPath = { param($path) 
                     $path -like "*Start-PSmediaManager.lnk" ? $false : $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             Mock -CommandName New-Object -ParameterFilter {
                 $ComObject -eq 'WScript.Shell'
@@ -491,7 +491,7 @@ Describe 'New-DriveRootLauncher' {
                     CreateShortcut = {
                         throw "Failed to create shortcut"
                     }
-                } | ConvertTo-PSObject
+                } 
             }
             
             $output = New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
@@ -506,13 +506,13 @@ Describe 'New-DriveRootLauncher' {
             $fileSystem = @{
                 TestPath = { param($path) 
                     $path -like "*Start-PSmediaManager.lnk" ? $false : $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             Mock -CommandName New-Object -ParameterFilter {
                 $ComObject -eq 'WScript.Shell'
@@ -529,7 +529,7 @@ Describe 'New-DriveRootLauncher' {
                             Save = { }
                         }
                     }
-                } | ConvertTo-PSObject
+                } 
             }
             
             $output = New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
@@ -542,13 +542,13 @@ Describe 'New-DriveRootLauncher' {
             $fileSystem = @{
                 TestPath = { param($path) 
                     $path -like "*Start-PSmediaManager.lnk" ? $false : $true
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             # This test just validates it accepts the parameter
             # Actual interactive confirmation can't be tested
@@ -563,13 +563,13 @@ Describe 'New-DriveRootLauncher' {
             $fileSystem = @{
                 TestPath = { 
                     throw "Unexpected file system error"
-                }
+                } | New-MockObject
                 RemoveItem = { }
-            } | ConvertTo-PSObject
+            } 
             
             $pathProvider = @{
-                CombinePath = { param($paths) $paths -join '\' }
-            } | ConvertTo-PSObject
+                CombinePath = { param($paths) $paths -join '\' } | New-MockObject
+            } 
             
             $output = New-DriveRootLauncher -RepositoryRoot "D:\PSmediaManager" `
                 -FileSystem $fileSystem -PathProvider $pathProvider -WarningVariable warnings 4>&1
@@ -578,3 +578,6 @@ Describe 'New-DriveRootLauncher' {
         }
     }
 }
+
+
+

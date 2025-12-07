@@ -163,3 +163,29 @@ function Register-TestWritePSmmLogMock {
         Mock -CommandName 'Write-PSmmLog' -MockWith $mockWith
     }
 }
+
+function New-MockObject {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Properties
+    )
+
+    $obj = [PSCustomObject]@{}
+
+    foreach ($key in $Properties.Keys) {
+        $value = $Properties[$key]
+        
+        if ($value -is [scriptblock]) {
+            # Add script block as a method
+            $obj | Add-Member -MemberType ScriptMethod -Name $key -Value $value
+        }
+        else {
+            # Add as property
+            $obj | Add-Member -MemberType NoteProperty -Name $key -Value $value
+        }
+    }
+
+    return $obj
+}
+

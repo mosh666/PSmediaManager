@@ -1,26 +1,28 @@
-runtimes:
-    - java
-    - python
-
-version: "2"
-
 exclude_paths:
-    # Test harness, coverage artifacts, and generated files
     - tests/**
-    - "*.coverage-*.json"
-    - "*.coverage-*.xml"
+    - '*.coverage-*.json'
+    - '*.coverage-*.xml'
     - .codacy/**
     - _tmp/**
-    # Dependency caches
     - node_modules/**
-    - "**/.venv/**"
-    - "**/.pytest_cache/**"
-    # Logs and temp
-    - "**/*.log"
-    - "**/.DS_Store"
-    - "**/Thumbs.db"
-
+    - '**/.venv/**'
+    - '**/.pytest_cache/**'
+    - '**/*.log'
+    - '**/.DS_Store'
+    - '**/Thumbs.db'
+runtimes:
+    - dart@3.7.2
+    - go@1.22.3
+    - java@17.0.10
+    - node@22.2.0
+    - python@3.11.11
 tools:
-    - pmd
-    - semgrep
-    - trivy
+    - dartanalyzer@3.7.2
+    - eslint@8.57.0
+    - lizard@1.17.31
+    - pmd@7.11.0
+    - pylint@3.3.6
+    - revive@1.7.0
+    - semgrep@1.78.0
+    - trivy@0.66.0
+version: "2"
