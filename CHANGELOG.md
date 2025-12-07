@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed (Unreleased)
 
+- **Projects**: Fixed missing `Get-FromKeyOrProperty` helper function in `Get-PSmmProjects.ps1` that caused projects to disappear from main menu after performing any action - function now safely extracts values from both hashtables and PSObjects during cache retrieval
+- **Testing**: Fixed 2 skipped tests in `Resolve-CommandPath.Tests.ps1` by instantiating `FileSystemService` before `InModuleScope` and passing via global test data structure, enabling proper plugin command path resolution tests
 - **PATH Management**: Fixed development mode (`-Dev`) documentation and behavior - PATH entries are now added to Process scope only and NOT cleaned up at exit, keeping plugin tools available in the session. Machine and User scopes are never modified.
 - **FileSystemService**: Enhanced shim fallback with complete method implementations (GetChildItem, RemoveItem, CopyItem, MoveItem, GetItemProperty) to support isolated logging module imports
 - **FileSystemService**: Changed OutputType from `[FileSystemService]` to `[object]` to support shim fallback gracefully
@@ -17,7 +19,7 @@ All notable changes to this project will be documented in this file.
 - **Testing**: Fixed test fixture setup in `Initialize-Logging.Tests.ps1` by rehydrating paths inside BeforeAll block to avoid null references when Pester scopes the file
 - **Testing**: Fixed test helper integration in `Invoke-LogRotation.Tests.ps1` by adding Preload-PSmmTypes.ps1 call and improved module loading
 - **Testing**: Fixed FileSystemService mock signature in multiple test files to accept `$itemType` parameter correctly for GetChildItem method calls
-- **Coverage**: Updated coverage baseline from 68.35% to 68.2% (2,569 commands analyzed, 1,752 executed) reflecting test infrastructure improvements
+- **Coverage**: Updated coverage baseline from 68.41% to 68.07% (2,574 commands analyzed, 1,752 executed) reflecting new code additions and test improvements
 - **Code Quality**: Fixed whitespace consistency across multiple plugin files (FFmpeg, ImageMagick, KeePassXC, MKVToolNix, MariaDB, 7-Zip, Git-LFS, GitVersion, PortableGit, digiKam, ExifTool) by removing trailing whitespace
 - **Code Quality**: Fixed whitespace consistency in core files (ConfigValidator, PortInfo, ProjectInfo, Get-PSmmProjects, Invoke-PSmm, New-ClassFactory, PSmediaManager)
 - **Code Quality**: Added UTF-8 BOM to ConfigValidator.ps1 for proper encoding consistency

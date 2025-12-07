@@ -49,9 +49,13 @@ Describe "Resolve-CommandPath" {
         }
         New-Item -Path $script:testScratch -ItemType Directory | Out-Null
 
+        # Create FileSystemService before InModuleScope so it's available in Plugin context
+        $script:fileSystemService = [FileSystemService]::new()
+        
         $global:ResolveCommandPathTestData = [pscustomobject]@{
             RepoRoot = $script:repoRoot
             Scratch = $script:testScratch
+            FileSystem = $script:fileSystemService
         }
     }
 
@@ -83,10 +87,7 @@ Describe "Resolve-CommandPath" {
             New-Item -Path (Join-Path $script:pluginsRoot '_Temp') -ItemType Directory | Out-Null
         }
 
-        It 'SKIP: resolves 7z from the Plugins root (requires FileSystemService parameter)' -Skip {
-            Set-ItResult -Skipped -Because 'FileSystemService not available in InModuleScope PSmm.Plugins'
-            return
-            
+        It 'resolves 7z from the Plugins root (using FileSystemService parameter)' {
             $candidateDir = Join-Path -Path $script:pluginsRoot -ChildPath 'bin'
             New-Item -Path $candidateDir -ItemType Directory | Out-Null
             $candidateExe = Join-Path -Path $candidateDir -ChildPath '7z.exe'
@@ -102,8 +103,8 @@ Describe "Resolve-CommandPath" {
             $process = New-Object PSObject
             $process | Add-Member -MemberType ScriptMethod -Name TestCommand -Value { param($command) $false }
 
-            # Get FileSystemService from outer scope (PSmm module)
-            $fileSystem = & (Get-Module PSmm) { [FileSystemService]::new() }
+            # Get FileSystemService from global test data
+            $fileSystem = $global:ResolveCommandPathTestData.FileSystem
 
             $resolved = Resolve-PluginCommandPath -Paths $paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $fileSystem -Process $process
 
@@ -111,10 +112,7 @@ Describe "Resolve-CommandPath" {
             $paths.Commands['7z'] | Should -Be $candidateExe
         }
 
-        It 'SKIP: returns the cached path before checking the file system (requires FileSystemService parameter)' -Skip {
-            Set-ItResult -Skipped -Because 'FileSystemService not available in InModuleScope PSmm.Plugins'
-            return
-            
+        It 'returns the cached path before checking the file system (using FileSystemService parameter)' {
             $emptyDir = Join-Path -Path $script:pluginsRoot -ChildPath 'empty'
             New-Item -Path $emptyDir -ItemType Directory | Out-Null
             $cachedExe = Join-Path -Path $script:testScratch -ChildPath 'cached\7z.exe'
@@ -131,8 +129,8 @@ Describe "Resolve-CommandPath" {
             $process = New-Object PSObject
             $process | Add-Member -MemberType ScriptMethod -Name TestCommand -Value { param($command) $false }
 
-            # Get FileSystemService from outer scope (PSmm module)
-            $fileSystem = & (Get-Module PSmm) { [FileSystemService]::new() }
+            # Get FileSystemService from global test data
+            $fileSystem = $global:ResolveCommandPathTestData.FileSystem
 
             $resolved = Resolve-PluginCommandPath -Paths $paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $fileSystem -Process $process
 

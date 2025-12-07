@@ -2,6 +2,8 @@
 
 ## Latest Changes
 
+- Fixed critical bug where projects disappeared from main menu after any action - added missing `Get-FromKeyOrProperty` helper function for safe cache retrieval
+- Fixed 2 skipped tests in plugin command path resolution by properly passing FileSystemService to InModuleScope context
 - Fixed PATH management in development mode (`-Dev`): PATH entries now stay in Process scope only without cleanup, keeping plugin tools available in the session
 - Enhanced FileSystemService shim fallback with complete method implementations for isolated logging imports
 - Fixed test infrastructure: improved fixture setup, test compatibility, and FileSystemService mock signatures

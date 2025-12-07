@@ -374,6 +374,27 @@ function Get-PSmmProjects {
             , $result
         }
 
+        # Helper function to extract a value from either a hashtable key or PSObject property
+        function Get-FromKeyOrProperty {
+            param(
+                [Parameter(Mandatory)]
+                $Object,
+                [Parameter(Mandatory)]
+                [string]$Name,
+                $Default = $null
+            )
+
+            if ($Object -is [hashtable] -and $Object.ContainsKey($Name)) {
+                return $Object[$Name]
+            }
+            elseif ($null -ne $Object -and $Object.PSObject.Properties.Match($Name).Count -gt 0) {
+                return $Object.$Name
+            }
+            else {
+                return $Default
+            }
+        }
+
         function Get-FlattenedProjectsFromRegistrySide {
             param([Parameter(Mandatory)][hashtable]$RegistrySide)
             $result = @()
