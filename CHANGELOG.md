@@ -36,6 +36,7 @@ All notable changes to this project will be documented in this file.
 - **Code Quality**: Fixed 13 PSScriptAnalyzer issues in `AppConfiguration.ps1` and `AppConfigurationBuilder.ps1` - added verbose logging to empty catch blocks and removed trailing whitespace
 - **Core**: Corrected run configuration filename format in `PSmediaManager.ps1` to include missing dot between `InternalName` and `Run` (e.g., `PSmm.Run.psd1` instead of `PSmmRun.psd1`)
 - **Testing**: Fixed baseline update script to prevent accidental baseline regressions; added `-Force` parameter for intentional baseline adjustments
+- **Testing**: Fixed storage wizard test "renumbers and appends next group ID when groups exist" by persisting existing group to disk before wizard execution and using config's actual DriveRoot path instead of hardcoded value
 
 ### Added (Unreleased)
 

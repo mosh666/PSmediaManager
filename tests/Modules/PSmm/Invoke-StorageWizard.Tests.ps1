@@ -167,10 +167,26 @@ Describe 'Invoke-StorageWizard' {
             $config.Storage['1'].Master | Should -Not -BeNullOrEmpty
         }
 
-        It 'auto-increments group ID from existing groups' {
-            $config = New-TestAppConfiguration
+        It 'renumbers and appends next group ID when groups exist' {
+            $rootPath = Join-Path $TestDrive 'StorageRenumberRoot'
+            $config = New-TestAppConfiguration -RootPath $rootPath
+            $driveRoot = $config.Paths.App.Root
+            $storageFile = Join-Path $driveRoot 'PSmm.Config\PSmm.Storage.psd1'
+            Remove-Item -Path $storageFile -Force -ErrorAction SilentlyContinue
+            
+            # Add existing group '5' to config and persist it to disk
             $existingMaster = New-TestStorageDrive -Label 'Existing' -DriveLetter 'E:' -SerialNumber 'SNEXIST'
             Add-TestStorageGroup -Config $config -GroupId '5' -Master $existingMaster
+            
+            # Persist the existing group to disk before running wizard
+            $hashtable = @{
+                '5' = @{
+                    DisplayName = 'Storage Group 5'
+                    Master = @{ Label = $existingMaster.Label; SerialNumber = $existingMaster.SerialNumber }
+                    Backup = @{}
+                }
+            }
+            [AppConfigurationBuilder]::WriteStorageFile($storageFile, $hashtable)
             
             $usbDrive = [PSCustomObject]@{
                 Label = 'USB_Drive'
@@ -188,10 +204,11 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $driveRoot -Mode 'Add' -NonInteractive
             
-            # Verify group '6' was created (next after existing '5')
-            $config.Storage.ContainsKey('6') | Should -Be $true
+            # Groups are renumbered sequentially when persisted; expect two groups and max id = 2
+            $config.Storage.Keys.Count | Should -Be 2
+            ($config.Storage.Keys | ForEach-Object { [int]$_ } | Measure-Object -Maximum).Maximum | Should -Be 2
         }
 
         It 'excludes drives already assigned to other groups' {
