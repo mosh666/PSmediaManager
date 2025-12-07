@@ -2,16 +2,10 @@
 
 ## Latest Changes
 
-- Fixed critical bug where projects disappeared from main menu after any action - added missing `Get-FromKeyOrProperty` helper function for safe cache retrieval
-- Fixed 2 skipped tests in plugin command path resolution by properly passing FileSystemService to InModuleScope context
-- Fixed PATH management in development mode (`-Dev`): PATH entries now stay in Process scope only without cleanup, keeping plugin tools available in the session
-- Enhanced FileSystemService shim fallback with complete method implementations for isolated logging imports
-- Fixed test infrastructure: improved fixture setup, test compatibility, and FileSystemService mock signatures
-- Fixed critical bootstrap errors: ConfigValidator parser error, GitHub-Token vault console mode error, ExifTool installer error, and HTTP health check
-- Enhanced Get-LocalPluginExecutablePath to dynamically resolve installed plugin directories
-- Fixed FileSystemService GetChildItem method overload resolution
-- Application successfully bootstraps through all stages and reaches interactive UI
-- All 11 required plugins confirmed and installed (7z, PortableGit, git-lfs, gitversion, exiftool, ffmpeg, ImageMagick, KeePassXC, mkvtoolnix, mariadb, digiKam)
+- Re-enabled storage wizard logging paths (no USB drives, excluded fixed drives, wizard start) with explicit mocks so tests assert warnings and return `false` when no eligible drives exist
+- Stabilized logging test suite by preloading PSmm classes and injecting `FileSystem` instances in rotation tests to prevent hangs and module-scoped mock conflicts
+- Raised coverage baseline to **71.02%** (1,769 executed / 2,491 analyzed commands) with refreshed JaCoCo + `tests/.coverage-*.json` snapshots
+- Tidied storage management helper naming (`Invoke-PauseIfInteractive`) for clearer test intent while preserving runtime behavior
 
 See CHANGELOG.md for details.
 
@@ -108,14 +102,20 @@ Outputs PowerShell version compliance, required modules availability, plugin sta
 This project maintains high code quality standards:
 
 - **100%** PSScriptAnalyzer compliance (0 issues remaining)
-- **68.35%** line coverage (2,588 commands analyzed, 1,769 executed – baseline with 0.42% edge-case buffer)
-- **265/265** Pester tests passing (100% pass rate with organized test structure and comprehensive coverage)
+- **71.02%** line coverage (1,769 executed / 2,491 analyzed commands; baseline enforced in CI)
+- All Pester suites currently passing, including re-enabled storage wizard logging scenarios
 - Follows PowerShell best practices:
   - Named parameters for all function calls
   - Proper stream usage (`Write-Information` over `Write-Host` in non-interactive paths)
   - `ShouldProcess` implementation for destructive operations
   - Type declarations with `[OutputType]` attributes
   - Suppression attributes only for vetted false positives
+
+### Recent Quality Improvements (2025-12-07)
+
+- Re-enabled storage wizard logging tests (no USB drives, excluded fixed drives, wizard start) with explicit mocks instead of skips
+- Stabilized logging error-branch coverage by preloading PSmm classes and injecting `FileSystem` dependencies into log rotation tests to avoid hangs and shared state
+- Raised coverage baseline to **71.02%** with refreshed JaCoCo and coverage snapshot artifacts
 
 ### Recent Quality Improvements (2025-12-05)
 

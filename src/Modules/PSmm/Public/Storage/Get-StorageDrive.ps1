@@ -107,7 +107,7 @@ function Get-StorageDrive {
             Write-Verbose "Get-StorageDrive: CIM query failed, returning empty result. Details: $_"
             return @()
         }
-        
+
         foreach ($disk in $disks) {
             try {
                 $diskMetadata = if ($useTestData -and $testData.DiskMetadata -and $testData.DiskMetadata.ContainsKey($disk.Index)) {

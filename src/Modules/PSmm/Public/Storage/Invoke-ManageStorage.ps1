@@ -65,7 +65,7 @@ function Invoke-ManageStorage {
     }
 
     # Helper to skip Pause in test mode
-    function Call-PauseIfInteractive {
+    function Invoke-PauseIfInteractive {
         if (-not [string]::Equals($env:MEDIA_MANAGER_TEST_MODE, '1', [System.StringComparison]::OrdinalIgnoreCase)) {
             if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
         }

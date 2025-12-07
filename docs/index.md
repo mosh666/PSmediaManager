@@ -2,9 +2,9 @@
 
 ## Recent Updates
 
-- Core modules and health checks improved
-- Documentation, README, and changelog updated
-# PSmediaManager Documentation
+- Re-enabled storage wizard logging tests (no USB/excluded drives) and confirmed warnings instead of skipped cases
+- Logging test suite now preloads PSmm types and injects filesystem dependencies for rotation tests; coverage baseline raised to 71.02% with refreshed artifacts
+- README and changelog updated to capture the coverage uplift and test stabilization
 
 Welcome to the PSmediaManager documentation portal. This site expands on the high-level README by providing deep dives into architecture, configuration, development workflow, and module responsibilities.
 

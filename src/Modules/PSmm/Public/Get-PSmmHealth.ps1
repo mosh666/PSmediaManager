@@ -69,7 +69,7 @@ function Get-PSmmHealth {
                 }
             }
         }
-        
+
         # Ensure $modules is always an array
         if ($modules -isnot [object[]]) { $modules = @($modules) }
         # Plugin state (cached)
@@ -95,6 +95,7 @@ function Get-PSmmHealth {
                 }
             }
         }
+
         # Storage status (using Config when possible)
         $storage = @()
         if ($Config -and $Config.Storage) {
@@ -135,10 +136,10 @@ function Get-PSmmHealth {
             KeePassXCAvailable = $false
             VaultInitialized = ($Config -and $Config.Secrets -and $Config.Secrets.VaultPath)
         }
-        
+
         # Update Modules to use 'Installed' property name instead of 'Present'
         $modulesFixed = @($modules | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Version = $_.Version; Installed = $_.Present } })
-        
+
         # Structure storage with Configured flag and GroupCount
         $storageFixed = [pscustomobject]@{
             Configured = ($storage.Count -gt 0)
@@ -146,16 +147,16 @@ function Get-PSmmHealth {
             Status = if ($storage.Count -gt 0) { 'OK' } else { 'NotConfigured' }
             Details = $storage
         }
-        
+
         $configPath = $null
         if ($Config) {
             try {
-                if ($Config.PSObject.Properties -and $Config.PSObject.Properties['Paths']) { 
-                    $configPath = $Config.Paths.Config 
+                if ($Config.PSObject.Properties -and $Config.PSObject.Properties['Paths']) {
+                    $configPath = $Config.Paths.Config
                 }
             } catch { $configPath = $null }
         }
-        
+
         $result = [pscustomobject]@{
             PowerShell = [pscustomobject]@{ CurrentVersion = $currentPs.ToString(); RequiredVersion = $requiredPs.ToString(); VersionOk = $psOk }
             Modules    = $modulesFixed
