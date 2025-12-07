@@ -2,10 +2,10 @@
 
 ## Latest Changes
 
+- Pinned Codacy CLI v2 to `v2.2.0` in CI for deterministic SARIF output and reproducible scans
+- Pinned `markdownlint-cli2` GitHub Action to commit `30a0e04f1870d58f8d717450cc6134995f993c63` to satisfy supply-chain scanning and prevent unpinned third-party action warnings
 - Re-enabled storage wizard logging paths (no USB drives, excluded fixed drives, wizard start) with explicit mocks so tests assert warnings and return `false` when no eligible drives exist
 - Stabilized logging test suite by preloading PSmm classes and injecting `FileSystem` instances in rotation tests to prevent hangs and module-scoped mock conflicts
-- Raised coverage baseline to **71.02%** (1,769 executed / 2,491 analyzed commands) with refreshed JaCoCo + `tests/.coverage-*.json` snapshots
-- Tidied storage management helper naming (`Invoke-PauseIfInteractive`) for clearer test intent while preserving runtime behavior
 
 See CHANGELOG.md for details.
 
@@ -151,7 +151,7 @@ This project maintains high code quality standards:
 
 ### Codacy Analysis
 
-PSmediaManager uses Codacy CLI v2 (scheduled + on push) to surface security and maintainability findings alongside CodeQL in GitHub Advanced Security. The workflow is defined in `.github/workflows/codacy.yml` and enforced by internal instructions stored at `.github/instructions/codacy.instructions.md`. CLI v2 reads configuration from `.codacy/codacy.yaml`.
+PSmediaManager uses Codacy CLI v2 (scheduled + on push) to surface security and maintainability findings alongside CodeQL in GitHub Advanced Security. The workflow is defined in `.github/workflows/codacy.yml` and enforced by internal instructions stored at `.github/instructions/codacy.instructions.md`. CLI v2 reads configuration from `.codacy/codacy.yaml` and is pinned to `CODACY_CLI_V2_VERSION=v2.2.0` for deterministic output.
 
 Local run (mirrors CI wrapper):
 
@@ -189,6 +189,8 @@ tools:
   - name: semgrep
   - name: trivy
 ```
+
+Third-party GitHub Actions are pinned to immutable commits to satisfy supply-chain checks; `markdownlint-cli2` runs via `DavidAnson/markdownlint-cli2-action@30a0e04f1870d58f8d717450cc6134995f993c63`.
 
 ### Recent Cleanup Highlights (2025-11-30)
 

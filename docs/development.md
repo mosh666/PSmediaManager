@@ -135,10 +135,11 @@ Running `./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer` automatically invokes 
 ## Automation & Quality Gates
 
 - `.github/workflows/ci.yml` (push/PR to `main` and `dev` + manual dispatch) installs PowerShell 7.5.4, trusts PSGallery for dependency installs, runs `tests/Invoke-PSScriptAnalyzer.ps1`, executes `tests/Invoke-Pester.ps1 -CodeCoverage -Quiet`, and uploads analyzer/test/coverage artifacts (`tests/TestResults.xml`, `.coverage-jacoco.xml`, `.coverage-latest.json`, `.coverage-debug.txt`). Failures block merges via required GitHub checks.
-- `.github/workflows/codacy.yml` runs on the same branches plus a weekly cron. It executes Codacy CLI v2 via `./.codacy/cli.sh analyze` (using `.codacy/codacy.yaml`), emits SARIF, and uploads results via `github/codeql-action/upload-sarif@v4` so findings land in GitHub Advanced Security next to CodeQL alerts.
+- `.github/workflows/codacy.yml` runs on the same branches plus a weekly cron. It executes Codacy CLI v2 via `./.codacy/cli.sh analyze` (using `.codacy/codacy.yaml`), emits SARIF, and uploads results via `github/codeql-action/upload-sarif@v4` so findings land in GitHub Advanced Security next to CodeQL alerts. CLI is pinned with `CODACY_CLI_V2_VERSION=v2.2.0` for deterministic output.
   - Note: Linux runners require the script to be executable; the workflow contains a `chmod +x ./.codacy/cli.sh` step to prevent `Permission denied` and ensure SARIF files are generated.
   - Reliability: SARIF upload steps are conditional using `if: ${{ hashFiles('<file>.sarif') != '' }}` so a missing file doesn’t fail the job when a tool produces no output.
   - Config schema: `.codacy/codacy.yaml` uses `version: "2"` and lists tools as objects with `name` (e.g., `- name: pmd`).
+- Supply-chain: Third-party actions are pinned; `markdownlint-cli2` uses `DavidAnson/markdownlint-cli2-action@30a0e04f1870d58f8d717450cc6134995f993c63` to satisfy Semgrep/Codacy checks on unpinned actions.
 - Codacy MCP instructions file (`.github/instructions/codacy.instructions.md`) documents mandatory post-edit analysis triggers. When automated edits touch source or docs, immediately run the Codacy CLI for each changed file.
 - Local Codacy run (WSL wrapper script) to replicate CI:
 

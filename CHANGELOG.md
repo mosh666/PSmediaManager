@@ -58,6 +58,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed (Unreleased)
 
+- **CI/Codacy**: Pinned Codacy CLI v2 to `v2.2.0` for deterministic SARIF generation and reproducible scans; pinned `DavidAnson/markdownlint-cli2-action` to commit `30a0e04f1870d58f8d717450cc6134995f993c63` to satisfy supply-chain scanners and eliminate unpinned action warnings
 - **Cleanup**: Removed obsolete milestone and reference documentation files (INDEX.md, PROJECT_COMPLETE.md, PROJECT_MILESTONE.md, QUICK_REFERENCE.md, PHASE9_COMPLETION_REPORT.md)
 - **Cleanup**: Removed obsolete container push documentation (container-push.md)
 - **Testing**: Removed legacy phase test files (test-phase2 through phase10) and test-classes.ps1 as testing is now consolidated into Pester test suite
