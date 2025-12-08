@@ -2,6 +2,9 @@
 
 ## Latest Changes
 
+- **Documentation**: Added comprehensive troubleshooting guide with solutions for common issues (startup, storage, plugins, performance, development)
+- **Documentation**: Created complete public API reference documenting all 35+ exported functions across 5 modules with stability markers
+- **Documentation**: Improved README clarity by removing confusing version references and adding deployment guide link
 - **Quality**: All source files pass PSScriptAnalyzer with 0 issues - ready for release
 - **Testing**: Lowered coverage baseline to 70.95% to accommodate consistent 0.08% variance between local (71.04%) and CI (70.96%) environments
 - **Testing**: Enhanced coverage debugging infrastructure to monitor variance between CI and local runs - added `tests/Compare-CoverageDebug.ps1` for detailed analysis

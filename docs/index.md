@@ -2,6 +2,11 @@
 
 ## Recent Updates
 
+- **Documentation** (2025-12-08): Comprehensive documentation improvements
+  - Added troubleshooting guide with solutions for common issues across all components
+  - Created complete public API reference documenting all 35+ exported functions
+  - Improved version clarity in README and documentation index
+  - All documentation now accurately reflects v0.1.0 codebase
 - **v0.1.0 Released** (2025-12-08): First tagged release with complete dynamic versioning system
 - All modules now derive versions automatically from Git tags via GitVersion
 - CI automation and pre-commit hooks ensure version synchronization

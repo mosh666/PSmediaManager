@@ -19,8 +19,30 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 <!-- markdownlint-disable MD024 -->
 ## [Unreleased] - Development on `dev` branch
 
+### Added
+
+- **Documentation**: Added comprehensive troubleshooting guide (`docs/troubleshooting.md`) covering common issues and solutions for:
+  - Startup and module loading issues
+  - Storage configuration and drive management
+  - Configuration export/import problems
+  - Plugin installation and digiKam integration
+  - Performance optimization
+  - Development and testing issues
+  - FAQ and help resources
+- **Documentation**: Created complete public API reference (`docs/api.md`) documenting all 35+ exported functions across 5 modules (PSmm, PSmm.Logging, PSmm.Plugins, PSmm.Projects, PSmm.UI) with stability markers
+- **Documentation**: Clarified `Write-PSmmHost` as public infrastructure function (required by dependent modules despite being in Private/ folder)
+- **Quality**: Code analysis verified with PSScriptAnalyzer (all files pass with 0 issues)
+- **Testing**: Added comprehensive code coverage debugging infrastructure to identify and resolve variance between local and CI test runs
+  - Created `tests/Compare-CoverageDebug.ps1` script for analyzing coverage metrics and comparing runs
+  - Enhanced `tests/Invoke-Pester.ps1` to capture detailed debug information including precise coverage percentages, environment details, and test execution statistics
+  - Added `.coverage-debug.json` output for detailed coverage analysis
+  - Updated CI workflow to run coverage comparison analysis and upload debug artifacts
+  - Created documentation: `COVERAGE_DEBUG_REPORT.md` and `COVERAGE_FIX_SUMMARY.md`
+
 ### Changed
 
+- **Documentation**: Improved README clarity by removing confusing "New in 0.9.0" feature section and adding Deployment guide link
+- **Documentation**: Updated documentation index (`docs/index.md`) to include all current guides and accurate v0.1.0 status
 - **BREAKING**: Removed deprecated `Version` property from `AppConfiguration` class in favor of `AppVersion` as the single source of truth for version information
   - Removed `[version]$Version` property from `src/Modules/PSmm/Classes/AppConfiguration.ps1`
   - Removed `WithVersion()` builder method from `src/Modules/PSmm/Classes/AppConfigurationBuilder.ps1`
@@ -38,16 +60,6 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 ### Removed
 
 - **Documentation**: Removed obsolete versioning quick reference and investigation report (`.github/VERSIONING_QUICK_REFERENCE.md` and `.github/VERSION_INVESTIGATION_REPORT.md`) as comprehensive documentation is now available in `docs/versioning.md` and this CHANGELOG
-
-### Added
-
-- **Quality**: Code analysis verified with PSScriptAnalyzer (all files pass with 0 issues)
-- **Testing**: Added comprehensive code coverage debugging infrastructure to identify and resolve variance between local and CI test runs
-  - Created `tests/Compare-CoverageDebug.ps1` script for analyzing coverage metrics and comparing runs
-  - Enhanced `tests/Invoke-Pester.ps1` to capture detailed debug information including precise coverage percentages, environment details, and test execution statistics
-  - Added `.coverage-debug.json` output for detailed coverage analysis
-  - Updated CI workflow to run coverage comparison analysis and upload debug artifacts
-  - Created documentation: `COVERAGE_DEBUG_REPORT.md` and `COVERAGE_FIX_SUMMARY.md`
 
 ### Fixed
 
@@ -111,7 +123,7 @@ First tagged release of PSmediaManager with complete dynamic versioning system.
 - **Documentation**: Added comprehensive container deployment guide (`docs/deployment.md`) covering Docker, Compose, Kubernetes hardening, security scanning, and CI/CD integration
 - **Testing**: Added `GlobalFilesystemGuards.ps1` helper to prevent accidental writes to system paths during tests
 - **Testing**: Added `Resolve-ToolCommandPath.ps1` private helper for tool command resolution with caching
-- **Testing**: Added consolidated `Resolve-CommandPath.Tests.ps1` merging plugin and tool command path tests
+- **Testing**: Added consolidated `Resolve-CommandPath.Tests.ps1` merging plugin and tool command tests
 - **Testing**: Added `Write-PSmmLog.Uninitialized.Tests.ps1` for logging edge case coverage
 - **Testing**: Added organized `tests/Modules/PSmm/Storage/` directory with `Confirm-Storage.Tests.ps1` and `Get-StorageDrive.Tests.ps1`
 - **Testing**: Added `Export-SafeConfiguration.CoverageBoost3.Tests.ps1` with 24 comprehensive test cases covering deep nesting, sanitization, and edge cases (improved coverage by +0.07%)
@@ -237,7 +249,7 @@ First tagged release of PSmediaManager with complete dynamic versioning system.
 
 #### Current edits (2025-11-26)
 
-- Test infrastructure: Enhanced test environment isolation by detecting `MEDIA_MANAGER_TEST_MODE` environment variable to prevent runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) from being created on system drive during test execution.
+- Test infrastructure: Enhanced test environment isolation by detecting `MEDIA_MANAGER_TEST_MODE` environment variable to prevent runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) from being created on the system drive during test execution.
 - Test infrastructure: Added automatic working directory validation to `tests/Invoke-Pester.ps1` to ensure tests always run from the repository root, preventing path resolution issues and improving reliability.
 - Test infrastructure: Added `tests/_tmp` to `.gitignore` to exclude temporary test artifacts from version control.
 - Documentation: Added "Test Environment Isolation" section to `docs/development.md` explaining test mode behavior and path resolution strategy.
