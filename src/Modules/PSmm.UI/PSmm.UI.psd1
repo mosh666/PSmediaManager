@@ -3,7 +3,7 @@
     RootModule = 'PSmm.UI.psm1'
 
     # Version number of this module (updated by Update-ModuleVersions.ps1 from Git)
-    ModuleVersion = '0.0.1'
+    ModuleVersion = '0.1.0'
 
     # ID used to uniquely identify this module
     GUID = '65e7d1ea-d069-4da5-b9fc-682c3cd90016'
