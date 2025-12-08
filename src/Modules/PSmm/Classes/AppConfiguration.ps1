@@ -575,11 +575,8 @@ class AppConfiguration {
     [string]$InternalName = 'PSmm'
     # User-facing application name shown in UI and messages
     [string]$DisplayName = 'PSmediaManager'
-    # DEPRECATED: Kept for backward compatibility - use AppVersion instead
-    # This property is dynamically set from Git on initialization
-    [version]$Version = '0.0.1'
     # Full semantic version from Git (e.g., "0.1.0-alpha.5+Branch.dev.Sha.abc1234")
-    # This is the primary version property - derived from GitVersion
+    # This is the primary version property - derived from GitVersion during bootstrap
     [string]$AppVersion
     [RuntimeParameters]$Parameters
     [AppPaths]$Paths
@@ -651,7 +648,7 @@ class AppConfiguration {
     }
 
     [string] ToString() {
-        return "$($this.DisplayName) v$($this.Version) (App: v$($this.AppVersion))"
+        return "$($this.DisplayName) v$($this.AppVersion)"
     }
 }
 
