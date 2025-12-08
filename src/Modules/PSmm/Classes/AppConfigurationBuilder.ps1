@@ -169,7 +169,62 @@ class AppConfigurationBuilder {
             $paths = [AppPaths]::new($resolvedPath, $runtimeRoot)
         }
         else {
-            $paths = [AppPaths]::new($resolvedPath)
+            # NOT a repository root, but still need to check if we're in test mode
+            # to determine where runtime folders should go
+            $isTestMode = $false
+            $testModeReason = ""
+
+            # Signal 1: Check explicit environment variable (most reliable)
+            if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
+                $testModeReason = "MEDIA_MANAGER_TEST_MODE=1"
+                $isTestMode = $true
+            }
+
+            # Signal 2: Check if called from Pester by examining call stack
+            if (-not $isTestMode) {
+                try {
+                    $callStack = Get-PSCallStack
+                    $isPesterContext = $callStack | Where-Object {
+                        $_.Command -match 'Invoke-Pester|Should|It|Describe|Context|BeforeAll|AfterAll|Invoke-ScriptBlock' -or
+                        $_.ScriptName -match '\.Tests\.ps1$|Invoke-Pester\.ps1$'
+                    }
+                    if ($isPesterContext) {
+                        $testModeReason = "Pester in call stack"
+                        $isTestMode = $true
+                    }
+                } catch {
+                    # Ignore errors in call stack inspection
+                    Write-Verbose "Unable to inspect call stack: $_"
+                }
+            }
+
+            # Signal 3: Check for Pester module or preference variable
+            if (-not $isTestMode) {
+                $pesterLoaded = Get-Module -Name Pester -ErrorAction SilentlyContinue
+                $pesterPref = Get-Variable -Name 'PesterPreference' -Scope Global -ErrorAction SilentlyContinue
+                if ($pesterLoaded -or $pesterPref) {
+                    $testModeReason = "Pester module loaded or PesterPreference exists"
+                    $isTestMode = $true
+                }
+            }
+
+            if ($isTestMode) {
+                Write-Verbose "[AppConfigurationBuilder] Test mode DETECTED in non-repo path ($testModeReason)"
+                # For test paths, always use TEMP regardless of the passed path
+                $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::User)
+                if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                    $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::Process)
+                }
+                if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                    $tempPath = [System.IO.Path]::GetTempPath()
+                }
+                $testRoot = [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
+                Write-Verbose "[AppConfigurationBuilder] Overriding test path to TEMP: $testRoot"
+                $paths = [AppPaths]::new($resolvedPath, $testRoot)
+            } else {
+                Write-Verbose "[AppConfigurationBuilder] Non-repository path, production mode detected"
+                $paths = [AppPaths]::new($resolvedPath)
+            }
         }
 
         $this.ApplyPaths($paths)

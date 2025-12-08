@@ -33,8 +33,8 @@ Describe 'Confirm-Storage' {
     AfterAll {
         $stubEnabled = Get-Variable -Name TestWritePSmmLog_Enabled -Scope Global -ErrorAction SilentlyContinue
         if ($stubEnabled -and $stubEnabled.Value) { Disable-TestWritePSmmLogStub }
-        # Clean up test mode flag
-        Remove-Item Env:\MEDIA_MANAGER_TEST_MODE -ErrorAction SilentlyContinue
+        # Preserve MEDIA_MANAGER_TEST_MODE for other tests - don't delete it
+        # It was set by Invoke-Pester.ps1 and should remain for the entire test suite
     }
 
     It 'updates Master drive letter when drive is found' {

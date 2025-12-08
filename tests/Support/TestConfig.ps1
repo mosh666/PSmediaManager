@@ -29,6 +29,8 @@ function New-TestAppConfiguration {
     )
 
     $rootPath = New-TestRepositoryRoot -RootPath $RootPath
+    Write-Verbose "[New-TestAppConfiguration] Building config with RootPath: $rootPath"
+    Write-Verbose "[New-TestAppConfiguration] MEDIA_MANAGER_TEST_MODE='$env:MEDIA_MANAGER_TEST_MODE'"
 
     $builder = [AppConfigurationBuilder]::new()
     $builder.WithRootPath($rootPath) | Out-Null

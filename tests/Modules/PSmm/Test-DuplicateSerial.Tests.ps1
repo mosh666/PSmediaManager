@@ -1,17 +1,16 @@
 BeforeAll {
-    $modulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\src\Modules\PSmm\PSmm.psd1'
-    $loggingModulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\src\Modules\PSmm.Logging\PSmm.Logging.psd1'
+    $script:previousTestMode = $env:MEDIA_MANAGER_TEST_MODE
+    $modulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\.\src\Modules\PSmm\PSmm.psd1'
+    $loggingModulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\.\src\Modules\PSmm.Logging\PSmm.Logging.psd1'
     Import-Module -Name $modulePath -Force -Verbose:$false
     Import-Module -Name $loggingModulePath -Force -Verbose:$false
-    $testConfigPath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\tests\Support\TestConfig.ps1'
+    $testConfigPath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\.\tests\Support\TestConfig.ps1'
     . $testConfigPath
     $env:MEDIA_MANAGER_TEST_MODE = '1'
 }
 
 AfterAll {
-    if (Test-Path -Path env:MEDIA_MANAGER_TEST_MODE) {
-        Remove-Item -Path env:MEDIA_MANAGER_TEST_MODE
-    }
+    if ($null -ne $script:previousTestMode) { $env:MEDIA_MANAGER_TEST_MODE = $script:previousTestMode } else { Remove-Item Env:MEDIA_MANAGER_TEST_MODE -ErrorAction SilentlyContinue }
 }
 
 Describe 'Test-DuplicateSerial' {
