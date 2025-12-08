@@ -35,8 +35,11 @@ function New-TestAppConfiguration {
     $builder = [AppConfigurationBuilder]::new()
     $builder.WithRootPath($rootPath) | Out-Null
     $builder.WithParameters([RuntimeParameters]::new()) | Out-Null
+    Write-Verbose "[New-TestAppConfiguration] About to call InitializeDirectories..."
     $builder.InitializeDirectories() | Out-Null
     $config = $builder.Build()
+    Write-Verbose "[New-TestAppConfiguration] Config Paths.Root: $($config.Paths.Root)"
+    Write-Verbose "[New-TestAppConfiguration] Config Paths.App.Config: $($config.Paths.App.Config)"
 
     if (-not $config.Projects) {
         $config.Projects = @{}
