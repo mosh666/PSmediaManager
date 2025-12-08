@@ -19,6 +19,10 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 <!-- markdownlint-disable MD024 -->
 ## [Unreleased] - Development on `dev` branch
 
+### Removed
+
+- **Documentation**: Removed obsolete versioning quick reference and investigation report (`.github/VERSIONING_QUICK_REFERENCE.md` and `.github/VERSION_INVESTIGATION_REPORT.md`) as comprehensive documentation is now available in `docs/versioning.md` and this CHANGELOG
+
 ### Added
 
 - **Quality**: Code analysis verified with PSScriptAnalyzer (all files pass with 0 issues)
