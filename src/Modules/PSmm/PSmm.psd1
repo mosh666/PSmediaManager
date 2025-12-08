@@ -2,8 +2,8 @@
     # Script module or binary module file associated with this manifest
     RootModule = 'PSmm.psm1'
 
-    # Version number of this module
-    ModuleVersion = '1.0.0'
+    # Version number of this module (updated by Update-ModuleVersions.ps1 from Git)
+    ModuleVersion = '0.0.1'
 
     # ID used to uniquely identify this module
     GUID = '0c513322-1f25-46c8-b8b5-e9115ec18f07'

@@ -575,8 +575,12 @@ class AppConfiguration {
     [string]$InternalName = 'PSmm'
     # User-facing application name shown in UI and messages
     [string]$DisplayName = 'PSmediaManager'
-    [version]$Version = '1.0.0'
-    [string]$AppVersion  # String to support semantic versioning (e.g., "2.2.0-alpha.262-27f773b")
+    # DEPRECATED: Kept for backward compatibility - use AppVersion instead
+    # This property is dynamically set from Git on initialization
+    [version]$Version = '0.0.1'
+    # Full semantic version from Git (e.g., "0.1.0-alpha.5+Branch.dev.Sha.abc1234")
+    # This is the primary version property - derived from GitVersion
+    [string]$AppVersion
     [RuntimeParameters]$Parameters
     [AppPaths]$Paths
     [AppSecrets]$Secrets

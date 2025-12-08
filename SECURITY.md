@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Version `1.0.0` is the current focus. Older revisions should be updated to latest `main` before reporting issues to ensure fixes are not already applied.
+PSmediaManager uses **dynamic versioning** derived from Git tags. Version `v0.1.0` will be the first official release. Until then, the project is in unreleased state on the `dev` branch. Older revisions should be updated to the latest `main` branch before reporting issues to ensure fixes are not already applied.
 
 ## Reporting a Vulnerability
 

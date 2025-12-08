@@ -1,0 +1,112 @@
+# GitVersion Configuration for PSmediaManager
+# This file defines the versioning strategy for the entire repository
+# All modules and the application derive their version from Git tags
+
+mode: ContinuousDelivery
+continuous-delivery-fallback-tag: dev
+
+# Branch configuration
+branches:
+  main:
+    mode: ContinuousDelivery
+    tag: ''
+    increment: Patch
+    prevent-increment-of-merged-branch-version: true
+    track-merge-target: false
+    regex: ^main$
+    source-branches: ['dev']
+    tracks-release-branches: false
+    is-release-branch: true
+    is-mainline: true
+
+  dev:
+    mode: ContinuousDeployment
+    tag: 'alpha'
+    increment: Minor
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: true
+    regex: ^dev(elop)?(ment)?$
+    source-branches: []
+    tracks-release-branches: true
+    is-release-branch: false
+    is-mainline: false
+    pre-release-weight: 0
+
+  feature:
+    mode: ContinuousDeployment
+    tag: 'feature'
+    increment: Inherit
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: false
+    regex: ^features?[/-]
+    source-branches: ['dev']
+    tracks-release-branches: false
+    is-release-branch: false
+    is-mainline: false
+
+  pull-request:
+    mode: ContinuousDelivery
+    tag: 'pr'
+    increment: Inherit
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: false
+    regex: ^(pull|pull\-requests|pr)[/-]
+    source-branches: ['dev', 'main', 'feature']
+    tracks-release-branches: false
+    is-release-branch: false
+    is-mainline: false
+    tag-number-pattern: '[/-](?<number>\d+)'
+
+  release:
+    mode: ContinuousDelivery
+    tag: 'rc'
+    increment: None
+    prevent-increment-of-merged-branch-version: true
+    track-merge-target: false
+    regex: ^releases?[/-]
+    source-branches: ['dev', 'main']
+    tracks-release-branches: false
+    is-release-branch: true
+    is-mainline: false
+
+  hotfix:
+    mode: ContinuousDelivery
+    tag: 'hotfix'
+    increment: Patch
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: false
+    regex: ^hotfix(es)?[/-]
+    source-branches: ['main']
+    tracks-release-branches: false
+    is-release-branch: false
+    is-mainline: false
+
+# Tag prefix for version tags (e.g., v0.1.0)
+tag-prefix: 'v'
+
+# Version format
+assembly-versioning-scheme: MajorMinorPatch
+assembly-file-versioning-scheme: MajorMinorPatchTag
+assembly-informational-format: '{InformationalVersion}'
+
+# Increment strategy
+major-version-bump-message: '\+semver:\s?(breaking|major)'
+minor-version-bump-message: '\+semver:\s?(feature|minor)'
+patch-version-bump-message: '\+semver:\s?(fix|patch)'
+no-bump-message: '\+semver:\s?none'
+
+# Commit message increment rules
+commit-message-incrementing: Enabled
+
+# Other options
+commit-date-format: 'yyyy-MM-dd'
+merge-message-formats: {}
+update-build-number: true
+
+# Ignore configuration
+ignore:
+  sha: []
+
+# Next version (starting point before any tags exist)
+# This will be used until the first tag (v0.1.0) is created
+next-version: 0.1.0

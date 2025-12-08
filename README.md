@@ -17,7 +17,9 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 [![Coverage Artifacts](https://img.shields.io/badge/coverage-uploaded--via--Pester-blue)](https://github.com/mosh666/PSmediaManager/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> Status: Early 1.0.0 foundation release. APIs and structure may evolve.
+> **Status**: Unreleased (v0.1.0 will be the first tagged release). APIs and structure may evolve.
+>
+> **Versioning**: All modules derive their version dynamically from Git tags using GitVersion. See [docs/versioning.md](docs/versioning.md) for details.
 
 ## Table of Contents
 

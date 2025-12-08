@@ -4,12 +4,33 @@
 
 All notable changes to this project will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## Version Strategy
+
+PSmediaManager uses **dynamic versioning** derived from Git tags via GitVersion:
+- All modules share the same version as the application
+- Versions are computed automatically from Git history
+- No manual version updates are required
+
+See [docs/versioning.md](docs/versioning.md) for complete details.
+
 <!-- markdownlint-disable MD024 -->
-## [Unreleased Details]
+## [Unreleased] - Development on `dev` branch
+
+These changes will be included in the first release (v0.1.0).
+
+### Added (Unreleased)
+
+- **Versioning**: Implemented complete dynamic versioning system using GitVersion
+  - Created `GitVersion.yml` configuration for semantic versioning
+  - Added `Get-PSmmDynamicVersion` helper function for version retrieval
+  - Updated all module manifests to derive versions from Git dynamically
+  - Added comprehensive versioning documentation at `docs/versioning.md`
+  - All modules now share synchronized version from Git tags
 
 ### Fixed (Unreleased)
-
-- **Testing**: Fixed `Clear-PSmmProjectRegistry` test suite failures by updating all test cases to use `New-TestAppConfiguration` helper instead of hashtables, ensuring proper `[AppConfiguration]` type validation - all 414 Pester tests now pass
 - **Projects**: Fixed `[AppConfiguration]` type resolution errors in `PSmm.Projects` module functions by changing parameter types from `[AppConfiguration]` to `[object]` and adding runtime type validation in `Select-PSmmProject`, `New-PSmmProject`, and `Clear-PSmmProjectRegistry` - this prevents type lookup failures when modules are loaded before types are available in the session scope
 - **Projects**: Fixed `PathProvider.CombinePath` method call signature in `Select-PSmmProject` to use array syntax `@($path, $subfolder)` instead of separate arguments, resolving "Cannot find an overload for 'CombinePath' and the argument count: 2" errors when selecting projects
 - **Projects**: Fixed missing `Get-FromKeyOrProperty` helper function in `Get-PSmmProjects.ps1` that caused projects to disappear from main menu after performing any action - function now safely extracts values from both hashtables and PSObjects during cache retrieval

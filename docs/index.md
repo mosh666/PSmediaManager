@@ -12,6 +12,7 @@ Welcome to the PSmediaManager documentation portal. This site expands on the hig
 
 - [Installation](install.md)
 - [Configuration](configuration.md)
+- [Versioning](versioning.md) – Dynamic versioning with GitVersion
 - [Modules](modules.md)
 - [Development](development.md)
 - [Architecture](architecture.md)
