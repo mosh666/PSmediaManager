@@ -216,6 +216,7 @@ $config = New-PesterConfiguration
 $config.Run.Path = @($TestPath)
 $config.Run.Exit = $false
 $config.Run.PassThru = $true
+$config.Run.RandomizeOrder = $false  # Ensure deterministic test ordering for consistent coverage
 $config.Output.Verbosity = if ($Quiet) { 'Normal' } else { 'Detailed' }
 $config.TestResult.Enabled = $true
 $config.TestResult.OutputFormat = 'NUnitXml'
@@ -418,6 +419,7 @@ if ($config.TestResult.Enabled -and $testResultPath -and (Test-Path -Path $testR
 
 if ($CodeCoverage) {
     $coveragePath = Join-Path -Path $PSScriptRoot -ChildPath '.coverage-latest.json'
+    $coverageDebugPath = Join-Path -Path $PSScriptRoot -ChildPath '.coverage-debug.json'
     $coverageInfo = $null
     $hasCodeCoverage = $null -ne $result -and ($result.PSObject.Properties.Name -contains 'CodeCoverage')
     if ($hasCodeCoverage -and $null -ne $result.CodeCoverage) {
@@ -441,12 +443,46 @@ if ($CodeCoverage) {
             0
         }
 
+        # Calculate precise percentage for debugging (unrounded)
+        $precisePct = if ($analyzed -gt 0) {
+            ($executed / $analyzed) * 100
+        } else {
+            0
+        }
+
         $coverageInfo = [pscustomobject]@{
             line = $linePercent
             analyzedCommands = [int]$analyzed
             executedCommands = [int]$executed
             generatedAt = (Get-Date).ToString('o')
         }
+
+        # Write detailed debug info to separate file for comparison
+        $debugInfo = [pscustomobject]@{
+            timestamp = (Get-Date).ToString('o')
+            environment = @{
+                osVersion = [System.Environment]::OSVersion.VersionString
+                psVersion = $PSVersionTable.PSVersion.ToString()
+                ciContext = (Test-IsCiContext).ToString()
+                githubActions = $env:GITHUB_ACTIONS ?? 'false'
+            }
+            coverage = @{
+                precise = [math]::Round($precisePct, 4)
+                rounded = $linePercent
+                analyzed = [int]$analyzed
+                executed = [int]$executed
+                delta = [int]($analyzed - $executed)
+            }
+            testExecution = @{
+                totalTests = if ($result.PSObject.Properties.Name -contains 'TotalCount') { $result.TotalCount } else { 0 }
+                passedTests = if ($result.PSObject.Properties.Name -contains 'PassedCount') { $result.PassedCount } else { 0 }
+                failedTests = if ($result.PSObject.Properties.Name -contains 'FailedCount') { $result.FailedCount } else { 0 }
+                skippedTests = if ($result.PSObject.Properties.Name -contains 'SkippedCount') { $result.SkippedCount } else { 0 }
+                duration = if ($result.PSObject.Properties.Name -contains 'Duration') { $result.Duration.TotalSeconds } else { 0 }
+            }
+        }
+        $debugInfo | ConvertTo-Json -Depth 4 | Set-Content -Path $coverageDebugPath -Encoding UTF8
+        Write-Verbose "Coverage debug info saved to: $coverageDebugPath"
     }
     else {
         $coverageInfo = [pscustomobject]@{
