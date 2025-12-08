@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed (Unreleased)
 
+- **Testing**: Fixed `Clear-PSmmProjectRegistry` test suite failures by updating all test cases to use `New-TestAppConfiguration` helper instead of hashtables, ensuring proper `[AppConfiguration]` type validation - all 414 Pester tests now pass
 - **Projects**: Fixed `[AppConfiguration]` type resolution errors in `PSmm.Projects` module functions by changing parameter types from `[AppConfiguration]` to `[object]` and adding runtime type validation in `Select-PSmmProject`, `New-PSmmProject`, and `Clear-PSmmProjectRegistry` - this prevents type lookup failures when modules are loaded before types are available in the session scope
 - **Projects**: Fixed `PathProvider.CombinePath` method call signature in `Select-PSmmProject` to use array syntax `@($path, $subfolder)` instead of separate arguments, resolving "Cannot find an overload for 'CombinePath' and the argument count: 2" errors when selecting projects
 - **Projects**: Fixed missing `Get-FromKeyOrProperty` helper function in `Get-PSmmProjects.ps1` that caused projects to disappear from main menu after performing any action - function now safely extracts values from both hashtables and PSObjects during cache retrieval

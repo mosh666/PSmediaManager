@@ -2,6 +2,7 @@
 
 ## Latest Changes
 
+- **Testing**: Fixed all 6 failing Pester tests in `Clear-PSmmProjectRegistry` suite by ensuring tests use proper `[AppConfiguration]` objects instead of hashtables - full test suite (414 tests) now passes with 0 failures
 - Refreshed coverage artifacts and lowered the enforced baseline to **71.02%** (1,769 / 2,491); aligned README and development guide to the current counts
 - Pruned legacy `.disabled` test fixtures after consolidating coverage, ensuring the Pester suite reflects active scenarios only
 - Reaffirmed Codacy/MCP post-edit workflow and coverage baseline update path (`tests/Update-CoverageBaseline.ps1 [-Force]`) for anyone adjusting tests locally
