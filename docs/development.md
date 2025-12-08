@@ -44,8 +44,9 @@ Add new test files under the matching `tests/Modules/<ModuleName>` path. Keep on
 
 ### Coverage Strategy
 
-- **Coverage Strategy**: 71.02% (2,491 commands analyzed, 1,769 executed)
+- **Coverage Strategy**: 71.04% (2,493 commands analyzed, 1,771 executed)
 - **Baseline Enforcement**: The coverage baseline is stored in `tests/.coverage-baseline.json` and enforced during test runs
+- **Test Determinism**: Pester test randomization is disabled (`$config.Run.RandomizeOrder = $false`) to ensure consistent coverage results between local and CI runs
 - **Edge-Case Buffer**: A small gap remains for exception paths and external service fallbacks (e.g., `whoami` failure, DNS resolution errors, NuGet provider installation failures)
 - **Rationale**: Testing these paths requires complex mocking infrastructure (external process mocking, system service stubbing) with diminishing return-on-investment. The current strategy prioritizes:
   - Direct path testing (happy path + obvious error cases)
@@ -68,6 +69,26 @@ To lower the baseline (e.g., after removing coverage exclusions):
 ```
 
 The script prevents accidental regressions by refusing to lower the baseline without `-Force`.
+
+**Debugging Coverage Variance**:
+
+If you observe differences between local and CI coverage, use the coverage comparison tool:
+
+```pwsh
+# Run tests with coverage to generate debug data
+./tests/Invoke-Pester.ps1 -CodeCoverage
+
+# Analyze coverage metrics and environment details
+./tests/Compare-CoverageDebug.ps1 -Verbose
+```
+
+This tool captures:
+- Precise coverage percentages (4 decimal places)
+- Environment details (OS, PowerShell version, CI context)
+- Test execution statistics (passed, failed, skipped, duration)
+- Comparison between multiple runs to identify variance sources
+
+Debug data is saved to `.coverage-debug.json` and analysis reports to `.coverage-comparison.txt`. CI automatically runs this analysis and uploads artifacts for inspection.
 
 ### Development Mode (-Dev)
 

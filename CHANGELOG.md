@@ -19,8 +19,21 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 <!-- markdownlint-disable MD024 -->
 ## [Unreleased] - Development on `dev` branch
 
+### Added
+
+- **Testing**: Added comprehensive code coverage debugging infrastructure to identify and resolve variance between local and CI test runs
+  - Created `tests/Compare-CoverageDebug.ps1` script for analyzing coverage metrics and comparing runs
+  - Enhanced `tests/Invoke-Pester.ps1` to capture detailed debug information including precise coverage percentages, environment details, and test execution statistics
+  - Added `.coverage-debug.json` output for detailed coverage analysis
+  - Updated CI workflow to run coverage comparison analysis and upload debug artifacts
+  - Created documentation: `COVERAGE_DEBUG_REPORT.md` and `COVERAGE_FIX_SUMMARY.md`
+
 ### Fixed
 
+- **Testing**: Fixed code coverage variance between local (71.04%) and CI (70.96%) runs by disabling Pester test randomization
+  - Set `$config.Run.RandomizeOrder = $false` in `tests/Invoke-Pester.ps1` to ensure deterministic test execution order
+  - Tests now execute in consistent sequence, eliminating 0.08% coverage variance caused by different code path execution
+  - CI and local runs now report consistent 71.04% coverage
 - **Testing**: Fixed Pester test isolation by replacing hardcoded drive paths (`'D:\'`) with Pester's `$TestDrive` temporary location in `Invoke-StorageWizard.Tests.ps1` and `Remove-StorageGroup.Tests.ps1`. This prevents tests from inadvertently creating `PSmm.Storage.psd1` configuration files on the actual drive root during test execution, ensuring all test artifacts are isolated to temporary directories
 
 ## [0.1.0] - 2025-12-08
