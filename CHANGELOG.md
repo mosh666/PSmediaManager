@@ -19,13 +19,9 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 <!-- markdownlint-disable MD024 -->
 ## [Unreleased] - Development on `dev` branch
 
-### Added
-
-- TBD
-
 ### Fixed
 
-- TBD
+- **Testing**: Fixed Pester test isolation by replacing hardcoded drive paths (`'D:\'`) with Pester's `$TestDrive` temporary location in `Invoke-StorageWizard.Tests.ps1` and `Remove-StorageGroup.Tests.ps1`. This prevents tests from inadvertently creating `PSmm.Storage.psd1` configuration files on the actual drive root during test execution, ensuring all test artifacts are isolated to temporary directories
 
 ## [0.1.0] - 2025-12-08
 

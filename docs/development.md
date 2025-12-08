@@ -99,10 +99,11 @@ When developing PSmediaManager, use the `-Dev` parameter to enable persistent PA
 Tests run in an isolated environment with the `MEDIA_MANAGER_TEST_MODE` environment variable set to `'1'`. This ensures:
 
 - Runtime folders (`PSmm.Log`, `PSmm.Plugins`, `PSmm.Vault`) are created within the test directory instead of the system drive root
+- Storage configuration files (`PSmm.Storage.psd1`) are written to temporary test directories via Pester's `$TestDrive` instead of actual drive roots
 - Test artifacts remain contained and don't pollute the system
 - Tests can run in parallel without conflicting with production installations
 
-The `AppConfigurationBuilder` detects test mode and adjusts path resolution accordingly, keeping all test data within temporary directories managed by Pester's `TestDrive`.
+The `AppConfigurationBuilder` detects test mode and adjusts path resolution accordingly, keeping all test data within temporary directories managed by Pester's `TestDrive`. Test functions use Pester-provided variables (e.g., `$TestDrive`) instead of hardcoded paths to ensure proper isolation.
 
 ## Static Analysis
 

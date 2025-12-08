@@ -2,6 +2,7 @@
 
 ## Latest Changes
 
+- **Testing**: Fixed Pester test isolation by replacing hardcoded drive paths with temporary test directories - all storage tests now use `$TestDrive` to prevent creating files on actual drive roots
 - **Versioning**: Added CI step to auto-run `Update-ModuleVersions.ps1` and provided a pre-commit hook (`.githooks/pre-commit.ps1`; enable with `git config core.hooksPath .githooks`) so manifests always match Git versions.
 - **Release**: Tagged first version **v0.1.0**; dev branch now auto-syncs module versions from Git. See CHANGELOG.md for details.
 - **Testing**: Fixed all 6 failing Pester tests in `Clear-PSmmProjectRegistry` suite by ensuring tests use proper `[AppConfiguration]` objects instead of hashtables - full test suite (414 tests) now passes with 0 failures

@@ -41,7 +41,7 @@ Describe 'Remove-StorageGroup' {
 
     Context 'Parameter Validation' {
         It 'requires Config parameter' {
-            { Remove-StorageGroup -Config $null -DriveRoot 'D:\' -GroupIds @('1') -Confirm:$false -ErrorAction Stop } |
+            { Remove-StorageGroup -Config $null -DriveRoot $TestDrive -GroupIds @('1') -Confirm:$false -ErrorAction Stop } |
                 Should -Throw -ErrorId 'ParameterArgumentValidationError,Remove-StorageGroup'
         }
 
@@ -51,7 +51,7 @@ Describe 'Remove-StorageGroup' {
         }
 
         It 'requires GroupIds parameter' {
-            { Remove-StorageGroup -Config $config -DriveRoot 'D:\' -GroupIds $null -Confirm:$false -ErrorAction Stop } |
+            { Remove-StorageGroup -Config $config -DriveRoot $TestDrive -GroupIds $null -Confirm:$false -ErrorAction Stop } |
                 Should -Throw -ErrorId 'ParameterArgumentValidationError,Remove-StorageGroup'
         }
     }

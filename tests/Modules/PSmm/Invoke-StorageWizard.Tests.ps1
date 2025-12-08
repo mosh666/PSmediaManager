@@ -39,7 +39,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
             # Pass $null for Config to trigger validation error
-            { Invoke-StorageWizard -Config $null -DriveRoot 'D:\' -ErrorAction Stop } | Should -Throw
+            { Invoke-StorageWizard -Config $null -DriveRoot $TestDrive -ErrorAction Stop } | Should -Throw
         }
 
         It 'requires DriveRoot parameter' {
@@ -58,7 +58,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            { Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Invalid' -ErrorAction Stop } | Should -Throw
+            { Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Invalid' -ErrorAction Stop } | Should -Throw
         }
 
         It 'requires GroupId when Mode is Edit' {
@@ -67,7 +67,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            { Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Edit' -ErrorAction Stop } | Should -Throw
+            { Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Edit' -ErrorAction Stop } | Should -Throw
         }
 
         It 'validates GroupId exists when Mode is Edit' {
@@ -76,7 +76,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            { Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Edit' -GroupId 'nonexistent' -ErrorAction Stop } | Should -Throw
+            { Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Edit' -GroupId 'nonexistent' -ErrorAction Stop } | Should -Throw
         }
     }
 
@@ -105,7 +105,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             $result | Should -Be $false
         }
 
@@ -133,7 +133,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
             # When no USB drives are found, function should return false and log warning
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             
             $result | Should -Be $false
         }
@@ -160,7 +160,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             
             # Verify group '1' was created
             $config.Storage.ContainsKey('1') | Should -Be $true
@@ -245,7 +245,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             
             # Should only create group with SNFREE, not SNUSED
             $config.Storage['2'].Master.SerialNumber | Should -Be 'SNFREE'
@@ -277,7 +277,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Edit' -GroupId '1' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Edit' -GroupId '1' -NonInteractive
             
             # Edit mode should succeed
             $config.Storage['1'] | Should -Not -BeNullOrEmpty
@@ -305,7 +305,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Edit' -GroupId '1' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Edit' -GroupId '1' -NonInteractive
             
             # Group 1 should still exist
             $config.Storage['1'] | Should -Not -BeNullOrEmpty
@@ -332,7 +332,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             
             # Should detect USB drive by BusType even if IsUSB is false
             $result | Should -Be $true
@@ -358,7 +358,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             
             # Should detect USB drive by InterfaceType
             $result | Should -Be $true
@@ -383,7 +383,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             
             # Should detect removable drive
             $result | Should -Be $true
@@ -398,7 +398,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             
             # Should return false when no drives available after error
             $result | Should -Be $false
@@ -409,7 +409,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmLog -ModuleName PSmm.Logging -MockWith {}
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
-            { Invoke-StorageWizard -Config $null -DriveRoot 'D:\' -ErrorAction Stop } | Should -Throw
+            { Invoke-StorageWizard -Config $null -DriveRoot $TestDrive -ErrorAction Stop } | Should -Throw
         }
     }
 
@@ -438,7 +438,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Read-Host -MockWith { return 'N' }
             
             # Verify that Edit mode with valid GroupId doesn't throw
-            { Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Edit' -GroupId '1' } | Should -Not -Throw
+            { Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Edit' -GroupId '1' } | Should -Not -Throw
         }
 
         It 'logs excluded drives at verbose level' {
@@ -465,7 +465,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
             # When only fixed/internal drives are present, should exclude them and return false
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             
             $result | Should -Be $false
         }
@@ -492,7 +492,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
             # In NonInteractive mode, should complete without prompting
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add' -NonInteractive
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add' -NonInteractive
             
             # Verify Write-PSmmHost was not called much (minimal display)
             Assert-MockCalled -CommandName Write-PSmmHost -ModuleName PSmm -Times 0
@@ -519,7 +519,7 @@ Describe 'Invoke-StorageWizard' {
             Mock -CommandName Write-PSmmHost -ModuleName PSmm -MockWith {}
             
             # In test mode without test inputs and non-interactive, should return false
-            $result = Invoke-StorageWizard -Config $config -DriveRoot 'D:\' -Mode 'Add'
+            $result = Invoke-StorageWizard -Config $config -DriveRoot $TestDrive -Mode 'Add'
             
             $result | Should -Be $false
         }

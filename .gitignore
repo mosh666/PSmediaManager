@@ -6,8 +6,8 @@ Plugins/
 *.Run.psd1
 *.log
 tmp-logs/
-*.sarif
-*.json
+#*.sarif
+#*.json
 
 # PSmediaManager module-level Plugins folders (keep these)
 !src/**/Plugins/
@@ -21,8 +21,8 @@ publish/
 .coverage-debug.txt
 TestResults.xml
 PSScriptAnalyzerResults.json
-coverage.xml
-*.coverage
+#coverage.xml
+#*.coverage
 
 # IDE
 .idea/
