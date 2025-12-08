@@ -1,7 +1,7 @@
 @{
     RootModule = 'PSmm.Plugins.psm1'
     # Version number of this module (updated by Update-ModuleVersions.ps1 from Git)
-    ModuleVersion = '0.1.0'
+    ModuleVersion = '0.1.1'
     GUID = 'b413c6f2-0d0a-4c7c-9f2a-e6321c72b8e3'
     Author = 'Der Mosh'
     CompanyName = ''

@@ -3,7 +3,7 @@
     RootModule = 'PSmm.Logging.psm1'
 
     # Version number of this module (updated by Update-ModuleVersions.ps1 from Git)
-    ModuleVersion = '0.1.0'
+    ModuleVersion = '0.1.1'
 
     # ID used to uniquely identify this module
     GUID = '8fa9f51c-486c-4e02-8366-ec338b5b073a'
