@@ -18,7 +18,8 @@ output/
 publish/
 
 # Test results
-.coverage-debug.txt
+.coverage-debug*
+.coverage-comparison.*
 TestResults.xml
 PSScriptAnalyzerResults.json
 #coverage.xml
@@ -46,6 +47,8 @@ secrets/
 #Ignore vscode AI rules
 .refactoring/
 
+COVERAGE_*.md
+DEBUG_COMPLETE.md
 RESEARCH_*.md
 PHASE*.md
 UNUSED_CODE_ANALYSIS*.md
