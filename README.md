@@ -2,8 +2,7 @@
 
 ## Latest Changes
 
-- **Testing**: Fixed code coverage variance between CI and local runs by disabling Pester test randomization - coverage now consistently reports 71.04% in both environments
-- **Testing**: Added comprehensive coverage debugging infrastructure (`tests/Compare-CoverageDebug.ps1`) to analyze and track coverage metrics across runs
+- **Testing**: Enhanced coverage debugging infrastructure to monitor variance between CI and local runs - added `tests/Compare-CoverageDebug.ps1` for detailed analysis
 - **Testing**: Fixed Pester test isolation by replacing hardcoded drive paths with temporary test directories - all storage tests now use `$TestDrive` to prevent creating files on actual drive roots
 - **Versioning**: Added CI step to auto-run `Update-ModuleVersions.ps1` and provided a pre-commit hook (`.githooks/pre-commit.ps1`; enable with `git config core.hooksPath .githooks`) so manifests always match Git versions.
 - **Release**: Tagged first version **v0.1.0**; dev branch now auto-syncs module versions from Git. See CHANGELOG.md for details.

@@ -216,7 +216,6 @@ $config = New-PesterConfiguration
 $config.Run.Path = @($TestPath)
 $config.Run.Exit = $false
 $config.Run.PassThru = $true
-$config.Run.RandomizeOrder = $false  # Ensure deterministic test ordering for consistent coverage
 $config.Output.Verbosity = if ($Quiet) { 'Normal' } else { 'Detailed' }
 $config.TestResult.Enabled = $true
 $config.TestResult.OutputFormat = 'NUnitXml'
