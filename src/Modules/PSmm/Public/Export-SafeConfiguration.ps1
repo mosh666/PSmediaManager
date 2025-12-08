@@ -755,18 +755,12 @@ function Export-SafeConfiguration {
             }
 
             $appName = _GetMemberValue -InputObject $Configuration -Name 'InternalName'
-            $versionRaw = _GetMemberValue -InputObject $Configuration -Name 'Version'
-            if ($null -ne $versionRaw -and $versionRaw -isnot [string]) {
-                try { $versionRaw = $versionRaw.ToString() }
-                catch { Write-Verbose "[SafeExport] Failed to convert Version to string: $($_.Exception.Message)" }
-            }
             $appVersionValue = _GetMemberValue -InputObject $Configuration -Name 'AppVersion'
 
             # Compose snapshot
             return @{
                 App = @{
                     Name = $appName
-                    Version = $versionRaw
                     AppVersion = $appVersionValue
                 }
                 Paths = $paths

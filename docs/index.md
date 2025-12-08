@@ -2,10 +2,18 @@
 
 ## Recent Updates
 
+- **v0.1.1 Released** (2025-12-08): Patch release with documentation improvements
+  - Added comprehensive troubleshooting guide covering all component issues
+  - Created complete public API reference with 35+ exported functions documented
+  - Added `tools/Enable-GitHooks.ps1` helper for simplified git hook setup
+  - Fixed duplicate SHA in version string generation
+  - Fixed test isolation and coverage variance issues
 - **v0.1.0 Released** (2025-12-08): First tagged release with complete dynamic versioning system
-- All modules now derive versions automatically from Git tags via GitVersion
-- CI automation and pre-commit hooks ensure version synchronization
-- Coverage baseline at 71.02% with comprehensive test suite (414 tests passing)
+  - All modules now derive versions automatically from Git tags via GitVersion
+  - CI automation and pre-commit hooks ensure version synchronization
+  - Coverage baseline at 70.95% with comprehensive test suite (414 tests passing)
+  - 100% PSScriptAnalyzer compliance (0 issues)
+  - Complete public API documentation with all exported functions
 
 Welcome to the PSmediaManager documentation portal. This site expands on the high-level README by providing deep dives into architecture, configuration, development workflow, and module responsibilities.
 
@@ -18,12 +26,9 @@ Welcome to the PSmediaManager documentation portal. This site expands on the hig
 - [Development](development.md)
 - [Architecture](architecture.md)
 - [Deployment](deployment.md) – Container deployment, security hardening, CI/CD integration
-
-## What’s New (0.9.0)
-
-- Added `Get-PSmmHealth` for quick environment diagnostics (PowerShell version, modules, plugins, storage, vault). Supports `-Format` output.
-- Introduced early bootstrap services (`src/Core/BootstrapServices.ps1`) so core path/filesystem/environment/process helpers are available before module import.
-- Added Codacy and markdown lint configuration files (`.codacy.yml`, `.markdownlint.yml`) and documented upstream base image CVE suppressions in `.trivyignore`.
+- [Storage](storage.md) – Storage drive management and configuration
+- [API Reference](api.md) – Complete public API documentation
+- [Troubleshooting](troubleshooting.md) – Common issues and solutions
 
 ## Design Goals
 

@@ -1,19 +1,14 @@
 # PSmediaManager
 
-## Latest Changes
+## Latest Changes - v0.1.1
 
-- **Quality**: All source files pass PSScriptAnalyzer with 0 issues - ready for release
-- **Testing**: Lowered coverage baseline to 70.95% to accommodate consistent 0.08% variance between local (71.04%) and CI (70.96%) environments
-- **Testing**: Enhanced coverage debugging infrastructure to monitor variance between CI and local runs - added `tests/Compare-CoverageDebug.ps1` for detailed analysis
-- **Testing**: Fixed Pester test isolation by replacing hardcoded drive paths with temporary test directories - all storage tests now use `$TestDrive` to prevent creating files on actual drive roots
-- **Versioning**: Added CI step to auto-run `Update-ModuleVersions.ps1` and provided a pre-commit hook (`.githooks/pre-commit.ps1`; enable with `git config core.hooksPath .githooks`) so manifests always match Git versions.
-- **Release**: Tagged first version **v0.1.0**; dev branch now auto-syncs module versions from Git. See CHANGELOG.md for details.
-- **Testing**: Fixed all 6 failing Pester tests in `Clear-PSmmProjectRegistry` suite by ensuring tests use proper `[AppConfiguration]` objects instead of hashtables - full test suite (414 tests) now passes with 0 failures
-- Refreshed coverage artifacts and lowered the enforced baseline to **71.02%** (1,769 / 2,491); aligned README and development guide to the current counts
-- Pruned legacy `.disabled` test fixtures after consolidating coverage, ensuring the Pester suite reflects active scenarios only
-- Reaffirmed Codacy/MCP post-edit workflow and coverage baseline update path (`tests/Update-CoverageBaseline.ps1 [-Force]`) for anyone adjusting tests locally
+- **Documentation**: Added comprehensive troubleshooting guide covering startup, storage, plugins, performance, and development issues
+- **Documentation**: Created complete public API reference documenting all 35+ exported functions across 5 modules with stability markers
+- **Automation**: Added `tools/Enable-GitHooks.ps1` helper script to simplify git hook setup for automatic version synchronization
+- **Versioning**: Fixed duplicate SHA in `AppVersion` string generation (now correctly displays as `v0.1.0-17-g1f72ffd` instead of `v0.1.0-17-g1f72ffd-1f72ffd`)
+- **Testing**: Fixed code coverage variance and test isolation issues
 
-See CHANGELOG.md for details.
+See [CHANGELOG.md](CHANGELOG.md) for complete details.
 
 ## Overview
 
@@ -24,7 +19,7 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/mosh666/PSmediaManager)](https://github.com/mosh666/PSmediaManager/releases)
 
-> **Status**: Initial release v0.1.0 available. APIs and structure may evolve.
+> **Status**: Version v0.1.1 available. APIs and structure may evolve.
 >
 > **Versioning**: All modules derive their version dynamically from Git tags using GitVersion. See [docs/versioning.md](docs/versioning.md) for details.
 
@@ -45,10 +40,11 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 13. [Development](#development)
 14. [Security](#security)
 15. [Contributing](#contributing)
-16. [Roadmap](#roadmap)
-17. [FAQ](#faq)
-18. [Changelog](#changelog)
-19. [License](#license)
+16. [Deployment](#deployment)
+17. [Roadmap](#roadmap)
+18. [FAQ](#faq)
+19. [Changelog](#changelog)
+20. [License](#license)
 
 ## Features
 
@@ -64,13 +60,6 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 - Pester test suite & coverage baseline scripts.
 - PowerShell 7.5.4+ only (Core, cross-platform focus).
 - Intelligent PATH management with batch operations and optional User-level persistence.
-
-### New in 0.9.0
-
-- Health overview: `Get-PSmmHealth` summarizes environment status (PowerShell version, modules, plugins, storage, vault). Use `-Format` for readable output.
-- Early bootstrap services (`src/Core/BootstrapServices.ps1`) provide path, filesystem, environment, and process helpers before module import.
-- Enhanced environment service with batch PATH operations (`AddPathEntries`, `RemovePathEntries`) for efficient plugin registration.
-- Development mode (`-Dev`) now persists PATH changes to User scope, keeping plugin tools available after session exit.
 
 ## Quick Start
 
@@ -94,6 +83,16 @@ If you see module import or analyzer warnings, pre-install the recommended PSGal
 Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
 ./Start-PSmediaManager.ps1
 ```
+
+Optional: enable the repo-provided Git hooks once per clone (keeps module manifests in sync before commits):
+
+```pwsh
+pwsh -NoProfile -File ./tools/Enable-GitHooks.ps1
+# or during clone
+git clone --config core.hooksPath=.githooks https://github.com/mosh666/PSmediaManager.git
+```
+
+Hooks are opt-in; feel free to inspect `.githooks/pre-commit.ps1` before enabling.
 
 ## Health Check
 
@@ -485,6 +484,19 @@ See `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` for detailed guidelines. Highligh
 - Ensure analyzer + tests pass locally using the same harness CI consumes; include docs updates for any public surface change.
 - Maintain modular boundaries (do not couple UI logic into core services) and keep PowerShell best practices (approved verbs, comment-based help for public functions).
 - By contributing you agree to follow the Code of Conduct and accept that CODEOWNERS may request additional changes before merge.
+
+## Deployment
+
+For production deployments using containers, see the comprehensive [Container Deployment Guide](docs/deployment.md), which covers:
+
+- Docker and Docker Compose configurations
+- Kubernetes deployment with security hardening
+- Runtime security controls (read-only filesystem, capability dropping, seccomp)
+- Network policies and resource limits
+- CI/CD integration and automated scanning
+- Image vulnerability management
+
+For local development or portable usage, simply clone the repository and run `Start-PSmediaManager.ps1` as described in [Installation & Portability](#installation--portability).
 
 ## Roadmap
 

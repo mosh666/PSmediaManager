@@ -395,15 +395,13 @@ function Get-ApplicationVersion {
                     $gitVersionJson = ($gitVersionOutput | Out-String)
                     $gitVersionData = $gitVersionJson | ConvertFrom-Json -ErrorAction Stop
                     $verSemVer = $gitVersionData.SemVer
-                    $verShortSha = $gitVersionData.ShortSha
 
-                    if ($verSemVer -and $verShortSha) {
-                        $version = "$verSemVer-$verShortSha"
-                        Write-Verbose "Retrieved version from GitVersion: $version"
-                        return $version
+                    if ($verSemVer) {
+                        Write-Verbose "Retrieved version from GitVersion: $verSemVer"
+                        return $verSemVer
                     }
                     else {
-                        Write-Warning 'GitVersion JSON missing SemVer or ShortSha fields'
+                        Write-Warning 'GitVersion JSON missing SemVer field'
                     }
                 }
                 catch {
@@ -424,12 +422,10 @@ function Get-ApplicationVersion {
             }
 
             $gitSemVer = $gitSemVer.Trim()
-            $gitSha = (& git.exe -C $repositoryPath rev-parse --short HEAD 2>$null).Trim()
 
-            if ($gitSemVer -and $gitSha) {
-                $fallbackVersion = "$gitSemVer-$gitSha"
-                Write-Verbose "Retrieved version from git describe fallback: $fallbackVersion"
-                return $fallbackVersion
+            if ($gitSemVer) {
+                Write-Verbose "Retrieved version from git describe fallback: $gitSemVer"
+                return $gitSemVer
             }
         }
 

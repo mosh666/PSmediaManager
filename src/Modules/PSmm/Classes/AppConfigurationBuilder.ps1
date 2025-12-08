@@ -276,12 +276,6 @@ class AppConfigurationBuilder {
         return $this
     }
 
-    [AppConfigurationBuilder] WithVersion([version]$version) {
-        $this.EnsureNotBuilt()
-        $this._config.Version = $version
-        return $this
-    }
-
     [AppConfigurationBuilder] WithServices([object]$fileSystem, [object]$environment, [object]$pathProvider, [object]$process) {
         $this.EnsureNotBuilt()
         $this._fileSystem = $fileSystem

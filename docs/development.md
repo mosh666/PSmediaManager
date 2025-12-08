@@ -19,6 +19,16 @@ test: add coverage for secret redaction
 refactor: extract plugin version resolver
 ```
 
+### Git hooks (opt-in)
+
+- Run once per clone to enable the provided pre-commit hook (keeps module manifests in sync):
+
+```pwsh
+pwsh -NoProfile -File ./tools/Enable-GitHooks.ps1
+```
+
+- Hooks are optional; inspect `.githooks/pre-commit.ps1` before enabling.
+
 ## Code Style
 
 - Approved verbs (use `Get-Verb` reference).

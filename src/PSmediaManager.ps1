@@ -271,7 +271,6 @@ try {
     # Create builder with repository-aware paths
     $configBuilder = [AppConfigurationBuilder]::new($repositoryRoot).
     WithParameters($runtimeParams).
-    WithVersion([version]'1.0.0').
     WithServices($script:Services.FileSystem, $script:Services.Environment, $script:Services.PathProvider, $script:Services.Process).
     InitializeDirectories()
 
@@ -598,11 +597,11 @@ finally {
             # Fallback: minimal PSD1 export bypassing Export-SafeConfiguration internals
             try {
                 $mini = @{
-                    App = @{ Name = $appConfig.DisplayName; Version = $appConfig.AppVersion }
+                    App = @{ Name = $appConfig.DisplayName; AppVersion = $appConfig.AppVersion }
                     Paths = @{ Root = $appConfig.Paths.Root; Log = $appConfig.Paths.Log }
                     Timestamp = (Get-Date).ToString('o')
                 }
-                $miniContent = "@{`n    App = @{ Name = '$($mini.App.Name)'; Version = '$($mini.App.Version)' }`n    Paths = @{ Root = '$($mini.Paths.Root)'; Log = '$($mini.Paths.Log)' }`n    Timestamp = '$($mini.Timestamp)'`n}"
+                $miniContent = "@{`n    App = @{ Name = '$($mini.App.Name)'; AppVersion = '$($mini.App.AppVersion)' }`n    Paths = @{ Root = '$($mini.Paths.Root)'; Log = '$($mini.Paths.Log)' }`n    Timestamp = '$($mini.Timestamp)'`n}"
                 $script:Services.FileSystem.SetContent($runConfigPath, $miniContent)
                 Write-Warning "Fallback minimal configuration written to $runConfigPath"
             }
