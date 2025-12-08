@@ -497,6 +497,8 @@ Planned enhancements (subject to change):
 
 **Q: How do I add a new plugin?** Extend `PSmm.Requirements.psd1` with a new entry, implement acquisition logic or leverage existing patterns, add tests, update docs.
 
+**Q: Why does `Select-PSmmProject` use `[object]` instead of `[AppConfiguration]`?** Functions in dependent modules (PSmm.Projects, PSmm.UI) that accept configuration objects use `[object]` type annotations and validate at runtime to avoid type resolution failures during module loading. This ensures modules load correctly even before custom types are available in the session scope, while maintaining type safety through runtime checks.
+
 ---
 
 If you find issues or have feature ideas, please open an issue. Feedback accelerates maturity.

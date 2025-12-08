@@ -50,6 +50,22 @@ This document explains how PSmediaManager composes modules, services, and extern
 - **PSmm.Projects**: Maintains project registry, ensures per-project directories/databases, exposes CRUD-style cmdlets.
 - **PSmm.UI**: Provides ANSI-friendly prompts, multi-select choices, and dispatches to underlying commands.
 
+## Module Type Resolution
+
+PowerShell modules that depend on custom types defined in other modules must handle type availability carefully. In PSmediaManager:
+
+- **Type Definition**: `AppConfiguration` and related types are defined in `src/Modules/PSmm/Classes/AppConfiguration.ps1` and loaded when the PSmm module initializes.
+- **Module Load Order**: The main bootstrap sequence in `src/PSmediaManager.ps1` imports modules in dependency order: PSmm → PSmm.Logging → PSmm.Plugins → PSmm.Projects → PSmm.UI.
+- **Type Availability Pattern**: Functions in dependent modules (PSmm.Projects, PSmm.UI) that accept configuration objects use `[object]` type annotations instead of `[AppConfiguration]` to avoid type resolution failures during module parsing. Runtime validation ensures type safety:
+
+```powershell
+if ($Config.GetType().Name -ne 'AppConfiguration') {
+    throw [ArgumentException]::new("Config parameter must be of type [AppConfiguration]", 'Config')
+}
+```
+
+- **Rationale**: This pattern prevents "Unable to find type [AppConfiguration]" errors that would occur if modules tried to reference the type before the PSmm module was fully loaded. The approach maintains type safety while accommodating PowerShell's module loading mechanics.
+
 ## Data & Storage Layout
 
 ```text

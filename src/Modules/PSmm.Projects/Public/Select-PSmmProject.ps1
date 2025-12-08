@@ -40,7 +40,7 @@ function Select-PSmmProject {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,  # Uses [object] instead of [AppConfiguration] to avoid type resolution issues when module is loaded
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -55,6 +55,11 @@ function Select-PSmmProject {
         [Parameter(Mandatory)]
         $PathProvider
     )
+
+    # Validate Config is AppConfiguration type
+    if ($Config.GetType().Name -ne 'AppConfiguration') {
+        throw [ArgumentException]::new("Config parameter must be of type [AppConfiguration]", 'Config')
+    }
 
     # Build internal runtime projection for helpers
     $Run = @{
@@ -165,13 +170,13 @@ function Select-PSmmProject {
 
         # Update all project-specific paths
         $Run.Projects.Current.Path = $projectBasePath
-        $Run.Projects.Current.Config = $PathProvider.CombinePath($projectBasePath,'Config')
-        $Run.Projects.Current.Backup = $PathProvider.CombinePath($projectBasePath,'Backup')
-        $Run.Projects.Current.Databases = $PathProvider.CombinePath($projectBasePath,'Databases')
-        $Run.Projects.Current.Documents = $PathProvider.CombinePath($projectBasePath,'Documents')
-        $Run.Projects.Current.Libraries = $PathProvider.CombinePath($projectBasePath,'Libraries')
-        $Run.Projects.Current.Vault = $PathProvider.CombinePath($projectBasePath,'Vault')
-        $Run.Projects.Current.Log = $PathProvider.CombinePath($projectBasePath,'Log')
+        $Run.Projects.Current.Config = $PathProvider.CombinePath(@($projectBasePath,'Config'))
+        $Run.Projects.Current.Backup = $PathProvider.CombinePath(@($projectBasePath,'Backup'))
+        $Run.Projects.Current.Databases = $PathProvider.CombinePath(@($projectBasePath,'Databases'))
+        $Run.Projects.Current.Documents = $PathProvider.CombinePath(@($projectBasePath,'Documents'))
+        $Run.Projects.Current.Libraries = $PathProvider.CombinePath(@($projectBasePath,'Libraries'))
+        $Run.Projects.Current.Vault = $PathProvider.CombinePath(@($projectBasePath,'Vault'))
+        $Run.Projects.Current.Log = $PathProvider.CombinePath(@($projectBasePath,'Log'))
 
         # Store storage drive information
         $Run.Projects.Current.StorageDrive = @{

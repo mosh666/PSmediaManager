@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed (Unreleased)
 
+- **Projects**: Fixed `[AppConfiguration]` type resolution errors in `PSmm.Projects` module functions by changing parameter types from `[AppConfiguration]` to `[object]` and adding runtime type validation in `Select-PSmmProject`, `New-PSmmProject`, and `Clear-PSmmProjectRegistry` - this prevents type lookup failures when modules are loaded before types are available in the session scope
+- **Projects**: Fixed `PathProvider.CombinePath` method call signature in `Select-PSmmProject` to use array syntax `@($path, $subfolder)` instead of separate arguments, resolving "Cannot find an overload for 'CombinePath' and the argument count: 2" errors when selecting projects
 - **Projects**: Fixed missing `Get-FromKeyOrProperty` helper function in `Get-PSmmProjects.ps1` that caused projects to disappear from main menu after performing any action - function now safely extracts values from both hashtables and PSObjects during cache retrieval
 - **Testing**: Fixed 2 skipped tests in `Resolve-CommandPath.Tests.ps1` by instantiating `FileSystemService` before `InModuleScope` and passing via global test data structure, enabling proper plugin command path resolution tests
 - **PATH Management**: Fixed development mode (`-Dev`) documentation and behavior - PATH entries are now added to Process scope only and NOT cleaned up at exit, keeping plugin tools available in the session. Machine and User scopes are never modified.

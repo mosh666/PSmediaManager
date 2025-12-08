@@ -34,7 +34,7 @@ function New-PSmmProject {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,  # Uses [object] instead of [AppConfiguration] to avoid type resolution issues when module is loaded
 
         [Parameter(Mandatory)]
         $FileSystem,
@@ -42,6 +42,11 @@ function New-PSmmProject {
         [Parameter(Mandatory)]
         $PathProvider
     )
+
+    # Validate Config is AppConfiguration type
+    if ($Config.GetType().Name -ne 'AppConfiguration') {
+        throw [ArgumentException]::new("Config parameter must be of type [AppConfiguration]", 'Config')
+    }
 
     try {
         Clear-Host
