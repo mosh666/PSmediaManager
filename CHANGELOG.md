@@ -21,6 +21,18 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.1.1] - 2025-12-08
+
+Patch release with documentation improvements and git hook automation helper.
+
+### Added
+
 - **Documentation**: Added comprehensive troubleshooting guide (`docs/troubleshooting.md`) covering common issues and solutions for:
   - Startup and module loading issues
   - Storage configuration and drive management
@@ -31,24 +43,12 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
   - FAQ and help resources
 - **Documentation**: Created complete public API reference (`docs/api.md`) documenting all 35+ exported functions across 5 modules (PSmm, PSmm.Logging, PSmm.Plugins, PSmm.Projects, PSmm.UI) with stability markers
 - **Documentation**: Clarified `Write-PSmmHost` as public infrastructure function (required by dependent modules despite being in Private/ folder)
-- **Quality**: Code analysis verified with PSScriptAnalyzer (all files pass with 0 issues)
-- **Testing**: Added comprehensive code coverage debugging infrastructure to identify and resolve variance between local and CI test runs
-  - Created `tests/Compare-CoverageDebug.ps1` script for analyzing coverage metrics and comparing runs
-  - Enhanced `tests/Invoke-Pester.ps1` to capture detailed debug information including precise coverage percentages, environment details, and test execution statistics
-  - Added `.coverage-debug.json` output for detailed coverage analysis
-  - Updated CI workflow to run coverage comparison analysis and upload debug artifacts
-  - Created documentation: `COVERAGE_DEBUG_REPORT.md` and `COVERAGE_FIX_SUMMARY.md`
+- **Automation**: Added `tools/Enable-GitHooks.ps1` helper script to simplify git hook setup for automatic version synchronization
 
 ### Changed
 
 - **Documentation**: Improved README clarity by removing confusing "New in 0.9.0" feature section and adding Deployment guide link
 - **Documentation**: Updated documentation index (`docs/index.md`) to include all current guides and accurate v0.1.0 status
-- **BREAKING**: Removed deprecated `Version` property from `AppConfiguration` class in favor of `AppVersion` as the single source of truth for version information
-  - Removed `[version]$Version` property from `src/Modules/PSmm/Classes/AppConfiguration.ps1`
-  - Removed `WithVersion()` builder method from `src/Modules/PSmm/Classes/AppConfigurationBuilder.ps1`
-  - Updated `Export-SafeConfiguration` to exclude deprecated `Version` field from configuration exports
-  - Removed `.WithVersion([version]'1.0.0')` initialization call from `src/PSmediaManager.ps1`
-  - Updated `ToString()` method to display only `AppVersion` in consistent format
 
 ### Fixed
 
@@ -56,13 +56,6 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
   - Fixed `Get-ApplicationVersion` function in `src/Modules/PSmm/Public/Bootstrap/Invoke-PSmm.ps1` to use GitVersion's `SemVer` field directly (which already includes SHA)
   - Removed redundant SHA append in git describe fallback path
   - Version string now correctly displays as `v0.1.0-17-g1f72ffd` instead of `v0.1.0-17-g1f72ffd-1f72ffd`
-
-### Removed
-
-- **Documentation**: Removed obsolete versioning quick reference and investigation report (`.github/VERSIONING_QUICK_REFERENCE.md` and `.github/VERSION_INVESTIGATION_REPORT.md`) as comprehensive documentation is now available in `docs/versioning.md` and this CHANGELOG
-
-### Fixed
-
 - **Testing**: Fixed code coverage variance between local (71.04%) and CI (70.96%) runs caused by non-deterministic test execution
   - Removed unsupported `$config.Run.RandomizeOrder = $false` property (not available in Pester 5.5)
   - Lowered baseline to 70.95% to accommodate consistent 0.08% variance between environments
@@ -70,6 +63,10 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
   - Added comprehensive debug logging to track and analyze coverage differences
   - Coverage debug infrastructure captures environment details for troubleshooting
 - **Testing**: Fixed Pester test isolation by replacing hardcoded drive paths (`'D:\'`) with Pester's `$TestDrive` temporary location in `Invoke-StorageWizard.Tests.ps1` and `Remove-StorageGroup.Tests.ps1`. This prevents tests from inadvertently creating `PSmm.Storage.psd1` configuration files on the actual drive root during test execution, ensuring all test artifacts are isolated to temporary directories
+
+### Removed
+
+- **Documentation**: Removed obsolete versioning quick reference and investigation report (`.github/VERSIONING_QUICK_REFERENCE.md` and `.github/VERSION_INVESTIGATION_REPORT.md`) as comprehensive documentation is now available in `docs/versioning.md` and this CHANGELOG
 
 ## [0.1.0] - 2025-12-08
 
@@ -84,6 +81,22 @@ First tagged release of PSmediaManager with complete dynamic versioning system.
   - Added comprehensive versioning documentation at `docs/versioning.md`
   - All modules now share synchronized version from Git tags
 - **Automation**: Added CI step to run `Update-ModuleVersions.ps1 -UpdateManifests` and documented an opt-in pre-commit hook (`.githooks/pre-commit.ps1`; enable with `git config core.hooksPath .githooks`) to keep manifests in sync locally.
+- **Quality**: Code analysis verified with PSScriptAnalyzer (all files pass with 0 issues)
+- **Testing**: Added comprehensive code coverage debugging infrastructure to identify and resolve variance between local and CI test runs
+  - Created `tests/Compare-CoverageDebug.ps1` script for analyzing coverage metrics and comparing runs
+  - Enhanced `tests/Invoke-Pester.ps1` to capture detailed debug information including precise coverage percentages, environment details, and test execution statistics
+  - Added `.coverage-debug.json` output for detailed coverage analysis
+  - Updated CI workflow to run coverage comparison analysis and upload debug artifacts
+  - Created documentation: `COVERAGE_DEBUG_REPORT.md` and `COVERAGE_FIX_SUMMARY.md`
+
+### Changed
+
+- **BREAKING**: Removed deprecated `Version` property from `AppConfiguration` class in favor of `AppVersion` as the single source of truth for version information
+  - Removed `[version]$Version` property from `src/Modules/PSmm/Classes/AppConfiguration.ps1`
+  - Removed `WithVersion()` builder method from `src/Modules/PSmm/Classes/AppConfigurationBuilder.ps1`
+  - Updated `Export-SafeConfiguration` to exclude deprecated `Version` field from configuration exports
+  - Removed `.WithVersion([version]'1.0.0')` initialization call from `src/PSmediaManager.ps1`
+  - Updated `ToString()` method to display only `AppVersion` in consistent format
 
 ### Fixed
 - **Projects**: Fixed `[AppConfiguration]` type resolution errors in `PSmm.Projects` module functions by changing parameter types from `[AppConfiguration]` to `[object]` and adding runtime type validation in `Select-PSmmProject`, `New-PSmmProject`, and `Clear-PSmmProjectRegistry` - this prevents type lookup failures when modules are loaded before types are available in the session scope

@@ -2,17 +2,18 @@
 
 ## Recent Updates
 
-- **Documentation** (2025-12-08): Comprehensive documentation improvements
-  - Added troubleshooting guide with solutions for common issues across all components
-  - Created complete public API reference documenting all 35+ exported functions
-  - Improved version clarity in README and documentation index
-  - All documentation now accurately reflects v0.1.0 codebase
+- **v0.1.1 Released** (2025-12-08): Patch release with documentation improvements
+  - Added comprehensive troubleshooting guide covering all component issues
+  - Created complete public API reference with 35+ exported functions documented
+  - Added `tools/Enable-GitHooks.ps1` helper for simplified git hook setup
+  - Fixed duplicate SHA in version string generation
+  - Fixed test isolation and coverage variance issues
 - **v0.1.0 Released** (2025-12-08): First tagged release with complete dynamic versioning system
-- All modules now derive versions automatically from Git tags via GitVersion
-- CI automation and pre-commit hooks ensure version synchronization
-- Coverage baseline at 71.02% with comprehensive test suite (414 tests passing)
-- 100% PSScriptAnalyzer compliance (0 issues)
-- Complete public API documentation with all exported functions
+  - All modules now derive versions automatically from Git tags via GitVersion
+  - CI automation and pre-commit hooks ensure version synchronization
+  - Coverage baseline at 70.95% with comprehensive test suite (414 tests passing)
+  - 100% PSScriptAnalyzer compliance (0 issues)
+  - Complete public API documentation with all exported functions
 
 Welcome to the PSmediaManager documentation portal. This site expands on the high-level README by providing deep dives into architecture, configuration, development workflow, and module responsibilities.
 
