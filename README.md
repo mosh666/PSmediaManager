@@ -45,10 +45,11 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 13. [Development](#development)
 14. [Security](#security)
 15. [Contributing](#contributing)
-16. [Roadmap](#roadmap)
-17. [FAQ](#faq)
-18. [Changelog](#changelog)
-19. [License](#license)
+16. [Deployment](#deployment)
+17. [Roadmap](#roadmap)
+18. [FAQ](#faq)
+19. [Changelog](#changelog)
+20. [License](#license)
 
 ## Features
 
@@ -64,13 +65,6 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 - Pester test suite & coverage baseline scripts.
 - PowerShell 7.5.4+ only (Core, cross-platform focus).
 - Intelligent PATH management with batch operations and optional User-level persistence.
-
-### New in 0.9.0
-
-- Health overview: `Get-PSmmHealth` summarizes environment status (PowerShell version, modules, plugins, storage, vault). Use `-Format` for readable output.
-- Early bootstrap services (`src/Core/BootstrapServices.ps1`) provide path, filesystem, environment, and process helpers before module import.
-- Enhanced environment service with batch PATH operations (`AddPathEntries`, `RemovePathEntries`) for efficient plugin registration.
-- Development mode (`-Dev`) now persists PATH changes to User scope, keeping plugin tools available after session exit.
 
 ## Quick Start
 
@@ -485,6 +479,19 @@ See `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` for detailed guidelines. Highligh
 - Ensure analyzer + tests pass locally using the same harness CI consumes; include docs updates for any public surface change.
 - Maintain modular boundaries (do not couple UI logic into core services) and keep PowerShell best practices (approved verbs, comment-based help for public functions).
 - By contributing you agree to follow the Code of Conduct and accept that CODEOWNERS may request additional changes before merge.
+
+## Deployment
+
+For production deployments using containers, see the comprehensive [Container Deployment Guide](docs/deployment.md), which covers:
+
+- Docker and Docker Compose configurations
+- Kubernetes deployment with security hardening
+- Runtime security controls (read-only filesystem, capability dropping, seccomp)
+- Network policies and resource limits
+- CI/CD integration and automated scanning
+- Image vulnerability management
+
+For local development or portable usage, simply clone the repository and run `Start-PSmediaManager.ps1` as described in [Installation & Portability](#installation--portability).
 
 ## Roadmap
 

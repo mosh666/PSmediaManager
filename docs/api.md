@@ -1,7 +1,7 @@
 # PSmediaManager Public API Documentation
 
-**Version:** 1.0.0  
-**Last Updated:** 2025-12-07
+**Version:** 0.1.0  
+**Last Updated:** 2025-12-08
 
 This document defines the public API surface for PSmediaManager. Functions listed here are part of the stable public interface and can be safely used by external scripts and extensions.
 
@@ -134,14 +134,136 @@ Centralized host output function for consistent logging and display.
 
 ---
 
+### Logging (PSmm.Logging Module)
+
+#### `Initialize-Logging`
+Initializes the logging subsystem with console and file targets.
+
+**Module:** PSmm.Logging  
+**Stability:** Stable
+
+#### `Write-PSmmLog`
+Writes structured log messages to configured targets.
+
+**Module:** PSmm.Logging  
+**Stability:** Stable
+
+#### `Set-LogContext`
+Sets contextual information for log entries (project, session, etc.).
+
+**Module:** PSmm.Logging  
+**Stability:** Stable
+
+#### `Invoke-LogRotation`
+Rotates log files based on size or date criteria.
+
+**Module:** PSmm.Logging  
+**Stability:** Stable
+
+---
+
+### Plugin Management (PSmm.Plugins Module)
+
+#### `Confirm-Plugins`
+Validates and installs required external plugins.
+
+**Module:** PSmm.Plugins  
+**Stability:** Stable
+
+#### `Install-KeePassXC`
+Installs KeePassXC CLI plugin for secret management.
+
+**Module:** PSmm.Plugins  
+**Stability:** Stable
+
+#### `Get-PSmmAvailablePort`
+Finds an available TCP port for service binding.
+
+**Module:** PSmm.Plugins  
+**Stability:** Stable
+
+#### `Get-PSmmProjectPorts`
+Retrieves assigned ports for a project's services.
+
+**Module:** PSmm.Plugins  
+**Stability:** Stable
+
+#### `Initialize-PSmmProjectDigiKamConfig`
+Initializes digiKam configuration for a project.
+
+**Module:** PSmm.Plugins  
+**Stability:** Stable
+
+#### `Start-PSmmdigiKam`
+Starts digiKam with project-specific configuration.
+
+**Module:** PSmm.Plugins  
+**Stability:** Stable
+
+#### `Stop-PSmmdigiKam`
+Stops running digiKam instances.
+
+**Module:** PSmm.Plugins  
+**Stability:** Stable
+
+---
+
+### Project Management (PSmm.Projects Module)
+
+#### `New-PSmmProject`
+Creates a new media management project.
+
+**Module:** PSmm.Projects  
+**Stability:** Stable
+
+#### `Get-PSmmProjects`
+Retrieves all configured projects.
+
+**Module:** PSmm.Projects  
+**Stability:** Stable
+
+#### `Select-PSmmProject`
+Selects a project as the active context.
+
+**Module:** PSmm.Projects  
+**Stability:** Stable
+
+#### `Clear-PSmmProjectRegistry`
+Clears the project registry cache.
+
+**Module:** PSmm.Projects  
+**Stability:** Stable
+
+---
+
+### User Interface (PSmm.UI Module)
+
+#### `Invoke-PSmmUI`
+Launches the interactive console UI with menu system.
+
+**Module:** PSmm.UI  
+**Stability:** Stable
+
+#### `Invoke-MultiOptionPrompt`
+Displays multi-option prompt for user selection.
+
+**Module:** PSmm.UI  
+**Stability:** Stable
+
+---
+
 ## Internal Functions (Not Part of Public API)
 
 The following functions exist in the codebase but are **NOT** part of the public API. They are subject to change without notice and should not be used by external scripts:
 
-- `Get-KeePassCli` (moved to Private, internal bootstrap helper)
+- `Get-KeePassCli` (internal bootstrap helper)
 - `Get-SystemSecretMetadata` (internal helper for Get-SystemSecret)
 - `Invoke-HttpRestMethod` (internal HTTP service wrapper)
-- All functions in `Private/` folders
+- `Get-ApplicationVersion` (internal version resolution)
+- `Get-LocalPluginExecutablePath` (internal plugin path resolution)
+- `Invoke-SystemInfoMenu` (internal UI helper)
+- `Invoke-ProjectMenu` (internal UI helper)
+- All other functions in `Private/` folders
 
 ---
 
