@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Updates module manifest versions dynamically from Git.
 
@@ -55,16 +55,16 @@ if (-not (Test-Path -Path $versionHelperPath)) {
 $moduleVersion = Get-PSmmDynamicVersion -RepositoryRoot $PSScriptRoot
 $fullVersion = Get-PSmmFullVersion -RepositoryRoot $PSScriptRoot
 
-Write-Host "Current Version:" -ForegroundColor Cyan
-Write-Host "  Module Version (Major.Minor.Patch): $moduleVersion" -ForegroundColor Green
-Write-Host "  Full Version (SemVer): $fullVersion" -ForegroundColor Green
+Write-Output "Current Version:"
+Write-Output "  Module Version (Major.Minor.Patch): $moduleVersion"
+Write-Output "  Full Version (SemVer): $fullVersion"
 
 if ($ShowVersion) {
     return
 }
 
 if (-not $UpdateManifests) {
-    Write-Host "`nUse -UpdateManifests to update module manifest files." -ForegroundColor Yellow
+    Write-Output "`nUse -UpdateManifests to update module manifest files."
     return
 }
 
@@ -77,7 +77,7 @@ $manifestPaths = @(
     'src\Modules\PSmm.UI\PSmm.UI.psd1'
 )
 
-Write-Host "`nUpdating module manifests..." -ForegroundColor Cyan
+Write-Output "`nUpdating module manifests..."
 
 foreach ($relativePath in $manifestPaths) {
     $manifestPath = Join-Path -Path $PSScriptRoot -ChildPath $relativePath
@@ -99,7 +99,7 @@ foreach ($relativePath in $manifestPaths) {
             $newContent = $content -replace $pattern, $replacement
             Set-Content -Path $manifestPath -Value $newContent -NoNewline -Encoding UTF8
 
-            Write-Host "  ✓ Updated: $relativePath → $moduleVersion" -ForegroundColor Green
+            Write-Output "  ✓ Updated: $relativePath → $moduleVersion"
         }
         else {
             Write-Warning "  ✗ Could not find ModuleVersion in: $relativePath"
@@ -110,5 +110,5 @@ foreach ($relativePath in $manifestPaths) {
     }
 }
 
-Write-Host "`nAll manifests updated successfully!" -ForegroundColor Green
-Write-Host "Verify with: Test-ModuleManifest -Path <manifest-path>" -ForegroundColor Yellow
+Write-Output "`nAll manifests updated successfully!"
+Write-Output "Verify with: Test-ModuleManifest -Path <manifest-path>"

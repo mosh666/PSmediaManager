@@ -9,6 +9,10 @@ param(
     [switch]$PassThru
 )
 
+# CRITICAL: Set test mode environment variable IMMEDIATELY before anything else
+# This must be set before any modules are imported to ensure AppConfigurationBuilder detects test mode
+$env:MEDIA_MANAGER_TEST_MODE = '1'
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -165,7 +169,7 @@ Write-Host "DEBUG CoverageTarget: <$CoverageTarget>"
 $script:OriginalSkipReadKeyPreference = $env:MEDIA_MANAGER_SKIP_READKEY
 $script:SkipReadKeyPreconfigured = -not [string]::IsNullOrWhiteSpace($script:OriginalSkipReadKeyPreference)
 
-$env:MEDIA_MANAGER_TEST_MODE = '1'
+# Note: MEDIA_MANAGER_TEST_MODE is already set at the top of this script
 if (-not $script:SkipReadKeyPreconfigured) {
     # Default to skipping interactive ReadKey prompts inside modules under test.
     $env:MEDIA_MANAGER_SKIP_READKEY = '1'
@@ -198,6 +202,13 @@ if ($WithPSScriptAnalyzer) {
 if (-not (Get-Module -Name Pester -ListAvailable)) {
     throw 'Pester module is not available. Install it via Install-Module Pester -Scope CurrentUser'
 }
+
+# CRITICAL: Remove any previously loaded modules to ensure test mode is detected correctly
+# PowerShell classes are compiled at module load time; with MEDIA_MANAGER_TEST_MODE now set,
+# modules must be reloaded so AppConfigurationBuilder compiles with the correct test mode detection
+Write-Verbose "Clearing module cache to ensure test mode is detected..."
+Get-Module -Name 'PSmm*' -ErrorAction SilentlyContinue | Remove-Module -Force -ErrorAction SilentlyContinue
+Write-Verbose "Module cache cleared"
 
 $null = Import-Module Pester -MinimumVersion 5.5 -ErrorAction Stop
 

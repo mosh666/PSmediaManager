@@ -89,21 +89,24 @@ class AppConfigurationBuilder {
 
             # Detect test mode via multiple signals to ensure robustness
             $isTestMode = $false
+            $testModeReason = ""
 
-            # Check explicit environment variable
+            # Signal 1: Check explicit environment variable (most reliable)
             if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
+                $testModeReason = "MEDIA_MANAGER_TEST_MODE=1"
                 $isTestMode = $true
             }
 
-            # Check if called from Pester by examining call stack
+            # Signal 2: Check if called from Pester by examining call stack
             if (-not $isTestMode) {
                 try {
                     $callStack = Get-PSCallStack
                     $isPesterContext = $callStack | Where-Object {
-                        $_.Command -match 'Invoke-Pester|Should|It|Describe|Context|BeforeAll|AfterAll' -or
-                        $_.ScriptName -match '\.Tests\.ps1$'
+                        $_.Command -match 'Invoke-Pester|Should|It|Describe|Context|BeforeAll|AfterAll|Invoke-ScriptBlock' -or
+                        $_.ScriptName -match '\.Tests\.ps1$|Invoke-Pester\.ps1$'
                     }
                     if ($isPesterContext) {
+                        $testModeReason = "Pester in call stack"
                         $isTestMode = $true
                     }
                 } catch {
@@ -112,13 +115,20 @@ class AppConfigurationBuilder {
                 }
             }
 
-            # Check for Pester module or preference variable
+            # Signal 3: Check for Pester module or preference variable
             if (-not $isTestMode) {
                 $pesterLoaded = Get-Module -Name Pester -ErrorAction SilentlyContinue
                 $pesterPref = Get-Variable -Name 'PesterPreference' -Scope Global -ErrorAction SilentlyContinue
                 if ($pesterLoaded -or $pesterPref) {
+                    $testModeReason = "Pester module loaded or PesterPreference exists"
                     $isTestMode = $true
                 }
+            }
+
+            if ($isTestMode) {
+                Write-Verbose "[AppConfigurationBuilder] Test mode DETECTED ($testModeReason)"
+            } else {
+                Write-Verbose "[AppConfigurationBuilder] Production mode (no test signals detected)"
             }
 
             $runtimeRoot = if ($isTestMode) {
@@ -130,7 +140,9 @@ class AppConfigurationBuilder {
                 if ([string]::IsNullOrWhiteSpace($tempPath)) {
                     $tempPath = [System.IO.Path]::GetTempPath()
                 }
-                [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
+                $testRoot = [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
+                Write-Verbose "[AppConfigurationBuilder] Using test runtime root: $testRoot"
+                $testRoot
             } else {
                 # Production mode: Use drive root where PSmediaManager repository is located
                 # e.g., if repo is at D:\PSmediaManager, folders go to D:\PSmm.Log, D:\PSmm.Plugins, etc.
@@ -146,8 +158,11 @@ class AppConfigurationBuilder {
                     if ([string]::IsNullOrWhiteSpace($tempPath)) {
                         $tempPath = [System.IO.Path]::GetTempPath()
                     }
-                    [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Runtime')
+                    $fallbackRoot = [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Runtime')
+                    Write-Verbose "[AppConfigurationBuilder] Using fallback runtime root: $fallbackRoot"
+                    $fallbackRoot
                 } else {
+                    Write-Verbose "[AppConfigurationBuilder] Using production runtime root: $driveRoot"
                     $driveRoot
                 }
             }
