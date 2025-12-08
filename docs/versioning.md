@@ -105,7 +105,11 @@ Run the build script automatically in CI to keep manifests in sync during pipeli
 Use the provided hook to auto-update manifests before every commit:
 
 ```bash
+pwsh -NoProfile -File ./tools/Enable-GitHooks.ps1
+# or set manually
 git config core.hooksPath .githooks
+# or set during clone
+git clone --config core.hooksPath=.githooks https://github.com/mosh666/PSmediaManager.git
 ```
 
 Hook location: `.githooks/pre-commit.ps1`

@@ -120,6 +120,7 @@ First tagged release of PSmediaManager with complete dynamic versioning system.
 
 ### Added (Unreleased)
 
+- **Tooling**: Added `tools/Enable-GitHooks.ps1` helper to opt into the repo hooks (`.githooks/pre-commit.ps1`) that auto-sync module manifests; documented usage in README, development guide, and versioning docs.
 - **Documentation**: Added comprehensive container deployment guide (`docs/deployment.md`) covering Docker, Compose, Kubernetes hardening, security scanning, and CI/CD integration
 - **Testing**: Added `GlobalFilesystemGuards.ps1` helper to prevent accidental writes to system paths during tests
 - **Testing**: Added `Resolve-ToolCommandPath.ps1` private helper for tool command resolution with caching
