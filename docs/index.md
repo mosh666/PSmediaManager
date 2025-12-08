@@ -2,9 +2,10 @@
 
 ## Recent Updates
 
-- Re-enabled storage wizard logging tests (no USB/excluded drives) and confirmed warnings instead of skipped cases
-- Logging test suite now preloads PSmm types and injects filesystem dependencies for rotation tests; coverage baseline raised to 71.02% with refreshed artifacts
-- README and changelog updated to capture the coverage uplift and test stabilization
+- **v0.1.0 Released** (2025-12-08): First tagged release with complete dynamic versioning system
+- All modules now derive versions automatically from Git tags via GitVersion
+- CI automation and pre-commit hooks ensure version synchronization
+- Coverage baseline at 71.02% with comprehensive test suite (414 tests passing)
 
 Welcome to the PSmediaManager documentation portal. This site expands on the high-level README by providing deep dives into architecture, configuration, development workflow, and module responsibilities.
 

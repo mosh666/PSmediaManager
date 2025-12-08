@@ -18,8 +18,9 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 [![CI](https://github.com/mosh666/PSmediaManager/actions/workflows/ci.yml/badge.svg)](https://github.com/mosh666/PSmediaManager/actions/workflows/ci.yml)
 [![Coverage Artifacts](https://img.shields.io/badge/coverage-uploaded--via--Pester-blue)](https://github.com/mosh666/PSmediaManager/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/mosh666/PSmediaManager)](https://github.com/mosh666/PSmediaManager/releases)
 
-> **Status**: Unreleased (v0.1.0 will be the first tagged release). APIs and structure may evolve.
+> **Status**: Initial release v0.1.0 available. APIs and structure may evolve.
 >
 > **Versioning**: All modules derive their version dynamically from Git tags using GitVersion. See [docs/versioning.md](docs/versioning.md) for details.
 

@@ -19,9 +19,19 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 <!-- markdownlint-disable MD024 -->
 ## [Unreleased] - Development on `dev` branch
 
-These changes will be included in the first release (v0.1.0).
+### Added
 
-### Added (Unreleased)
+- TBD
+
+### Fixed
+
+- TBD
+
+## [0.1.0] - 2025-12-08
+
+First tagged release of PSmediaManager with complete dynamic versioning system.
+
+### Added
 
 - **Versioning**: Implemented complete dynamic versioning system using GitVersion
   - Created `GitVersion.yml` configuration for semantic versioning
@@ -31,7 +41,7 @@ These changes will be included in the first release (v0.1.0).
   - All modules now share synchronized version from Git tags
 - **Automation**: Added CI step to run `Update-ModuleVersions.ps1 -UpdateManifests` and documented an opt-in pre-commit hook (`.githooks/pre-commit.ps1`; enable with `git config core.hooksPath .githooks`) to keep manifests in sync locally.
 
-### Fixed (Unreleased)
+### Fixed
 - **Projects**: Fixed `[AppConfiguration]` type resolution errors in `PSmm.Projects` module functions by changing parameter types from `[AppConfiguration]` to `[object]` and adding runtime type validation in `Select-PSmmProject`, `New-PSmmProject`, and `Clear-PSmmProjectRegistry` - this prevents type lookup failures when modules are loaded before types are available in the session scope
 - **Projects**: Fixed `PathProvider.CombinePath` method call signature in `Select-PSmmProject` to use array syntax `@($path, $subfolder)` instead of separate arguments, resolving "Cannot find an overload for 'CombinePath' and the argument count: 2" errors when selecting projects
 - **Projects**: Fixed missing `Get-FromKeyOrProperty` helper function in `Get-PSmmProjects.ps1` that caused projects to disappear from main menu after performing any action - function now safely extracts values from both hashtables and PSObjects during cache retrieval
