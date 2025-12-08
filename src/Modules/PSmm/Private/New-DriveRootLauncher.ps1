@@ -1,4 +1,4 @@
-﻿function New-DriveRootLauncher {
+function New-DriveRootLauncher {
     <#
     .SYNOPSIS
         Creates a CMD launcher in the drive root to start PSmediaManager.
@@ -34,7 +34,15 @@
     param(
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [string]$RepositoryRoot
+        [string]$RepositoryRoot,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNull()]
+        $PathProvider
     )
 
     try {
@@ -47,16 +55,16 @@
         }
 
         # Define launcher file path
-        $launcherPath = Join-Path -Path $driveRoot -ChildPath 'Start-PSmediaManager.lnk'
-        $repoLauncher = Join-Path -Path $RepositoryRoot -ChildPath 'Start-PSmediaManager.ps1'
+        $launcherPath = $PathProvider.CombinePath(@($driveRoot, 'Start-PSmediaManager.lnk'))
+        $repoLauncher = $PathProvider.CombinePath(@($RepositoryRoot, 'Start-PSmediaManager.ps1'))
 
         # Check if launcher already exists
-        if (Test-Path -Path $launcherPath -PathType Leaf) {
+        if ($FileSystem.TestPath($launcherPath)) {
             Write-Verbose "Launcher already exists: $launcherPath"
             return
         }
 
-        if (-not (Test-Path -LiteralPath $repoLauncher -PathType Leaf)) {
+        if (-not $FileSystem.TestPath($repoLauncher)) {
             Write-Warning "Repository launcher not found at: $repoLauncher"
             return
         }
@@ -64,13 +72,13 @@
         Write-Verbose "Creating drive root launcher: $launcherPath"
 
         # Remove legacy launchers created by previous versions
-        $legacyCmd = Join-Path -Path $driveRoot -ChildPath 'Start-PSmediaManager.cmd'
-        $legacyPs1 = Join-Path -Path $driveRoot -ChildPath 'Start-PSmediaManager.ps1'
+        $legacyCmd = $PathProvider.CombinePath(@($driveRoot, 'Start-PSmediaManager.cmd'))
+        $legacyPs1 = $PathProvider.CombinePath(@($driveRoot, 'Start-PSmediaManager.ps1'))
         foreach ($legacy in @($legacyCmd, $legacyPs1)) {
-            if (Test-Path -LiteralPath $legacy -PathType Leaf) {
+            if ($FileSystem.TestPath($legacy)) {
                 try {
                     if ($PSCmdlet.ShouldProcess($legacy, 'Remove legacy launcher')) {
-                        Remove-Item -LiteralPath $legacy -Force -ErrorAction Stop
+                        $FileSystem.RemoveItem($legacy, $false)
                         Write-Verbose "Removed legacy launcher: $legacy"
                     }
                     else {

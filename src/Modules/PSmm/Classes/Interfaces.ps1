@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Interface definitions for PSmediaManager application.
 
@@ -61,7 +61,7 @@ class IFileSystemService {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 
-    [object[]] GetChildItem([string]$path, [string]$filter, [string]$itemType) {
+    [object[]] GetChildItem([string]$path, [string]$filter, [string]$itemType, [bool]$recurse = $false) {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 
@@ -100,11 +100,19 @@ class IEnvironmentService {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 
-    [void] AddPathEntry([string]$path) {
+    [void] AddPathEntry([string]$path, [bool]$persistUser = $false) {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 
-    [void] RemovePathEntry([string]$path) {
+    [void] RemovePathEntry([string]$path, [bool]$persistUser = $false) {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+
+    [void] AddPathEntries([string[]]$paths, [bool]$persistUser = $false) {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+
+    [void] RemovePathEntries([string[]]$paths, [bool]$persistUser = $false) {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 

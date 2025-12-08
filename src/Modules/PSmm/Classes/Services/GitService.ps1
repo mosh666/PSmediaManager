@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Implementation of IGitService interface.
 

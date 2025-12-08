@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Exports a sanitized (safe) snapshot of the current AppConfiguration to a PSD1 file.
 
@@ -201,7 +201,7 @@ function Export-SafeConfiguration {
                     return $arrCopy
                 }
 
-                if ($Value -isnot [string] -and ($Value | Get-Member -MemberType Properties -ErrorAction SilentlyContinue)) {
+                if ($Value -isnot [string] -and $Value -isnot [System.Collections.IEnumerable] -and ($Value | Get-Member -MemberType Properties -ErrorAction SilentlyContinue)) {
                     $propCopy = @{}
                     $props = $Value | Get-Member -MemberType Properties | Select-Object -ExpandProperty Name
                     foreach ($p in $props) {
@@ -264,22 +264,27 @@ function Export-SafeConfiguration {
                     return $null
                 }
 
-                try {
-                    if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
-                }
-                catch {
-                    Write-Verbose "[SafeExport] _GetMemberValue ContainsKey lookup failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    return $InputObject[$Name]
-                }
-                catch {
-                    Write-Verbose "[SafeExport] _GetMemberValue indexer lookup failed: $($_.Exception.Message)"
-                }
-
+                # Prefer property access for typed objects/PSCustomObjects
                 $propInfo = $InputObject.PSObject.Properties[$Name]
                 if ($propInfo) { return $propInfo.Value }
+
+                # Only attempt ContainsKey/indexer access if methods exist on the object
+                $hasContainsKey = ($InputObject.PSObject.Methods.Match('ContainsKey').Count -gt 0)
+                $hasIndexer = ($InputObject.PSObject.Methods.Match('get_Item').Count -gt 0)
+                if ($hasContainsKey -and $hasIndexer) {
+                    try {
+                        if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
+                    }
+                    catch {
+                        Write-Verbose "[SafeExport] _GetMemberValue ContainsKey lookup failed: $($_.Exception.Message)"
+                    }
+                    try {
+                        return $InputObject[$Name]
+                    }
+                    catch {
+                        Write-Verbose "[SafeExport] _GetMemberValue indexer lookup failed: $($_.Exception.Message)"
+                    }
+                }
 
                 return $null
             }
@@ -944,6 +949,13 @@ function Export-SafeConfiguration {
                 return $res
             }
 
+            # Enumerable (arrays etc.) but not string
+            if ($Data -is [System.Collections.IEnumerable] -and $Data -isnot [string]) {
+                $arr = @()
+                foreach ($i in $Data) { $arr += _Sanitize -Data $i -Visited $Visited -Level ($Level + 1) -MaxDepth $MaxDepth }
+                return $arr
+            }
+
             # PSCustomObject or other object with properties
             if ($Data -isnot [string] -and ($Data | Get-Member -MemberType Properties -ErrorAction SilentlyContinue)) {
                 $res = @{}
@@ -958,13 +970,6 @@ function Export-SafeConfiguration {
                     }
                 }
                 return $res
-            }
-
-            # Enumerable (arrays etc.) but not string
-            if ($Data -is [System.Collections.IEnumerable] -and $Data -isnot [string]) {
-                $arr = @()
-                foreach ($i in $Data) { $arr += _Sanitize -Data $i -Visited $Visited -Level ($Level + 1) -MaxDepth $MaxDepth }
-                return $arr
             }
 
             # String masking
@@ -1273,36 +1278,36 @@ function Export-SafeConfiguration {
         $content = _ToPsd1 -Data $stringified
         if (-not $content) { throw 'Export produced empty content.' }
 
-        # Ensure directory exists
+        # Ensure directory exists (use FileSystem service or fallback to native cmdlets)
         $parent = Split-Path -Parent $Path
-        if (-not [string]::IsNullOrWhiteSpace($parent) -and -not (Test-Path $parent)) {
-            Write-Verbose "[SafeExport] Creating parent directory: $parent"
-            $null = New-Item -Path $parent -ItemType Directory -Force -ErrorAction Stop
+        if (-not [string]::IsNullOrWhiteSpace($parent)) {
+            if ($null -ne $FileSystem -and ($FileSystem.PSObject.Methods.Match('TestPath').Count -gt 0) -and ($FileSystem.PSObject.Methods.Match('NewItem').Count -gt 0)) {
+                if (-not $FileSystem.TestPath($parent)) { $null = $FileSystem.NewItem($parent, 'Directory') }
+            }
+            else {
+                # Fallback to native PowerShell cmdlets
+                if (-not (Test-Path -Path $parent)) {
+                    $null = New-Item -Path $parent -ItemType Directory -Force -ErrorAction Stop
+                }
+            }
         }
 
-        $wrote = $false
-        # Write using provided file system service when available; otherwise fallback
+        # Write using file system service or fallback to native Set-Content
         if ($null -ne $FileSystem -and ($FileSystem.PSObject.Methods.Match('SetContent').Count -gt 0)) {
             try {
                 $FileSystem.SetContent($Path, $content)
-                $wrote = $true
             }
             catch {
-                Write-Verbose "[SafeExport] FileSystem.SetContent failed, falling back: $_"
+                throw "[SafeExport] FileSystem.SetContent failed: $_"
             }
         }
-
-        if (-not $wrote) {
+        else {
+            # Fallback to native PowerShell Set-Content
             try {
-                Set-Content -Path $Path -Value $content -Force -Encoding UTF8 -ErrorAction Stop
+                Set-Content -Path $Path -Value $content -Encoding UTF8 -Force -ErrorAction Stop
             }
             catch {
-                try {
-                    [System.IO.File]::WriteAllText($Path, $content, [System.Text.Encoding]::UTF8)
-                }
-                catch {
-                    throw "Failed to export safe configuration: $_"
-                }
+                throw "[SafeExport] Set-Content failed: $_"
             }
         }
 

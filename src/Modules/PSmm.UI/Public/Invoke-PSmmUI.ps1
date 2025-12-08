@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Displays and manages the main interactive menu for PSmediaManager.
 
@@ -20,8 +20,12 @@
 .NOTES
     This function runs in an interactive loop until the user chooses to quit (Q).
     Requires all Show-* menu functions to be available.
-#>
 
+    Uses Write-Host for UI rendering because:
+    - UI output must go directly to console, not pipeline (prevents blank line artifacts)
+    - Interactive menu operations require direct host communication
+    - PSAvoidUsingWriteHost is intentionally used for this purpose
+#>
 
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
@@ -31,10 +35,48 @@ function Invoke-PSmmUI {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [object]$Config
+        [object]$Config,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider
     )
 
     # PS 7.5.4+ baseline and entrypoint import order guarantee core types are available
+    # Defensive: ensure AppConfiguration class is loaded (runtime resilience against import order issues)
+    try {
+        $appConfigTypeLoaded = [System.AppDomain]::CurrentDomain.GetAssemblies().GetTypes() | Where-Object { $_.Name -eq 'AppConfiguration' } | Select-Object -First 1
+    }
+    catch {
+        $appConfigTypeLoaded = $null
+    }
+    if (-not $appConfigTypeLoaded) {
+        try {
+            $uiPublicDir = $PSScriptRoot
+            $uiModuleRoot = Split-Path -Path $uiPublicDir -Parent  # PSmm.UI module root
+            $modulesRoot  = Split-Path -Path $uiModuleRoot -Parent # Modules root containing PSmm
+            $classesPath  = Join-Path -Path $modulesRoot -ChildPath 'PSmm\Classes\AppConfiguration.ps1'
+            if (Test-Path -Path $classesPath -PathType Leaf) {
+                . $classesPath
+                if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
+                    Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message 'AppConfiguration class dynamically loaded (fallback)' -File
+                }
+            }
+        }
+        catch {
+            if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
+                Write-PSmmLog -Level WARNING -Context 'Invoke-PSmmUI' -Message "Failed dynamic AppConfiguration load: $_" -File -Console
+            }
+        }
+    }
 
     try {
         Write-Verbose 'Starting PSmediaManager UI...'
@@ -51,7 +93,7 @@ function Invoke-PSmmUI {
         }
         catch {
             Write-PSmmLog -Level WARNING -Context 'Invoke-PSmmUI' `
-                -Message "Storage validation encountered issues: $_" -Console -File
+                -Message 'Storage validation encountered issues' -Console -File
         }
 
         # Track selected storage group (default to Storage Group 1)
@@ -86,7 +128,7 @@ function Invoke-PSmmUI {
             $loopProjects = $null
             try {
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $($Config.Storage.Keys.Count)" -File
-                $loopProjects = Get-PSmmProjects -Config $Config
+                $loopProjects = Get-PSmmProjects -Config $Config -FileSystem $FileSystem
                 $masterCount = if ($loopProjects.Master) { $loopProjects.Master.Keys.Count } else { 0 }
                 $backupCount = if ($loopProjects.Backup) { $loopProjects.Backup.Keys.Count } else { 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Projects loaded. Master drives: $masterCount, Backup drives: $backupCount" -File
@@ -122,7 +164,7 @@ function Invoke-PSmmUI {
             }
             if ($Config.Parameters.Debug -or $Config.Parameters.Dev) { '1234567890' * 10 } # Visual separator for debugging
 
-            Write-Output ''
+            Write-PSmmHost ''
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message 'Awaiting user selection' -File
             }
@@ -148,7 +190,7 @@ function Invoke-PSmmUI {
                 }
                 'S' {
                     # Storage Group selector
-                    Write-Output ''
+                    Write-PSmmHost ''
                     Write-PSmmHost 'Available Storage Groups:' -ForegroundColor Cyan
 
                     # Display each storage group with Master drive info
@@ -167,7 +209,7 @@ function Invoke-PSmmUI {
                     }
 
                     Write-PSmmHost '  [A] Show All' -ForegroundColor Cyan
-                    Write-Output ''
+                    Write-PSmmHost ''
                     $GroupSelection = Read-Host 'Select Storage Group'
 
                     if ($GroupSelection -eq 'A' -or [string]::IsNullOrWhiteSpace($GroupSelection)) {
@@ -202,7 +244,7 @@ function Invoke-PSmmUI {
                     # Launch KeePassXC
                     try {
                         Write-Verbose 'Launching KeePassXC...'
-                        Start-Process KeePassXC.exe -ErrorAction Stop
+                        $Process.StartProcess('KeePassXC.exe', @())
                     }
                     catch {
                         Write-Warning "Failed to start KeePassXC: $_"
@@ -349,7 +391,7 @@ function Invoke-PSmmUI {
 
                             if ($SelectedProject) {
                                 # Select the project, passing the SerialNumber to ensure correct disk selection
-                                Select-PSmmProject -Config $Config -pName $SelectedProject.Name -SerialNumber $SelectedProject.SerialNumber
+                                Select-PSmmProject -Config $Config -pName $SelectedProject.Name -SerialNumber $SelectedProject.SerialNumber -FileSystem $FileSystem -PathProvider $PathProvider
 
                                 # Display the project menu
                                 $projectMenuResult = Invoke-ProjectMenu -Config $Config
@@ -412,23 +454,26 @@ function Invoke-SystemInfoMenu {
         Show-Header -Config $Config -ShowStorageErrors $false
         Show-Menu_SysInfo -Config $Config
 
-        Write-Output ''
+        Write-PSmmHost ''
         $SubSelection = Read-Host 'Please make a selection'
 
         switch ($SubSelection) {
             '1' {
                 # Show Storage
-                Write-Output ''
+                Write-PSmmHost ''
                 Show-StorageInfo -Config $Config -ShowDetails
                 Pause
             }
             '2' {
                 # Show Runtime Config
-                Write-Output ''
+                Write-PSmmHost ''
                 try {
-                    $tempPath = Join-Path $env:TEMP "PSmm-RuntimeConfig-$(Get-Date -Format 'yyyyMMdd-HHmmss').psd1"
-                    Export-SafeConfiguration -Configuration $Config -Path $tempPath
-                    Get-Content $tempPath | Write-Output
+                    # Use injected services for path/content operations
+                    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+                    $tempPath = $PathProvider.CombinePath(@($env:TEMP, "PSmm-RuntimeConfig-$timestamp.psd1"))
+                    Export-SafeConfiguration -Configuration $Config -Path $tempPath -FileSystem $FileSystem
+                    $configContent = $FileSystem.GetContent($tempPath)
+                    $configContent | Write-Output
                     Write-Output ""
                     Write-Output "Configuration exported to: $tempPath"
                 }
@@ -486,7 +531,7 @@ function Invoke-ProjectMenu {
         }
 
         try {
-            Show-Menu_Project -Config $Config
+            Show-Menu_Project -Config $Config -Process $Process
         }
         catch {
             Write-Warning "Project menu display failed: $_"
@@ -495,7 +540,7 @@ function Invoke-ProjectMenu {
             Pause
         }
 
-        Write-Output ''
+        Write-PSmmHost ''
         $SubSelection = Read-Host 'Please make a selection'
 
         # Check for running processes to control menu actions
@@ -504,13 +549,17 @@ function Invoke-ProjectMenu {
 
         if ($null -ne $Config.Projects -and $Config.Projects.ContainsKey('Current')) {
             if ($Config.Projects.Current.ContainsKey('Databases')) {
-                $ProcMariaDB = Get-Process -Name mariadbd -ErrorAction SilentlyContinue |
-                    Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+                $allMariaDB = $Process.GetProcess('mariadbd')
+                if ($null -ne $allMariaDB) {
+                    $ProcMariaDB = $allMariaDB | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+                }
             }
 
             if ($Config.Projects.Current.ContainsKey('Config')) {
-                $ProcDigiKam = Get-Process -Name digikam -ErrorAction SilentlyContinue |
-                    Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+                $allDigiKam = $Process.GetProcess('digikam')
+                if ($null -ne $allDigiKam) {
+                    $ProcDigiKam = $allDigiKam | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+                }
             }
         }
 
@@ -521,10 +570,10 @@ function Invoke-ProjectMenu {
                 # Start digiKam
                 try {
                     if (Get-Command -Name Start-PSmmdigiKam -ErrorAction SilentlyContinue) {
-                        Start-PSmmdigiKam -Config $Config
+                        Start-PSmmdigiKam -Config $Config -FileSystem $FileSystem -PathProvider $PathProvider -Process $Process
                     }
                     else {
-                        Write-Output ''
+                        Write-PSmmHost ''
                         Write-Warning 'Start digiKam function is not yet implemented'
                     }
                     Pause
@@ -540,10 +589,10 @@ function Invoke-ProjectMenu {
                 if ($ProcessesRunning) {
                     try {
                         if (Get-Command -Name Stop-PSmmdigiKam -ErrorAction SilentlyContinue) {
-                            Stop-PSmmdigiKam -Config $Config
+                            Stop-PSmmdigiKam -Config $Config -FileSystem $FileSystem -PathProvider $PathProvider -Process $Process
                         }
                         else {
-                            Write-Output ''
+                            Write-PSmmHost ''
                             Write-Warning 'Stop digiKam function is not yet implemented'
                         }
                         Pause
@@ -575,34 +624,4 @@ function Invoke-ProjectMenu {
 
     # Return to main menu (user pressed R)
     return 'RETURN'
-}
-
-<#
-.SYNOPSIS
-    Displays an invalid selection message to the user.
-
-.DESCRIPTION
-    Helper function to show a standardized error message when user
-    enters an invalid menu selection.
-#>
-function Show-InvalidSelection {
-    [CmdletBinding()]
-    param(
-        [Parameter()]
-        [switch]$Wait
-    )
-
-    Write-PSmmHost ''
-    $InvalidColumns = @(
-        @{
-            Text = 'Invalid selection, please try again.'
-            Width = 80
-            Alignment = 'c'
-        }
-    )
-    # Use no decorative border; 'None' previously produced a literal 'N' border due to non-empty string.
-    # Pass empty string to suppress border characters entirely.
-    Format-UI -Columns $InvalidColumns -Width 80 -Border ''
-    Write-PSmmHost ''
-    if ($Wait) { Pause } else { Start-Sleep -Milliseconds 500 }
 }

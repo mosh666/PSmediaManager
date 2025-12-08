@@ -48,6 +48,7 @@ function Test-DuplicateSerial {
 
         [Parameter(Mandatory)]
         [ValidateNotNull()]
+        [AllowEmptyString()]
         [string[]]$Serials,
 
         [Parameter()]

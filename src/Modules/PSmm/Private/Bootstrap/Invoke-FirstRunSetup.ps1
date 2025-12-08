@@ -43,43 +43,60 @@ function Invoke-FirstRunSetup {
         [AppConfiguration]$Config,
 
         [Parameter()]
-        [switch]$NonInteractive
+        [switch]$NonInteractive,
+
+        [Parameter(Mandatory)]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        $Process
     )
 
     try {
                 # Extract paths from config
         $VaultPath = $Config.Paths.App.Vault
-        $dbPath = Join-Path $VaultPath 'PSmm_System.kdbx'
-        $tokenCachePath = Join-Path $VaultPath '.pending_setup.cache'
+        $dbPath = $PathProvider.CombinePath(@($VaultPath,'PSmm_System.kdbx'))
+        $tokenCachePath = $PathProvider.CombinePath(@($VaultPath,'.pending_setup.cache'))
 
         # Check if vault already exists
-        if (Test-Path $dbPath) {
+        if ($FileSystem.TestPath($dbPath)) {
             Write-Verbose "Vault already exists at: $dbPath"
             # Clean up any pending cache
-            if (Test-Path $tokenCachePath) {
-                Remove-Item $tokenCachePath -Force -ErrorAction SilentlyContinue
+            if ($FileSystem.TestPath($tokenCachePath)) {
+                $FileSystem.RemoveItem($tokenCachePath, $false)
             }
             return $true
         }
 
         # Check for cached token from previous setup attempt FIRST
-        $token = $null
+        $githubTokenSec = $null
         $hasToken = $false
 
-        if (Test-Path $tokenCachePath) {
+        if ($FileSystem.TestPath($tokenCachePath)) {
             Write-PSmmHost ""
             Write-PSmmHost "Found cached setup data from previous attempt..." -ForegroundColor Cyan
             try {
-                $cacheData = Get-Content -Path $tokenCachePath -Raw | ConvertFrom-Json
+                $cacheRaw = $FileSystem.GetContent($tokenCachePath)
+                $cacheData = $cacheRaw | ConvertFrom-Json
                 $encryptedToken = $cacheData.Token
-                $token = $encryptedToken | ConvertTo-SecureString
+                $githubTokenSec = $encryptedToken | ConvertTo-SecureString
 
                 # Verify the token
-                $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
-                $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-                [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-
-                $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
+                $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($githubTokenSec)
+                try {
+                    $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+                    $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
+                }
+                finally {
+                    if ($bstr -ne [IntPtr]::Zero) { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+                    Set-Variable -Name plainToken -Value $null -Scope Local -Force
+                }
 
                 if ($hasToken) {
                     Write-PSmmHost "✓ Cached token loaded successfully" -ForegroundColor Green
@@ -161,18 +178,18 @@ function Invoke-FirstRunSetup {
 
             Write-PSmmHost ""
             Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-            Write-PSmmHost "Step 1: GitHub Personal Access Token" -ForegroundColor Cyan
+            Write-PSmmHost "Step 1: Configure GitHub access" -ForegroundColor Cyan
             Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
             Write-PSmmHost ""
 
         # Only prompt for token if we don't already have one cached
         if (-not $hasToken) {
-            Write-PSmmHost "The GitHub token is used for:" -ForegroundColor Yellow
+            Write-PSmmHost "A GitHub access credential is used for:" -ForegroundColor Yellow
             Write-PSmmHost "  • Downloading plugins and updates from GitHub releases" -ForegroundColor Gray
             Write-PSmmHost "  • Avoiding API rate limits" -ForegroundColor Gray
             Write-PSmmHost "  • Accessing private repositories (if configured)" -ForegroundColor Gray
             Write-PSmmHost ""
-            Write-PSmmHost "To create a token:" -ForegroundColor Cyan
+            Write-PSmmHost "To create a credential:" -ForegroundColor Cyan
             Write-PSmmHost "  1. Go to: https://github.com/settings/tokens" -ForegroundColor Gray
             Write-PSmmHost "  2. Click 'Generate new token (classic)'" -ForegroundColor Gray
             Write-PSmmHost "  3. Give it a name (e.g., 'PSmm')" -ForegroundColor Gray
@@ -182,15 +199,19 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost "Note: You can press Enter to skip and add it later." -ForegroundColor DarkYellow
             Write-PSmmHost ""
 
-            # Prompt for GitHub token
-            $token = Read-Host "Enter your GitHub Personal Access Token" -AsSecureString
+            # Prompt for GitHub credential (secure input)
+            $githubTokenSec = Read-Host "Enter a GitHub Personal Access credential" -AsSecureString
 
             # Check if token was provided
-            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
-            $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-
-            $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($githubTokenSec)
+            try {
+                $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+                $hasToken = -not [string]::IsNullOrWhiteSpace($plainToken)
+            }
+            finally {
+                if ($bstr -ne [IntPtr]::Zero) { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+                Set-Variable -Name plainToken -Value $null -Scope Local -Force
+            }
 
             if (-not $hasToken) {
                 Write-PSmmHost ""
@@ -201,6 +222,11 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost "✓ Using cached token from previous setup attempt" -ForegroundColor Green
         }
 
+        # Ensure $token variable is initialized for strict mode usage downstream.
+        # Use the secure string gathered (may be $null if user skipped); downstream logic
+        # always checks $hasToken before attempting to process or persist the token.
+        $token = $githubTokenSec
+
         # Check if KeePassXC is available
             Write-PSmmHost ""
             Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
@@ -208,7 +234,7 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
             Write-PSmmHost ""
 
-        $cliResolution = Resolve-KeePassCliCommand -VaultPath $Config.Paths.App.Vault
+        $cliResolution = Resolve-KeePassCliCommand -VaultPath $Config.Paths.App.Vault -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
         $cliCheck = if ($cliResolution -and $cliResolution.Command) { $cliResolution.Command } else { $null }
         if (-not $cliCheck) {
             Write-PSmmHost "❌ KeePassXC not found!" -ForegroundColor Red
@@ -219,8 +245,8 @@ function Invoke-FirstRunSetup {
                 Write-PSmmHost "Caching your token securely..." -ForegroundColor Cyan
                 try {
                     # Ensure vault directory exists
-                    if (-not (Test-Path $VaultPath)) {
-                        New-Item -ItemType Directory -Path $VaultPath -Force | Out-Null
+                    if (-not $FileSystem.TestPath($VaultPath)) {
+                        $FileSystem.NewItem($VaultPath,'Directory')
                     }
 
                     # Store encrypted token using DPAPI
@@ -229,7 +255,8 @@ function Invoke-FirstRunSetup {
                         Token = $encryptedToken
                         Timestamp = Get-Date -Format 'o'
                     }
-                    $cacheData | ConvertTo-Json | Set-Content -Path $tokenCachePath -Force
+                    $json = $cacheData | ConvertTo-Json
+                    $FileSystem.SetContent($tokenCachePath,$json)
                     Write-PSmmHost "✓ Token cached securely" -ForegroundColor Green
                 }
                 catch {
@@ -258,7 +285,7 @@ function Invoke-FirstRunSetup {
         Write-PSmmHost ""
 
         # Initialize the vault
-        $vaultCreated = Initialize-SystemVault -VaultPath $Config.Paths.App.Vault -ErrorAction Stop
+        $vaultCreated = Initialize-SystemVault -VaultPath $Config.Paths.App.Vault -FileSystem $FileSystem -ErrorAction Stop
 
         if (-not $vaultCreated) {
             Write-PSmmHost "❌ Failed to create vault" -ForegroundColor Red
@@ -290,8 +317,8 @@ function Invoke-FirstRunSetup {
                 Write-PSmmHost "✓ Token saved successfully" -ForegroundColor Green
 
                 # Clean up cached token
-                if (Test-Path $tokenCachePath) {
-                    Remove-Item $tokenCachePath -Force -ErrorAction SilentlyContinue
+                if ($FileSystem.TestPath($tokenCachePath)) {
+                    $FileSystem.RemoveItem($tokenCachePath, $false)
                 }
             }
             else {
@@ -315,9 +342,9 @@ function Invoke-FirstRunSetup {
 
         # Get drive root and check if storage config already exists
         $driveRoot = [System.IO.Path]::GetPathRoot($Config.Paths.App.Vault)
-        $storagePath = Join-Path -Path $driveRoot -ChildPath 'PSmm.Config\PSmm.Storage.psd1'
+        $storagePath = $PathProvider.CombinePath(@($driveRoot,'PSmm.Config','PSmm.Storage.psd1'))
 
-        if (-not (Test-Path -Path $storagePath)) {
+        if (-not $FileSystem.TestPath($storagePath)) {
             Write-PSmmHost "Starting storage wizard..." -ForegroundColor Cyan
             Write-PSmmHost ""
 

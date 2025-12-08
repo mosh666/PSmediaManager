@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Custom exception classes for PSmediaManager application.
 
@@ -198,6 +198,11 @@ class PluginRequirementException : MediaManagerException {
         $this.RecoverySuggestion = "Install $pluginName version $requiredVersion or higher."
     }
 
+        PluginRequirementException([string]$message, [string]$pluginName, [Exception]$innerException) : base($message, 'Plugin Requirement', $innerException) {
+            $this.PluginName = $pluginName
+            $this.RecoverySuggestion = "Check $pluginName is installed, accessible, and meets version requirements."
+        }
+
     PluginRequirementException([string]$message, [string]$pluginName, [version]$requiredVersion, [version]$foundVersion) : base($message, 'Plugin Requirement') {
         $this.PluginName = $pluginName
         $this.RequiredVersion = $requiredVersion
@@ -277,8 +282,9 @@ class LoggingException : MediaManagerException {
         $this.RecoverySuggestion = "Verify log path is writable: $logPath"
     }
 
-    LoggingException([string]$message, [Exception]$innerException) : base($message, 'Logging', $innerException) {
-        $this.RecoverySuggestion = 'Check logging configuration and file system permissions.'
+    LoggingException([string]$message, [string]$logPath, [Exception]$innerException) : base($message, 'Logging', $innerException) {
+        $this.LogPath = $logPath
+        $this.RecoverySuggestion = "Check logging configuration and file system permissions at: $logPath"
     }
 }
 

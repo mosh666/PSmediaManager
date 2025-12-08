@@ -1,11 +1,11 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 Describe 'Invoke-PSmmUI logging' {
 
     BeforeAll {
         $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
-        $script:testHelperPath = Join-Path -Path $script:repoRoot -ChildPath 'tests/Helpers/TestConfig.ps1'
+        $script:testHelperPath = Join-Path -Path $script:repoRoot -ChildPath 'tests/Support/TestConfig.ps1'
         $script:psmmManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm/PSmm.psd1'
         $script:projectsManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Projects/PSmm.Projects.psd1'
         $script:uiManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.UI/PSmm.UI.psd1'
@@ -29,7 +29,8 @@ Describe 'Invoke-PSmmUI logging' {
     BeforeEach {
         . $script:testHelperPath
         $script:recorder = New-TestAppLogsRecorder
-        Register-TestWritePSmmLogMock -Recorder $script:recorder -ModuleName 'PSmm.UI'
+            # Capture logs originating from both PSmm.UI and PSmm modules
+            Register-TestWritePSmmLogMock -Recorder $script:recorder -ModuleName @('PSmm.UI','PSmm')
 
         $script:config = New-TestAppConfiguration
 
@@ -38,22 +39,29 @@ Describe 'Invoke-PSmmUI logging' {
         Mock Show-InvalidSelection -ModuleName 'PSmm.UI' {}
         Mock Read-Host -ModuleName 'PSmm.UI' { 'Q' }
 
-        Mock Confirm-Storage -ModuleName 'PSmm' { throw 'Simulated storage validation failure' }
+        # Use global mock to ensure invocation from PSmm.UI module is intercepted
+            # Mock inside PSmm.UI module scope so Invoke-PSmmUI sees the failure and logs warning
+            Mock Confirm-Storage -ModuleName 'PSmm.UI' { throw 'Simulated storage validation failure' }
         Mock Get-PSmmProjects -ModuleName 'PSmm.Projects' {
             @{ Master = @{ 'MASTER-DRIVE' = @() }; Backup = @{} }
         }
         Mock Show-Header -ModuleName 'PSmm.UI' { param($Config,$ShowProject,$StorageGroupFilter) }
         Mock Show-MenuMain -ModuleName 'PSmm.UI' { param($Config,$StorageGroup,$Projects) }
         Mock Show-Footer -ModuleName 'PSmm.UI' { param($Config) }
+
+        # Mock services
+        $script:mockProcess = [PSCustomObject]@{ PSTypeName = 'ProcessService' }
+        $script:mockFS = [PSCustomObject]@{ PSTypeName = 'FileSystemService' }
+        $script:mockPath = [PSCustomObject]@{ PSTypeName = 'PathProvider' }
     }
 
     It 'records a warning when storage validation fails' {
-        { Invoke-PSmmUI -Config $script:config } | Should -Not -Throw
+        { Invoke-PSmmUI -Config $script:config -Process $script:mockProcess -FileSystem $script:mockFS -PathProvider $script:mockPath } | Should -Not -Throw
         $script:recorder.'Assert-Warning'('Storage validation encountered issues')
     }
 
     It 'records the UI startup notice' {
-        { Invoke-PSmmUI -Config $script:config } | Should -Not -Throw
+        { Invoke-PSmmUI -Config $script:config -Process $script:mockProcess -FileSystem $script:mockFS -PathProvider $script:mockPath } | Should -Not -Throw
         $script:recorder.'Assert-LogLevel'('NOTICE', 'UI interactive session starting')
     }
 }

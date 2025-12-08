@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     PSmm requirements
 #>
@@ -25,6 +25,7 @@ Set-StrictMode -Version Latest
                 CommandPath = ''
                 Command = '7z.exe'
                 Name = '7z'
+                RegisterToPath = $false
             }
         }
         b_GitEnv = @{
@@ -35,6 +36,7 @@ Set-StrictMode -Version Latest
                 CommandPath = 'cmd'
                 Command = 'git.exe'
                 Name = 'PortableGit'
+                RegisterToPath = $true
             }
             GitVersion = @{
                 Source = 'GitHub'
@@ -43,6 +45,7 @@ Set-StrictMode -Version Latest
                 CommandPath = ''
                 Command = 'gitversion.exe'
                 Name = 'gitversion'
+                RegisterToPath = $true
             }
             GitLFS = @{
                 Source = 'GitHub'
@@ -51,6 +54,7 @@ Set-StrictMode -Version Latest
                 CommandPath = ''
                 Command = 'git-lfs.exe'
                 Name = 'git-lfs'
+                RegisterToPath = $true
             }
         }
         c_Misc = @{
@@ -61,6 +65,7 @@ Set-StrictMode -Version Latest
                 CommandPath = ''
                 Command = 'exiftool.exe'
                 Name = 'exiftool'
+                RegisterToPath = $false
             }
             FFmpeg = @{
                 Source = 'Url'
@@ -69,6 +74,7 @@ Set-StrictMode -Version Latest
                 CommandPath = 'bin'
                 Command = 'ffmpeg.exe'
                 Name = 'ffmpeg'
+                RegisterToPath = $false
             }
             ImageMagick = @{
                 Source = 'Url'
@@ -78,6 +84,7 @@ Set-StrictMode -Version Latest
                 Command = 'magick.exe'
                 Name = 'ImageMagick'
                 AssetPattern = 'ImageMagick-(?<ver>\d+(?:\.\d+){2}-\d+)-portable-Q16-HDRI-x64\.7z'
+                RegisterToPath = $false
             }
             KeePassXC = @{
                 Source = 'GitHub'
@@ -86,6 +93,7 @@ Set-StrictMode -Version Latest
                 CommandPath = ''
                 Command = 'keepassxc-cli.exe'
                 Name = 'KeePassXC'
+                RegisterToPath = $true
             }
             MKVToolNix = @{
                 Source = 'Url'
@@ -94,6 +102,7 @@ Set-StrictMode -Version Latest
                 CommandPath = ''
                 Command = 'mkvmerge.exe'
                 Name = 'mkvtoolnix'
+                RegisterToPath = $false
             }
         }
         d_Database = @{
@@ -101,11 +110,10 @@ Set-StrictMode -Version Latest
                 Source = 'Url'
                 BaseUri = 'https://downloads.mariadb.org'
                 VersionUrl = 'https://downloads.mariadb.org/rest-api/mariadb/'
-                #Path             = ''
-                #processId        = ''
                 CommandPath = 'bin'
                 Command = 'mysql.exe'
                 Name = 'mariadb'
+                RegisterToPath = $true
             }
         }
         e_Management = @{
@@ -113,19 +121,10 @@ Set-StrictMode -Version Latest
                 Source = 'Url'
                 BaseUri = 'https://download.kde.org'
                 VersionUrl = 'https://download.kde.org/stable/digikam/'
-                #Config           = @{
-                #    database        = @{
-                #        1 = 'digiKam\digiKam.db'
-                #        2 = 'digiKam\digiKam-rc.db'
-                #    }
-                #    digiKamRC       = 'digiKam\digiKam-rc'
-                #    metadataProfile = 'digiKam\digiKam-metadataProfile.dkamp'
-                #    drmTemplate     = 'digiKam\template.xml'
-                #}
-                processId = ''
                 CommandPath = ''
                 Command = 'digikam.exe'
                 Name = 'digiKam'
+                RegisterToPath = $true
             }
         }
     }

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Initializes the central PSmediaManager system KeePassXC vault.
 
@@ -18,7 +18,7 @@
                     - SSL
 
 .PARAMETER VaultPath
-    Path where the KeePass database will be created. Defaults to d:\PSmediaManager\Vault
+    Path where the KeePass database will be created. If not provided, resolved from PSMM_VAULT_PATH or Config.Paths.App.Vault.
 
 .PARAMETER Force
     If specified, recreates the database even if it already exists (use with caution).
@@ -42,10 +42,8 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
-# Cache the vault master password during first-run setup within this module scope
-if (-not (Get-Variable -Name _VaultMasterPasswordCache -Scope Script -ErrorAction SilentlyContinue)) {
-    $script:_VaultMasterPasswordCache = $null
-}
+# Note: $script:_VaultMasterPasswordCache is declared in PSmm.psm1
+# This file is dot-sourced into the module and shares the module's script scope.
 
 function Initialize-SystemVault {
     [CmdletBinding(SupportsShouldProcess)]
@@ -53,10 +51,13 @@ function Initialize-SystemVault {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Interactive vault setup requires explicit host prompts with color.')]
     param(
         [Parameter()]
-        [string]$VaultPath = 'd:\PSmediaManager\Vault',
+        [string]$VaultPath,
 
         [Parameter()]
         [switch]$Force,
+
+        [Parameter(Mandatory)]
+        $FileSystem,
 
         [Parameter()]
         [SecureString]$MasterPassword
@@ -71,10 +72,15 @@ function Initialize-SystemVault {
             return $true
         }
 
-        # Ensure directory exists
+        # Ensure directory exists via FileSystem service
         if (-not (Test-Path -Path $VaultPath)) {
             Write-Verbose "Creating vault directory: $VaultPath"
-            $null = New-Item -Path $VaultPath -ItemType Directory -Force -ErrorAction Stop
+            if ($PSBoundParameters.ContainsKey('FileSystem') -and $FileSystem -and ($FileSystem | Get-Member -Name 'NewItem' -ErrorAction SilentlyContinue)) {
+                $null = $FileSystem.NewItem($VaultPath, 'Directory')
+            }
+            else {
+                throw [ValidationException]::new("FileSystem service is required to create vault directory", "FileSystem")
+            }
         }
 
         # Resolve master password (explicit > cached > prompt)
@@ -123,7 +129,7 @@ function Initialize-SystemVault {
             } while ($attempt -lt $maxAttempts)
 
             if (-not $resolvedPw) {
-                throw "Master password setup aborted after $maxAttempts failed attempts."
+                throw [ConfigurationException]::new("Master password setup aborted after $maxAttempts failed attempts")
             }
         }
 
@@ -139,11 +145,13 @@ function Initialize-SystemVault {
                 [System.IO.File]::WriteAllText($tempFile, "$plainMaster`n$plainMaster`n", [System.Text.Encoding]::ASCII)
                 $process = Start-Process -FilePath 'keepassxc-cli.exe' -ArgumentList 'db-create', '-p', $dbPath -NoNewWindow -Wait -PassThru -RedirectStandardInput $tempFile
                 if ($process.ExitCode -ne 0) {
-                    throw "Failed to create KeePass database (exit code: $($process.ExitCode))"
+                    $ex = [ProcessException]::new("Failed to create KeePass database", "keepassxc-cli.exe")
+                    $ex.SetExitCode($process.ExitCode)
+                    throw $ex
                 }
             }
             finally {
-                if (Test-Path $tempFile) { Remove-Item $tempFile -Force -ErrorAction SilentlyContinue }
+                if ($FileSystem.TestPath($tempFile)) { $FileSystem.RemoveItem($tempFile, $false) }
                 $plainMaster = $null
             }
 
@@ -154,7 +162,7 @@ function Initialize-SystemVault {
 
         # Log success if available
         if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
-            Write-PSmmLog -Level SUCCESS -Context 'Initialize-SystemVault' -Message "System vault ready at: $dbPath" -Console -File
+            Write-PSmmLog -Level SUCCESS -Context 'Initialize-SystemVault' -Message "System vault ready at: $dbPath" -File
         }
 
             Write-PSmmHost "`n[OK] System vault initialized" -ForegroundColor Green
@@ -221,7 +229,7 @@ function Save-SystemSecret {
         [hashtable]$Metadata = @{},
 
         [Parameter()]
-        [string]$VaultPath = 'd:\PSmediaManager\Vault',
+        [string]$VaultPath,
 
         [Parameter()]
         [string]$Username = 'system',
@@ -251,14 +259,38 @@ function Save-SystemSecret {
 
         $entry = $entryMap[$SecretType]
         $url = $urlMap[$SecretType]
+
+        # Resolve vault path from parameter, environment, or app configuration
+        if (-not $VaultPath -or [string]::IsNullOrWhiteSpace($VaultPath)) {
+            if ($env:PSMM_VAULT_PATH) {
+                $VaultPath = $env:PSMM_VAULT_PATH
+                Write-Verbose "[Save-SystemSecret] Resolved VaultPath from environment: $VaultPath"
+            }
+            elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
+                try {
+                        $VaultPath = (Get-AppConfiguration).Paths.App.Vault
+                                        Write-Verbose "[Save-SystemSecret] Resolved VaultPath from configuration: $VaultPath"
+                    }
+                    catch {
+                        Write-Verbose "Could not retrieve vault path from app configuration: $_"
+                    }
+            }
+            if (-not $VaultPath) {
+                throw [ConfigurationException]::new('VaultPath is not set. Provide -VaultPath or set PSMM_VAULT_PATH.')
+            }
+        }
+
         $dbPath = Join-Path $VaultPath 'PSmm_System.kdbx'
 
         # Ensure vault exists
         if (-not (Test-Path $dbPath)) {
             Write-Warning "System vault not found. Creating it now..."
-            $initialized = Initialize-SystemVault -VaultPath $VaultPath
+            if (-not $FileSystem) {
+                throw [ValidationException]::new("FileSystem service is required to initialize vault", "FileSystem")
+            }
+            $initialized = Initialize-SystemVault -VaultPath $VaultPath -FileSystem $FileSystem
             if (-not $initialized) {
-                throw "Failed to initialize system vault"
+                throw [ConfigurationException]::new("Failed to initialize system vault")
             }
         }
 
@@ -289,10 +321,10 @@ function Save-SystemSecret {
                 Write-Verbose "Using cached vault master password for secret save"
             }
             if (-not $resolvedVaultPw) {
-                Write-PSmmHost "To save the secret, please enter your vault master password." -ForegroundColor Cyan
+                Write-PSmmHost "To save the entry, please enter your vault master credential." -ForegroundColor Cyan
                 Write-PSmmHost "(It will not be shown while typing)" -ForegroundColor Yellow
                 Write-PSmmHost ""
-                $resolvedVaultPw = Read-Host "Enter vault master password" -AsSecureString
+                $resolvedVaultPw = Read-Host "Enter vault master credential" -AsSecureString
                 # Offer to cache the password for this session
                 $cacheAns = Read-Host 'Cache this master password for this session? [Y/n]'
                 if ([string]::IsNullOrWhiteSpace($cacheAns) -or $cacheAns.Trim().ToLower() -eq 'y') {
@@ -323,7 +355,14 @@ function Save-SystemSecret {
                         # If mkdir fails because it exists, ignore (exit code may be 1). We'll proceed regardless.
                     }
                     finally {
-                        if (Test-Path $tmpPw) { Remove-Item $tmpPw -Force -ErrorAction SilentlyContinue }
+                        if ($FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'TestPath')) {
+                            if ($FileSystem.TestPath($tmpPw)) {
+                                if ($FileSystem.PSObject.Methods.Name -contains 'RemoveItem') { $FileSystem.RemoveItem($tmpPw, $false) } else { Remove-Item -Path $tmpPw -Force -ErrorAction SilentlyContinue }
+                            }
+                        }
+                        else {
+                            if (Test-Path -Path $tmpPw) { Remove-Item -Path $tmpPw -Force -ErrorAction SilentlyContinue }
+                        }
                     }
                 }
             }
@@ -345,8 +384,13 @@ function Save-SystemSecret {
             }
             finally {
                 # Clean up temp file
-                if (Test-Path $tempFile) {
-                    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+                if ($FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'TestPath')) {
+                    if ($FileSystem.TestPath($tempFile)) {
+                        if ($FileSystem.PSObject.Methods.Name -contains 'RemoveItem') { $FileSystem.RemoveItem($tempFile, $false) } else { Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue }
+                    }
+                }
+                else {
+                    if (Test-Path -Path $tempFile) { Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue }
                 }
                 $plainVault = $null
             }
@@ -370,14 +414,14 @@ function Save-SystemSecret {
                     try {
                         [System.IO.File]::WriteAllText($tmpPwMk, "$plainVault`n", [System.Text.Encoding]::ASCII)
                         $null = Start-Process -FilePath 'keepassxc-cli.exe' -ArgumentList 'mkdir', $dbPath, $metaGroup -NoNewWindow -Wait -PassThru -RedirectStandardInput $tmpPwMk
-                    } finally { if (Test-Path $tmpPwMk) { Remove-Item $tmpPwMk -Force -ErrorAction SilentlyContinue } }
+                    } finally { if ($FileSystem.TestPath($tmpPwMk)) { $FileSystem.RemoveItem($tmpPwMk, $false) } }
 
                     # Create placeholder entry (password 'metadata'); no notes editing to avoid CLI parsing issues
                     $tmpPwMeta = [System.IO.Path]::GetTempFileName()
                     try {
                         [System.IO.File]::WriteAllText($tmpPwMeta, "$plainVault`nmetadata`n", [System.Text.Encoding]::ASCII)
                         $procMetaAdd = Start-Process -FilePath 'keepassxc-cli.exe' -ArgumentList 'add', '-u', $Username, '--url', $url, '-p', $dbPath, $metaEntry -NoNewWindow -Wait -PassThru -RedirectStandardInput $tmpPwMeta
-                    } finally { if (Test-Path $tmpPwMeta) { Remove-Item $tmpPwMeta -Force -ErrorAction SilentlyContinue } }
+                    } finally { if ($FileSystem.TestPath($tmpPwMeta)) { $FileSystem.RemoveItem($tmpPwMeta, $false) } }
                     if ($procMetaAdd.ExitCode -eq 0) {
                         Write-Verbose "Metadata entry ensured: $metaEntry"
                     } else {
@@ -393,7 +437,7 @@ function Save-SystemSecret {
 
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
                 Write-PSmmLog -Level SUCCESS -Context 'Save-SystemSecret' `
-                    -Message "Successfully saved $SecretType to KeePass" -Console -File
+                    -Message "Successfully saved $SecretType to KeePass" -File
             }
         }
 

@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 function New-PSmmProject {
@@ -34,11 +34,19 @@ function New-PSmmProject {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,  # Uses [object] instead of [AppConfiguration] to avoid type resolution issues when module is loaded
 
-        [Parameter()]
-        [IFileSystemService]$FileSystem = [FileSystemService]::new()
+        [Parameter(Mandatory)]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        $PathProvider
     )
+
+    # Validate Config is AppConfiguration type
+    if ($Config.GetType().Name -ne 'AppConfiguration') {
+        throw [ArgumentException]::new("Config parameter must be of type [AppConfiguration]", 'Config')
+    }
 
     try {
         Clear-Host
@@ -58,12 +66,12 @@ function New-PSmmProject {
         # Get storage drive for projects
         $storageDrive = Get-StorageDrive | Where-Object { $_.Label -eq $Config.Storage['1'].Master.Label }
         if (-not $storageDrive) {
-            throw "Master storage drive not found. Cannot create project."
+            throw [StorageException]::new("Master storage drive not found. Cannot create project.", $Config.Storage['1'].Master.Label)
         }
 
-        $projectsBasePath = Join-Path -Path "$($storageDrive.DriveLetter)\" -ChildPath 'Projects'
-        $projectBasePath = Join-Path -Path $projectsBasePath -ChildPath $pName
-        $projectConfigPath = Join-Path -Path $projectBasePath -ChildPath 'Config'
+        $projectsBasePath = $PathProvider.CombinePath("$($storageDrive.DriveLetter)\", 'Projects')
+        $projectBasePath = $PathProvider.CombinePath($projectsBasePath, $pName)
+        $projectConfigPath = $PathProvider.CombinePath($projectBasePath, 'Config')
 
         # Check if project already exists
         if ($FileSystem.TestPath($projectBasePath)) {
@@ -94,7 +102,7 @@ function New-PSmmProject {
         # Create all directories
         Write-Verbose "Creating project directory structure..."
         foreach ($directory in $directoriesToCreate) {
-            $fullPath = Join-Path -Path $projectBasePath -ChildPath $directory
+            $fullPath = $PathProvider.CombinePath($projectBasePath, $directory)
 
             if (-not $FileSystem.TestPath($fullPath)) {
                 if ($PSCmdlet.ShouldProcess($fullPath, 'Create directory')) {
@@ -131,15 +139,15 @@ function New-PSmmProject {
         Write-Output ''
         Write-Verbose "Initializing KeePass database..."
         try {
-            $vaultPath = Join-Path -Path $projectBasePath -ChildPath 'Vault'
+            $vaultPath = $PathProvider.CombinePath($projectBasePath, 'Vault')
             $dbName = "$pName.kdbx"
 
             New-KeePassDatabase -vaultPath $vaultPath -dbName $dbName
 
             # Prompt for MariaDB credentials entry
-            Write-PSmmHost "`nPlease enter a secure password for MariaDB root user:" -ForegroundColor Yellow
-            Write-PSmmHost "Press ENTER without typing to auto-generate a secure password" -ForegroundColor Gray
-            $mariaDBPassword = Read-Host "MariaDB Password" -AsSecureString
+            Write-PSmmHost "`nCreate credentials for the database admin user:" -ForegroundColor Yellow
+            Write-PSmmHost "Press ENTER without typing to auto-generate a strong credential" -ForegroundColor Gray
+            $mariaDBPassword = Read-Host "Database Admin Credential" -AsSecureString
 
             # Validate that user entered a password
             if ($mariaDBPassword.Length -eq 0) {
@@ -154,12 +162,9 @@ function New-PSmmProject {
                 # Convert to base64 and take first 20 characters for readability
                 $randomPassword = [Convert]::ToBase64String($passwordBytes).Substring(0, 20)
 
-                # Display the generated password to user
-                Write-PSmmHost "`nGenerated password: " -NoNewline -ForegroundColor Cyan
-                Write-PSmmHost $randomPassword -ForegroundColor Green
-                Write-PSmmHost "IMPORTANT: Save this password in a secure location NOW!" -ForegroundColor Red
-                Write-PSmmHost "Press any key to continue after saving the password..." -ForegroundColor Yellow
-                $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+                # Display a hint without echoing the full credential
+                Write-PSmmHost "`nA strong credential was generated (not displayed)." -ForegroundColor Cyan
+                Write-PSmmHost "It will be stored securely in the vault for the admin user." -ForegroundColor Yellow
 
                 # Convert to SecureString securely (from character array to avoid string in memory)
                 $securePassword = New-Object System.Security.SecureString
@@ -169,7 +174,7 @@ function New-PSmmProject {
                 $securePassword.MakeReadOnly()
                 $mariaDBPassword = $securePassword
 
-                # Clear the plain text password from memory
+                # Clear the plain text from memory
                 $randomPassword = $null
                 [System.GC]::Collect()
             }

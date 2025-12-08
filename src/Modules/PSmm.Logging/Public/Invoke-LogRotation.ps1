@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Rotates log files based on age and/or quantity limits.
 

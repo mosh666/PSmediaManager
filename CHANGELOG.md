@@ -1,31 +1,154 @@
-# Changelog
+# PSmediaManager Changelog
+
+<!-- markdownlint-disable MD024 -->
 
 All notable changes to this project will be documented in this file.
 
-This project adheres to "Keep a Changelog" ([Keep a Changelog](https://keepachangelog.com/en/1.0.0/)) and uses Semantic Versioning ([SemVer](https://semver.org/)).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The format below is designed for clear GitHub Releases and PowerShell module maintenance.
+## Version Strategy
 
-## [Unreleased]
+PSmediaManager uses **dynamic versioning** derived from Git tags via GitVersion:
+- All modules share the same version as the application
+- Versions are computed automatically from Git history
+- No manual version updates are required
 
-Use this section for in-progress changes that will be included in the next release.
+See [docs/versioning.md](docs/versioning.md) for complete details.
 
-When preparing a release, move the items into a new versioned section and update the date.
+<!-- markdownlint-disable MD024 -->
+## [Unreleased] - Development on `dev` branch
 
 ### Added
 
-- CI/Security: Introduced `.github/workflows/codacy.yml` to run Codacy Analysis CLI on pushes, pull requests, and a weekly schedule so fresh findings flow into GitHub code scanning automatically.
-- **Storage**: Introduced `StorageService` class (`src/Modules/PSmm/Classes/Services/StorageService.ps1`) implementing `IStorageService` interface for testable storage drive operations.
-- **Storage**: Added comprehensive storage documentation (`docs/storage.md`) covering architecture, configuration, usage patterns, and testing strategies.
-- **Interfaces**: Added `IStorageService` interface to `Classes/Interfaces.ps1` for dependency injection and testability.
-- **UI**: Added detailed logging for project loading operations with master/backup drive counts.
-- **Storage Wizard**: Added visual wizard header with decorative borders showing mode (Add/Edit) and group ID.
-- **Storage Wizard**: Added step-by-step progress indicators (Step 1/2/3 of 3) with descriptive guidance text.
-- **Storage Management**: Added numbered menu system with dynamic option mapping based on available storage groups.
-- **Logging**: Added `New-FileSystemService` helper under `PSmm.Logging` so file system operations can be resolved without importing the full PSmm class graph; keeps logging usable in analyzer runs and partial module imports.
-- **Tests**: Added `Initialize-Logging.Tests.ps1` and `Invoke-LogRotation.Tests.ps1` to cover the helper, rotation workflow, and configuration validation scenarios.
+- TBD
 
-### Changed
+### Fixed
+
+- TBD
+
+## [0.1.0] - 2025-12-08
+
+First tagged release of PSmediaManager with complete dynamic versioning system.
+
+### Added
+
+- **Versioning**: Implemented complete dynamic versioning system using GitVersion
+  - Created `GitVersion.yml` configuration for semantic versioning
+  - Added `Get-PSmmDynamicVersion` helper function for version retrieval
+  - Updated all module manifests to derive versions from Git dynamically
+  - Added comprehensive versioning documentation at `docs/versioning.md`
+  - All modules now share synchronized version from Git tags
+- **Automation**: Added CI step to run `Update-ModuleVersions.ps1 -UpdateManifests` and documented an opt-in pre-commit hook (`.githooks/pre-commit.ps1`; enable with `git config core.hooksPath .githooks`) to keep manifests in sync locally.
+
+### Fixed
+- **Projects**: Fixed `[AppConfiguration]` type resolution errors in `PSmm.Projects` module functions by changing parameter types from `[AppConfiguration]` to `[object]` and adding runtime type validation in `Select-PSmmProject`, `New-PSmmProject`, and `Clear-PSmmProjectRegistry` - this prevents type lookup failures when modules are loaded before types are available in the session scope
+- **Projects**: Fixed `PathProvider.CombinePath` method call signature in `Select-PSmmProject` to use array syntax `@($path, $subfolder)` instead of separate arguments, resolving "Cannot find an overload for 'CombinePath' and the argument count: 2" errors when selecting projects
+- **Projects**: Fixed missing `Get-FromKeyOrProperty` helper function in `Get-PSmmProjects.ps1` that caused projects to disappear from main menu after performing any action - function now safely extracts values from both hashtables and PSObjects during cache retrieval
+- **Testing**: Fixed 2 skipped tests in `Resolve-CommandPath.Tests.ps1` by instantiating `FileSystemService` before `InModuleScope` and passing via global test data structure, enabling proper plugin command path resolution tests
+- **PATH Management**: Fixed development mode (`-Dev`) documentation and behavior - PATH entries are now added to Process scope only and NOT cleaned up at exit, keeping plugin tools available in the session. Machine and User scopes are never modified.
+- **FileSystemService**: Enhanced shim fallback with complete method implementations (GetChildItem, RemoveItem, CopyItem, MoveItem, GetItemProperty) to support isolated logging module imports
+- **FileSystemService**: Changed OutputType from `[FileSystemService]` to `[object]` to support shim fallback gracefully
+- **Plugins**: Fixed PATH registration to always use Process scope only (`$persistUser = $false`) - Development mode skips cleanup at exit but does not persist to User scope
+- **Logging**: Fixed test compatibility in `Write-PSmmLog.Uninitialized.Tests.ps1` by preloading PSmm types and ensuring module initialization in BeforeAll
+- **Testing**: Fixed test fixture setup in `Initialize-Logging.Tests.ps1` by rehydrating paths inside BeforeAll block to avoid null references when Pester scopes the file
+- **Testing**: Fixed test helper integration in `Invoke-LogRotation.Tests.ps1` by adding Preload-PSmmTypes.ps1 call and improved module loading
+- **Testing**: Fixed FileSystemService mock signature in multiple test files to accept `$itemType` parameter correctly for GetChildItem method calls
+- **Testing**: Re-enabled storage wizard logging scenarios (no USB drives, excluded fixed drives, wizard start) with explicit mocks so tests assert warnings/false returns instead of skipping
+- **Testing**: Stabilized logging suite by preloading PSmm types and injecting `FileSystem` dependencies (Initialize-Logging, Invoke-LogRotation) to avoid hangs and cross-test contamination
+- **Code Quality**: Fixed whitespace consistency across multiple plugin files (FFmpeg, ImageMagick, KeePassXC, MKVToolNix, MariaDB, 7-Zip, Git-LFS, GitVersion, PortableGit, digiKam, ExifTool) by removing trailing whitespace
+- **Code Quality**: Fixed whitespace consistency in core files (ConfigValidator, PortInfo, ProjectInfo, Get-PSmmProjects, Invoke-PSmm, New-ClassFactory, PSmediaManager)
+- **Code Quality**: Added UTF-8 BOM to ConfigValidator.ps1 for proper encoding consistency
+- **Code Quality**: Fixed variable naming in PSmediaManager.ps1 (renamed `$error` to `$validationError` to avoid conflict with automatic variable)
+- **Code Quality**: Added PSScriptAnalyzer suppression for `PSUseShouldProcessForStateChangingFunctions` in factory functions (New-ProjectInfo, New-PortInfo) as they create in-memory objects without modifying system state
+- **Bootstrap**: Fixed ConfigValidator parser error caused by incorrect script block scoping that prevented configuration validation from completing
+- **Bootstrap**: Fixed GitHub-Token vault retrieval error (Win32 console mode error 0x57) by wrapping `Read-Host` in try-catch with graceful fallback for optional secrets
+- **Bootstrap**: Fixed ExifTool installer "file already exists" error by replacing fragile string-based path construction with dynamic directory search using wildcard patterns
+- **Bootstrap**: Added explicit GetChildItem 3-parameter overload to FileSystemService to resolve method overload resolution failures
+- **Bootstrap**: Enhanced Get-LocalPluginExecutablePath to dynamically resolve plugin paths from installed directories, eliminating hard dependency on InstallPath property
+- **Bootstrap**: Made HTTP service health check non-critical by gracefully handling missing wrapper function; now defaults to OK status instead of blocking bootstrap
+- **Exports**: Added Invoke-HttpRestMethod to PSmm module function exports to ensure HTTP wrapper availability
+- **Code Quality**: Fixed 13 PSScriptAnalyzer issues in `AppConfiguration.ps1` and `AppConfigurationBuilder.ps1` - added verbose logging to empty catch blocks and removed trailing whitespace
+- **Core**: Corrected run configuration filename format in `PSmediaManager.ps1` to include missing dot between `InternalName` and `Run` (e.g., `PSmm.Run.psd1` instead of `PSmmRun.psd1`)
+- **Testing**: Fixed baseline update script to prevent accidental baseline regressions; added `-Force` parameter for intentional baseline adjustments
+- **Testing**: Fixed storage wizard test "renumbers and appends next group ID when groups exist" by persisting existing group to disk before wizard execution and using config's actual DriveRoot path instead of hardcoded value
+- **Testing**: Fixed `Confirm-Storage` test to set `MEDIA_MANAGER_TEST_MODE` environment variable, preventing `UpdateStatus()` from calling `Get-PSDrive` on CI environments where test drive letters don't exist
+
+### Added (Unreleased)
+
+- **Documentation**: Added comprehensive container deployment guide (`docs/deployment.md`) covering Docker, Compose, Kubernetes hardening, security scanning, and CI/CD integration
+- **Testing**: Added `GlobalFilesystemGuards.ps1` helper to prevent accidental writes to system paths during tests
+- **Testing**: Added `Resolve-ToolCommandPath.ps1` private helper for tool command resolution with caching
+- **Testing**: Added consolidated `Resolve-CommandPath.Tests.ps1` merging plugin and tool command path tests
+- **Testing**: Added `Write-PSmmLog.Uninitialized.Tests.ps1` for logging edge case coverage
+- **Testing**: Added organized `tests/Modules/PSmm/Storage/` directory with `Confirm-Storage.Tests.ps1` and `Get-StorageDrive.Tests.ps1`
+- **Testing**: Added `Export-SafeConfiguration.CoverageBoost3.Tests.ps1` with 24 comprehensive test cases covering deep nesting, sanitization, and edge cases (improved coverage by +0.07%)
+- **Environment**: Added `AddPathEntries()` and `RemovePathEntries()` methods to `IEnvironmentService` interface for batch PATH operations
+- **Environment**: Added optional `$persistUser` parameter to `AddPathEntry()` and `RemovePathEntry()` methods for controlling User-level PATH persistence
+- **Bootstrap**: Enhanced error reporting in `Invoke-PSmm` with stack traces and position information for better diagnostics
+
+### Security / Container (Unreleased)
+
+- Switched container base to PowerShell 7.5 Alpine 3.20 (pinned digest) and retained explicit zlib install (apk) for defense in depth
+- Documented image build/tag/push flow in `docs/container-push.md`
+- Verified Codacy/Trivy scan clean on pinned image (alpine 3.20.5)
+
+### Changed (Unreleased)
+
+- **CI/Codacy**: Pinned Codacy CLI v2 to `v2.2.0` for deterministic SARIF generation and reproducible scans; pinned `DavidAnson/markdownlint-cli2-action` to commit `30a0e04f1870d58f8d717450cc6134995f993c63` to satisfy supply-chain scanners and eliminate unpinned action warnings
+- **Cleanup**: Removed obsolete milestone and reference documentation files (INDEX.md, PROJECT_COMPLETE.md, PROJECT_MILESTONE.md, QUICK_REFERENCE.md, PHASE9_COMPLETION_REPORT.md)
+- **Cleanup**: Removed obsolete container push documentation (container-push.md)
+- **Testing**: Removed legacy phase test files (test-phase2 through phase10) and test-classes.ps1 as testing is now consolidated into Pester test suite
+- **Testing**: Improved Invoke-Pester.ps1 with smarter CI detection and conditional read-key pauses via `Test-IsCiContext` and `Test-ShouldPauseForExit`
+- **Testing**: Enhanced Initialize-Logging.Tests.ps1 with comprehensive error branch coverage and deterministic test cases
+- **Testing**: Improved Import-AllTestHelpers.ps1 to load PSmm.Logging module and filesystem guards automatically
+- **Testing**: Expanded coverage exclusions to skip public UI/Plugin/Project surfaces and Bootstrap functions
+- **Coverage**: Raised baseline to 71.02% (1,769 executed / 2,491 analyzed commands) after re-enabling storage wizard logging tests and refreshing JaCoCo/latest coverage snapshots
+- **Testing**: Enhanced `Update-CoverageBaseline.ps1` with `-Force` parameter to allow intentional baseline adjustments while preventing accidental regressions
+- **Docs**: Synced README and development guide coverage metrics to the current 71.02% baseline and refreshed JaCoCo counts (1,769 / 2,491)
+- **Environment**: Refactored `EnvironmentService` to use batch PATH operations with `HashSet` for efficient deduplication and ordering
+- **Environment**: Improved PATH management with separate Process and User scope handling - Process scope always updated, User scope only when `$persistUser` is true
+- **Environment**: Enhanced `Register-PluginsToPATH` to batch-register all plugin directories in a single operation instead of multiple sequential calls
+- **Environment**: Modified `-Dev` mode to persist PATH changes to User scope, allowing plugin commands to remain available after session exit
+- **Plugins**: Changed `Register-PluginsToPATH` to check for existing PATH entries upfront using a `HashSet` for O(1) lookups, avoiding redundant registrations
+- **Core**: Updated `PSmediaManager.ps1` cleanup logic to use batch `RemovePathEntries()` for efficient PATH restoration on exit (non-Dev mode)
+- **Secrets**: Updated `Get-SystemSecret` and related functions to use non-persistent PATH additions (`$persistUser = $false`) for KeePassXC CLI discovery
+
+### Removed (Unreleased)
+
+- **Testing**: Removed duplicate test files: `Resolve-PluginCommandPath.Tests.ps1`, old `Confirm-Storage.Tests.ps1`, `Get-StorageDrive.Tests.ps1`, and `Write-PSmmLog.Tests.ps1` (replaced by consolidated/organized versions)
+
+### Changed (Previous)
+
+- **CI/Codacy**: Ensure `./.codacy/cli.sh` is executable in workflow to prevent `Permission denied` on Linux runners and restore SARIF uploads.
+- **CI/Codacy**: Guard SARIF upload steps using `hashFiles(...)` so the job does not fail when `results.sarif` (or `markdownlint.sarif`) is not produced; fixes "Path does not exist: results.sarif" in GitHub Actions.
+- **CI/Codacy**: Normalize `.codacy/codacy.yaml` to CLI v2 schema (`version: "2"`, `tools: [ { name: ... } ]`).
+- **CI/Security**: Migrated from Codacy classic GitHub Action to Codacy CLI v2 for more flexible local analysis and CI integration.
+- **Configuration**: Consolidated Codacy configuration from root `.codacy.yml` to `.codacy/codacy.yaml` with cross-tool path exclusions.
+- **Linting**: Separated markdownlint execution into dedicated GitHub Action with SARIF output; removed markdownlint from Codacy CLI v2 (unsupported).
+- **Configuration**: Removed version pinning from `.codacy/codacy.yaml` to use latest stable tool versions (pmd, semgrep, trivy).
+- **Configuration**: Added `exclude_paths` to `.codacy/codacy.yaml` mirroring `.semgrepignore` patterns for consistent exclusions across all tools.
+- **Configuration**: Cleaned `.markdownlint.yml` to contain only rule toggles; moved glob patterns to `.markdownlint-cli2.jsonc`.
+
+### Added (Details - Previous)
+
+- **CI/Linting**: Added `.markdownlint-cli2.jsonc` to configure markdownlint-cli2 with glob patterns and SARIF formatter output.
+- **CI/Security**: Added separate SARIF upload step for markdownlint results in Codacy workflow.
+
+- **refactor(plugins)**: Expanded try/catch blocks in plugin GitHub and confirmation helpers to provide diagnostic messages when system vault token retrieval fails.
+- **refactor(build)**: Replaced non-interactive `Write-Host` calls in `Build-ScanImage.ps1` with `Write-Information` for proper stream usage.
+- **chore(coverage)**: Updated coverage baseline JSON to reflect new executed command set (68.67%).
+
+### Changed (Details)
+
+#### Logging & UX Tweaks (2025-11-28)
+
+- **fix(logging)**: Expanded caller field width in log format (from 28 → 29) for improved alignment across longer function names.
+- **fix(vault)**: Removed redundant console duplication when reporting successful system vault initialization and secret saves (file logging retained).
+- **refactor(storage wizard)**: Standardized confirmation prompt casing to `y/N` (lowercase affirmative, uppercase default negative) for consistency with common CLI conventions.
+- **chore(requirements)**: Pruned obsolete commented placeholders (`processId`, legacy digiKam config block, unused path comments) from `PSmm.Requirements.psd1` to reduce analyzer noise.
+- **chore(test)**: Refreshed coverage artifacts (`.coverage-jacoco.xml`, `.coverage-latest.json`) with latest execution snapshot.
+
 
 #### User Experience Improvements (2025-11-27)
 
@@ -92,6 +215,16 @@ When preparing a release, move the items into a new versioned section and update
 - Documentation: Improved `README.md` Quick Start and Testing sections with optional PSGallery module pre-install guidance, a tip to re-run `Confirm-Plugins` after updates, and a quick Pester run command for fast local validation.
 - Documentation: Updated `README.md`, `docs/development.md`, and `docs/modules.md` with the latest coverage baseline (65.43%), background on `New-FileSystemService`, and references to the new logging-focused tests.
 
+#### Code Cleanup & Fixes (2025-11-30)
+
+- **refactor(plugins):** Remove duplicate GitHub helper file `Get-ToolFromGitHub.ps1`; consolidate on `Get-PluginFromGitHub.ps1` (identical implementations of `Get-GitHubLatestRelease`, `Get-LatestUrlFromGitHub`, `Find-MatchingReleaseAsset`).
+- **refactor(tests):** Consolidate test helpers by removing `tests/Helpers/TestConfig.ps1` and migrating `New-TestAppLogsRecorder` and `Register-TestWritePSmmLogMock` into `tests/Support/TestConfig.ps1`. Update UI logging tests to source from Support path.
+- **refactor(ui):** Move internal `Show-InvalidSelection` helper from `PSmm.UI/Public/Invoke-PSmmUI.ps1` into `PSmm.UI/Private/Show-InvalidSelection.ps1` for better encapsulation.
+- **fix(bootstrap):** Restore `Confirm-PowerShell` after accidental removal; function is required by `Invoke-PSmm.ps1` during bootstrap. Reintroduced under `PSmm/Private/Bootstrap/Confirm-PowerShell.ps1`.
+- **chore(psmm manifest):** Remove `Get-SystemSecretMetadata` from `FunctionsToExport` in `PSmm.psd1` (function exists but is not part of the public API).
+- **fix(secrets):** Added verbose error handling when vault path resolution via `Get-AppConfiguration` fails (AppSecrets constructor, `Get-SystemSecret`, `Save-SystemSecret`) instead of silently swallowing exceptions.
+- **docs(quality):** Updated README Code Quality section with new coverage metrics (68.67%) and recent test suite expansions.
+
 #### Previous edits (2025-11-24)
 
 - Documentation: added changelog link to `README.md`.
@@ -114,7 +247,7 @@ These are small documentation/metadata updates; move to a versioned release entr
 
 - Once-proposed features scheduled for removal.
 
-### Removed
+### Removed (Details)
 
 - Tests: retired `tests/Modules/PSmm/Exit-Order.Tests.ps1` now that `Write-PSmmHost` export coverage is handled via module tests and integration smoke runs.
 - CI: removed `.github/workflows/powershell-tests.yml` because the consolidated `ci.yml` plus the improved `tests/Invoke-Pester.ps1` cover the same validation steps.
@@ -200,3 +333,5 @@ These are small documentation/metadata updates; move to a versioned release entr
 - [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - [Semantic Versioning](https://semver.org/)
 - [GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
+
+<!-- markdownlint-enable MD024 -->

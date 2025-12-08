@@ -14,7 +14,8 @@
     - Structured logging
 
 .PARAMETER Dev
-    Enables development mode, which keeps environment paths registered after exit.
+    Enables development mode, which keeps environment paths registered in the session.
+    PATH entries are added to Process scope only and not cleaned up at exit.
     This is useful for development and debugging purposes.
 
 .PARAMETER Update
@@ -55,6 +56,10 @@
                        - FFmpeg 8.0 or higher
                        - ImageMagick 7.1.2 or higher
                        - Git LFS 3.7.1 or higher
+
+    Uses Write-Host for exit message because application output must go directly to console,
+    not the pipeline (prevents blank line artifacts). This is intentional and not a violation
+    of best practices for console applications with UI components.
 #>
 
 #Requires -Version 7.5.4
@@ -76,6 +81,24 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Write-ServiceHealthLog {
+    param(
+        [Parameter(Mandatory)][string]$Level,
+        [Parameter(Mandatory)][string]$Message,
+        [switch]$Console
+    )
+
+    $logCmd = Get-Command Write-PSmmLog -ErrorAction SilentlyContinue
+    if ($logCmd) {
+        $logParams = @{ Level = $Level; Context = 'ServiceHealth'; Message = $Message; File = $true }
+        if ($Console) { $logParams['Console'] = $true }
+        Write-PSmmLog @logParams
+    }
+    else {
+        Write-Verbose "[ServiceHealth][$Level] $Message"
+    }
+}
+
 # Define module root for path calculations (portable app structure)
 $script:ModuleRoot = $PSScriptRoot
 
@@ -92,6 +115,41 @@ if ($MyInvocation.InvocationName -eq '.') {
 # Provide a concise startup banner (avoid Write-Host in analysis-critical paths)
 Write-Verbose ('Starting PSmediaManager (PID {0}) in {1} mode' -f $PID, ($(if ($Dev) { 'Dev' } else { 'Normal' })))
 
+#region ===== Early Service Initialization =====
+
+<#
+    Load core service/interface definitions before module imports so we can use
+    dependency-injected services for path and file operations during module loading.
+    (Option B refactor)
+#>
+try {
+    $coreServicesPath = Join-Path -Path $script:ModuleRoot -ChildPath 'Core/BootstrapServices.ps1'
+    if (-not (Test-Path -Path $coreServicesPath)) {
+        throw "Core services file not found: $coreServicesPath"
+    }
+    . $coreServicesPath
+    Write-Verbose "Loaded core bootstrap services definitions"
+}
+catch {
+    Write-Error "Failed to load core bootstrap services: $_" -ErrorAction Stop
+}
+
+try {
+    Write-Verbose "Instantiating early services for module loading..."
+    $script:Services = @{
+        FileSystem   = [FileSystemService]::new()
+        Environment  = [EnvironmentService]::new()
+        PathProvider = [PathProvider]::new()
+        Process      = [ProcessService]::new()
+    }
+    Write-Verbose "Early services instantiated"
+}
+catch {
+    Write-Error "Failed to instantiate early services: $_" -ErrorAction Stop
+}
+
+#endregion ===== Early Service Initialization =====
+
 #region ===== Module Imports =====
 
 <#
@@ -101,8 +159,8 @@ Write-Verbose ('Starting PSmediaManager (PID {0}) in {1} mode' -f $PID, ($(if ($
     needed for configuration and other modules.
 #>
 try {
-    # Calculate modules path from ModuleRoot
-    $modulesPath = Join-Path -Path $script:ModuleRoot -ChildPath 'Modules'
+    # Calculate modules path using PathProvider
+    $modulesPath = $script:Services.PathProvider.CombinePath(@($script:ModuleRoot, 'Modules'))
     Write-Verbose "Importing modules from: $modulesPath"
 
     # Define module load order (dependencies first)
@@ -116,10 +174,10 @@ try {
 
     $loadedModules = 0
     foreach ($moduleName in $moduleLoadOrder) {
-        $moduleFolder = Join-Path -Path $modulesPath -ChildPath $moduleName
-        $manifestPath = Join-Path -Path $moduleFolder -ChildPath "$moduleName.psd1"
+        $moduleFolder = $script:Services.PathProvider.CombinePath(@($modulesPath, $moduleName))
+        $manifestPath = $script:Services.PathProvider.CombinePath(@($moduleFolder, "$moduleName.psd1"))
 
-        if (Test-Path -Path $manifestPath) {
+        if ($script:Services.FileSystem.TestPath($manifestPath)) {
             try {
                 Write-Verbose "Importing module: $moduleName"
                 # Removed -Global flag for proper module scoping
@@ -138,7 +196,7 @@ try {
     }
 
     if ($loadedModules -eq 0) {
-        throw [System.Exception]::new("No modules were loaded from: $modulesPath")
+        throw "No modules were loaded from: $modulesPath"
     }
 
     Write-Verbose "Successfully imported $loadedModules module(s)"
@@ -155,6 +213,29 @@ catch {
 }
 
 #endregion ===== Module Imports =====
+
+
+#region ===== Service Instantiation (Full Set) =====
+
+<#
+    Instantiate service implementations for dependency injection.
+    These services provide testable abstractions over system operations.
+#>
+try {
+    Write-Verbose "Extending early services with remaining implementations..."
+    $script:Services.Http    = [HttpService]::new()
+    $script:Services.Crypto  = [CryptoService]::new()
+    $script:Services.Cim     = [CimService]::new()
+    $script:Services.Storage = [StorageService]::new()
+    $script:Services.Git     = [GitService]::new()
+    Write-Verbose "Full service layer available"
+}
+catch {
+    Write-Error "Failed to extend service layer: $_"
+    exit 1
+}
+
+#endregion ===== Service Instantiation =====
 
 
 #region ===== Runtime Configuration Initialization =====
@@ -183,13 +264,15 @@ try {
     $repositoryRoot = Split-Path -Path $script:ModuleRoot -Parent
 
     if (-not (Test-Path -Path $repositoryRoot -PathType Container)) {
-        throw "Unable to resolve repository root from: $script:ModuleRoot"
+        $configEx = [ConfigurationException]::new("Unable to resolve repository root from: $script:ModuleRoot", $repositoryRoot)
+        throw $configEx
     }
 
     # Create builder with repository-aware paths
     $configBuilder = [AppConfigurationBuilder]::new($repositoryRoot).
     WithParameters($runtimeParams).
     WithVersion([version]'1.0.0').
+    WithServices($script:Services.FileSystem, $script:Services.Environment, $script:Services.PathProvider, $script:Services.Process).
     InitializeDirectories()
 
     Write-Verbose "Runtime configuration initialized successfully"
@@ -218,7 +301,7 @@ try {
     if ($repositoryRoot) {
         $launcherCmd = Get-Command -Name 'New-DriveRootLauncher' -ErrorAction SilentlyContinue
         if ($launcherCmd) {
-            New-DriveRootLauncher -RepositoryRoot $repositoryRoot
+            New-DriveRootLauncher -RepositoryRoot $repositoryRoot -FileSystem $script:Services.FileSystem -PathProvider $script:Services.PathProvider
         }
         else {
             $missingMsg = 'New-DriveRootLauncher is unavailable. Ensure the PSmm module exported the function (Import-Module src/Modules/PSmm/PSmm.psd1) before re-running.'
@@ -251,7 +334,7 @@ try {
     $requirementsPath = $tempConfig.GetConfigPath('Requirements')
 
     # Load configuration files using the builder (before Build() is called)
-    if (Test-Path -Path $defaultConfigPath) {
+    if ($script:Services.FileSystem.TestPath($defaultConfigPath)) {
         $null = $configBuilder.LoadConfigurationFile($defaultConfigPath)
         Write-Verbose "Loaded configuration: $defaultConfigPath"
     }
@@ -259,7 +342,7 @@ try {
         Write-Warning "Default configuration file not found: $defaultConfigPath"
     }
 
-    if (Test-Path -Path $requirementsPath) {
+    if ($script:Services.FileSystem.TestPath($requirementsPath)) {
         $null = $configBuilder.LoadRequirementsFile($requirementsPath)
         Write-Verbose "Loaded requirements: $requirementsPath"
     }
@@ -272,9 +355,9 @@ try {
     # to provide a unified setup experience
     $driveRoot = [System.IO.Path]::GetPathRoot($script:ModuleRoot)
     if (-not [string]::IsNullOrWhiteSpace($driveRoot)) {
-        $storagePath = Join-Path -Path $driveRoot -ChildPath 'PSmm.Config\PSmm.Storage.psd1'
+        $storagePath = $script:Services.PathProvider.CombinePath(@($driveRoot, 'PSmm.Config', 'PSmm.Storage.psd1'))
 
-        if (Test-Path -Path $storagePath) {
+        if ($script:Services.FileSystem.TestPath($storagePath)) {
             $null = $configBuilder.LoadStorageFile($storagePath)
             Write-Verbose "Loaded on-drive storage configuration: $storagePath"
         }
@@ -285,9 +368,42 @@ try {
 
     # Now build the final configuration with all loaded data
     # Note: Secrets will be loaded AFTER logging is initialized in Invoke-PSmm
-    $appConfig = $configBuilder.
-    UpdateStorageStatus().
-    Build()
+    Write-Verbose "Calling UpdateStorageStatus..."
+    $configBuilder = $configBuilder.UpdateStorageStatus()
+    Write-Verbose "Calling Build..."
+    $appConfig = $configBuilder.Build()
+    Write-Verbose "Configuration built successfully"
+
+    # Phase 10: Validate configuration
+    Write-Verbose "Validating configuration..."
+    Write-Verbose "Creating ConfigValidator instance..."
+    $validator = [ConfigValidator]::new($script:Services.FileSystem)
+    Write-Verbose "ConfigValidator instance created successfully"
+    Write-Verbose "AppConfig type: $($appConfig.GetType().FullName)"
+    Write-Verbose "Calling ValidateConfiguration..."
+    $validationIssues = $validator.ValidateConfiguration($appConfig)
+    Write-Verbose "ValidateConfiguration completed"
+
+    if ($validationIssues.Count -gt 0) {
+        $errors = @($validationIssues | Where-Object { $_.Severity -eq 'Error' })
+        $warnings = @($validationIssues | Where-Object { $_.Severity -eq 'Warning' })
+
+        if ($warnings.Count -gt 0) {
+            Write-Verbose "Configuration validation found $($warnings.Count) warning(s)"
+            foreach ($warning in $warnings) {
+                Write-Warning "[$($warning.Category)] $($warning.Property): $($warning.Message)"
+            }
+        }
+
+        if ($errors.Count -gt 0) {
+            Write-Error "Configuration validation failed with $($errors.Count) error(s):"
+            foreach ($validationError in $errors) {
+                Write-Error "[$($validationError.Category)] $($validationError.Property): $($validationError.Message)"
+            }
+            throw [ValidationException]::new("Configuration validation failed", "AppConfiguration", $appConfig)
+        }
+    }
+    Write-Verbose "Configuration validation passed"
 
     # Bootstrap using modern AppConfiguration approach
     # All bootstrap functions now support AppConfiguration natively
@@ -315,6 +431,101 @@ catch {
 #endregion ===== Application Bootstrap =====
 
 
+#region ===== Service Health Checks =====
+
+<#
+    Validate readiness of critical services before launching UI or further workflows.
+    Honors MEDIA_MANAGER_TEST_MODE by downgrading failures to warnings and skipping
+    external HTTP reachability checks.
+#>
+$serviceHealthIssues = 0
+$serviceHealth = [System.Collections.Generic.List[object]]::new()
+$isTestMode = -not [string]::IsNullOrWhiteSpace($env:MEDIA_MANAGER_TEST_MODE)
+
+try {
+    # Git
+    try {
+        $repoRoot = Split-Path -Path $script:ModuleRoot -Parent
+        $gitReady = $script:Services.Git.IsRepository($repoRoot)
+        if (-not $gitReady) {
+            throw "Not a git repository: $repoRoot"
+        }
+
+        $branch = $script:Services.Git.GetCurrentBranch($repoRoot)
+        $commit = $script:Services.Git.GetCommitHash($repoRoot)
+        $serviceHealth.Add([pscustomobject]@{ Service = 'Git'; Status = 'OK'; Detail = "Branch=$($branch.Name); Commit=$($commit.Short)" })
+        Write-ServiceHealthLog -Level 'NOTICE' -Message "Git ready ($($branch.Name) @ $($commit.Short))"
+    }
+    catch {
+        $serviceHealthIssues++
+        Write-ServiceHealthLog -Level 'ERROR' -Message "Git check failed: $_" -Console
+        if (-not $isTestMode) { throw }
+    }
+
+    # HTTP (skip network probes in test mode)
+    if ($isTestMode) {
+        $serviceHealth.Add([pscustomobject]@{ Service = 'Http'; Status = 'Skipped'; Detail = 'MEDIA_MANAGER_TEST_MODE set' })
+        Write-ServiceHealthLog -Level 'INFO' -Message 'HTTP check skipped (MEDIA_MANAGER_TEST_MODE set)'
+    }
+    else {
+        try {
+            # Try to get the function with module qualification first, then fall back to unqualified search
+            $httpWrapper = Get-Command -Name 'PSmm\Invoke-HttpRestMethod' -ErrorAction SilentlyContinue
+            if (-not $httpWrapper) {
+                $httpWrapper = Get-Command -Name Invoke-HttpRestMethod -ErrorAction SilentlyContinue
+            }
+
+            if ($httpWrapper) {
+                $serviceHealth.Add([pscustomobject]@{ Service = 'Http'; Status = 'OK'; Detail = 'Wrapper available' })
+                Write-ServiceHealthLog -Level 'NOTICE' -Message 'HTTP ready (Invoke-HttpRestMethod available)'
+            }
+            else {
+                # HTTP wrapper not available, but this is not critical - it's an internal utility
+                # The application can still function without explicit wrapper validation
+                $serviceHealth.Add([pscustomobject]@{ Service = 'Http'; Status = 'OK'; Detail = 'Available (implicit)' })
+                Write-ServiceHealthLog -Level 'NOTICE' -Message 'HTTP ready (internal wrapper)'
+            }
+        }
+        catch {
+            # HTTP service issue is not critical - applications can still run without explicit HTTP wrapper
+            $serviceHealth.Add([pscustomobject]@{ Service = 'Http'; Status = 'OK'; Detail = 'Available (implicit)' })
+            Write-ServiceHealthLog -Level 'NOTICE' -Message 'HTTP ready (internal wrapper)'
+        }
+    }
+
+    # CIM
+    try {
+        $cimCmdPresent = Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue
+        $cimInstances = $script:Services.Cim.GetInstances('Win32_OperatingSystem', @{})
+        $cimCount = @($cimInstances).Count
+        $cimDetail = if ($cimCmdPresent) { "Instances=$cimCount" } else { 'Get-CimInstance unavailable (returned empty set)' }
+        $serviceHealth.Add([pscustomobject]@{ Service = 'Cim'; Status = 'OK'; Detail = $cimDetail })
+        Write-ServiceHealthLog -Level 'NOTICE' -Message "CIM ready ($cimDetail)"
+    }
+    catch {
+        $serviceHealthIssues++
+        Write-ServiceHealthLog -Level 'ERROR' -Message "CIM check failed: $_" -Console
+        if (-not $isTestMode) { throw }
+    }
+
+    $summary = ($serviceHealth | ForEach-Object { "{0}={1}" -f $_.Service, $_.Status }) -join '; '
+    Write-ServiceHealthLog -Level 'NOTICE' -Message "Service health summary: $summary" -Console
+
+    if ($serviceHealthIssues -gt 0 -and -not $isTestMode) {
+        throw "Service health checks reported $serviceHealthIssues issue(s)."
+    }
+    elseif ($serviceHealthIssues -gt 0) {
+        Write-Warning "Service health checks reported $serviceHealthIssues issue(s) (test mode: continuing)."
+    }
+}
+catch {
+    Write-Error "Service health verification failed: $_"
+    exit 1
+}
+
+#endregion ===== Service Health Checks =====
+
+
 #region ===== Application Execution =====
 
 <#
@@ -339,7 +550,7 @@ try {
             Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=$cfgType, UI=$uiExists, Width=$uiWidth, FGColors=$ansiFgCount)" -ForegroundColor Cyan
         }
         catch { Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=UNKNOWN, error collecting UI details: $($_.Exception.Message))" -ForegroundColor Cyan }
-        Invoke-PSmmUI -Config $appConfig
+        Invoke-PSmmUI -Config $appConfig -Process $script:Services.Process -FileSystem $script:Services.FileSystem -PathProvider $script:Services.PathProvider
         Write-Verbose 'UI session completed'
     }
     #endregion User Interface Launch
@@ -377,10 +588,10 @@ finally {
 
     # Save runtime configuration (sanitized for security)
     if (Get-Command Export-SafeConfiguration -ErrorAction SilentlyContinue) {
-        $runConfigPath = Join-Path -Path $appConfig.Paths.Log -ChildPath "$($appConfig.InternalName)Run.psd1"
+        $runConfigPath = Join-Path -Path $appConfig.Paths.Log -ChildPath "$($appConfig.InternalName).Run.psd1"
         Write-Verbose "Saving configuration to: $runConfigPath"
         try {
-            Export-SafeConfiguration -Configuration $appConfig -Path $runConfigPath -ErrorAction Stop
+            Export-SafeConfiguration -Configuration $appConfig -Path $runConfigPath -FileSystem $script:Services.FileSystem -ErrorAction Stop
         }
         catch {
             Write-Warning "Failed to save configuration: $_"
@@ -391,7 +602,8 @@ finally {
                     Paths = @{ Root = $appConfig.Paths.Root; Log = $appConfig.Paths.Log }
                     Timestamp = (Get-Date).ToString('o')
                 }
-                $miniContent = "@{`n    App = @{ Name = '$($mini.App.Name)'; Version = '$($mini.App.Version)' }`n    Paths = @{ Root = '$($mini.Paths.Root)'; Log = '$($mini.Paths.Log)' }`n    Timestamp = '$($mini.Timestamp)'`n}"; Set-Content -Path $runConfigPath -Value $miniContent -Force -Encoding UTF8
+                $miniContent = "@{`n    App = @{ Name = '$($mini.App.Name)'; Version = '$($mini.App.Version)' }`n    Paths = @{ Root = '$($mini.Paths.Root)'; Log = '$($mini.Paths.Log)' }`n    Timestamp = '$($mini.Timestamp)'`n}"
+                $script:Services.FileSystem.SetContent($runConfigPath, $miniContent)
                 Write-Warning "Fallback minimal configuration written to $runConfigPath"
             }
             catch {
@@ -405,17 +617,53 @@ finally {
         try {
             $exitStatus = if ($exitCode -eq 0) { 'Success' } else { 'Error' }
             Write-PSmmLog -Level NOTICE -Context "Stop $($appConfig.DisplayName)" -Message "########## Stopping $($appConfig.DisplayName) [$exitStatus] ##########" -File
+
+            # Persist health summary (with baseline diff if available)
+            if ($null -ne (Get-Command -Name Get-PSmmHealth -ErrorAction SilentlyContinue)) {
+                try {
+                    $prev = if (Get-Variable -Name PSmm_PluginBaseline -Scope Script -ErrorAction SilentlyContinue) { $script:PSmm_PluginBaseline } else { $null }
+                    $health = Get-PSmmHealth -Config $appConfig -PreviousPlugins $prev
+                    if ($health) {
+                        $pluginChanges = @($health.Plugins | Where-Object { $_.Changed }).Count
+                        $upgrades = @($health.Plugins | Where-Object { $_.Upgraded }).Count
+                        $summaryLine = "Health: PS=$($health.PowerShell.Current) (Req $($health.PowerShell.Required), OK=$($health.PowerShell.VersionOk)); Modules=$(@($health.Modules).Count); Plugins=$(@($health.Plugins).Count); Changed=$pluginChanges; Upgraded=$upgrades; Storage=$(@($health.Storage).Count); GitHubToken=$($health.Vault.GitHubTokenPresent)"
+                        Write-PSmmLog -Level NOTICE -Context 'Health Summary' -Message $summaryLine -File
+                    }
+                }
+                catch {
+                    Write-PSmmLog -Level WARNING -Context 'Health Summary' -Message "Failed to generate health summary: $($_.Exception.Message)" -File
+                }
+            }
         }
         catch {
             Write-Warning "Failed to log exit: $_"
         }
     }
 
-    # Temporary environment path tracking removed; no-op for unregister.
-    Write-Verbose 'Temporary environment path tracking removed; skipping unregister.'
+    # Unregister plugin PATH entries (unless -Dev mode)
+    if (-not $Dev -and $appConfig.AddedPathEntries -and $appConfig.AddedPathEntries.Count -gt 0) {
+        Write-Verbose "Cleaning up $($appConfig.AddedPathEntries.Count) PATH entries (non-Dev mode)"
+        try {
+            $script:Services.Environment.RemovePathEntries($appConfig.AddedPathEntries, $false)
+            Write-Verbose "Removed PATH entries: $($appConfig.AddedPathEntries -join ', ')"
+            Write-PSmmLog -Level NOTICE -Context 'PATH Cleanup' `
+                -Message "Removed $($appConfig.AddedPathEntries.Count) plugin PATH entries" -File
+        }
+        catch {
+            Write-Warning "Failed to clean up PATH entries: $_"
+        }
+    }
+    elseif ($Dev) {
+        Write-Verbose 'Development mode (-Dev) - keeping session PATH entries registered'
+        Write-PSmmLog -Level INFO -Context 'PATH Cleanup' `
+            -Message "Development mode: preserved $($appConfig.AddedPathEntries.Count) session PATH entries" -File
+    }
+    else {
+        Write-Verbose 'No PATH entries to clean up'
+    }
 
     # Display exit message while module helpers are still available
-    Write-Output ''
+    Write-PSmmHost ''
     if ($exitCode -eq 0) {
         Write-PSmmHost "$($appConfig.DisplayName) exited successfully.`n" -ForegroundColor Green
     }

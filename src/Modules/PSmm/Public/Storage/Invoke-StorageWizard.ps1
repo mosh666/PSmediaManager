@@ -46,10 +46,10 @@ function Invoke-StorageWizard {
     # Validate parameters
     if ($Mode -eq 'Edit') {
         if ([string]::IsNullOrWhiteSpace($GroupId)) {
-            throw "GroupId is required when Mode is 'Edit'"
+            throw [ValidationException]::new("GroupId is required when Mode is 'Edit'", "GroupId")
         }
         if (-not $Config.Storage.ContainsKey($GroupId)) {
-            throw "Storage group '$GroupId' not found in configuration"
+            throw [StorageException]::new("Storage group '$GroupId' not found in configuration", $GroupId)
         }
     }
 
@@ -380,7 +380,7 @@ function Invoke-StorageWizard {
         }
         Write-Information '' -InformationAction Continue
         $confirmText = if ($Mode -eq 'Edit') { 'Update storage configuration?' } else { 'Write storage configuration?' }
-        $confirm = Read-WizardInput "$confirmText (Y/N)"
+        $confirm = Read-WizardInput "$confirmText (y/N)"
         if ($confirm -notmatch '^(?i)y$') { return $false }
     }
 

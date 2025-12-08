@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 Describe 'Resolve-PluginCommandPath helper' {
@@ -58,7 +58,9 @@ Describe 'Resolve-PluginCommandPath helper' {
         $process = New-Object PSObject
         $process | Add-Member -MemberType ScriptMethod -Name TestCommand -Value { param($command) $false }
 
-        $resolved = Resolve-PluginCommandPath -Paths $paths -CommandName '7z' -DefaultCommand '7z' -Process $process
+        $fileSystem = [FileSystemService]::new()
+
+        $resolved = Resolve-PluginCommandPath -Paths $paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $fileSystem -Process $process
 
         $resolved | Should -Be $candidateExe
         $paths.Commands['7z'] | Should -Be $candidateExe
@@ -81,7 +83,9 @@ Describe 'Resolve-PluginCommandPath helper' {
         $process = New-Object PSObject
         $process | Add-Member -MemberType ScriptMethod -Name TestCommand -Value { param($command) $false }
 
-        $resolved = Resolve-PluginCommandPath -Paths $paths -CommandName '7z' -DefaultCommand '7z' -Process $process
+        $fileSystem = [FileSystemService]::new()
+
+        $resolved = Resolve-PluginCommandPath -Paths $paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $fileSystem -Process $process
 
         $resolved | Should -Be $cachedExe
     }

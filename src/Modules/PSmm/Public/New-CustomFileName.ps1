@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Creates a customized filename with dynamic placeholders.
 

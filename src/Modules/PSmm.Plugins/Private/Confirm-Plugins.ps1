@@ -1,4 +1,4 @@
-﻿<#
+<#
  .SYNOPSIS
     Plugin management and validation functions for PSmediaManager.
 <#$
@@ -135,6 +135,10 @@ function Resolve-PluginCommandPath {
         [string]$DefaultCommand,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
@@ -150,7 +154,8 @@ function Resolve-PluginCommandPath {
     }
 
     $exeFilter = "$CommandName.exe"
-    $candidate = Get-ChildItem -LiteralPath $Paths.Root -Recurse -Filter $exeFilter -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $candidates = @($FileSystem.GetChildItem($Paths.Root, $exeFilter, 'File', $true))
+    $candidate = $candidates | Select-Object -First 1
 
     if ($candidate) {
         $resolvedPath = $candidate.FullName
@@ -158,7 +163,7 @@ function Resolve-PluginCommandPath {
         return $resolvedPath
     }
 
-    throw "Command '$CommandName' not found in PATH or under $($Paths.Root)"
+    throw [PluginRequirementException]::new("Command '$CommandName' not found in PATH or under $($Paths.Root)", $CommandName)
 }
 
 <#
@@ -167,6 +172,198 @@ function Resolve-PluginCommandPath {
 .DESCRIPTION
     Executes constructor in global scope where PSmm classes are defined via ScriptsToProcess.
 #>
+<#
+.SYNOPSIS
+    Registers plugin executables to PATH based on opt-in metadata.
+
+.DESCRIPTION
+    Iterates through all plugins with RegisterToPath=$true and adds their
+    executable directories to $env:PATH for the current session. Tracks
+    added paths in $Config.AddedPathEntries for later cleanup.
+
+.PARAMETER Config
+    Application configuration with Requirements.Plugins and AddedPathEntries.
+
+.PARAMETER Environment
+    Environment service for PATH manipulation.
+
+.PARAMETER PathProvider
+    Path provider service for path resolution.
+
+.PARAMETER FileSystem
+    File system service for path validation.
+#>
+function Register-PluginsToPATH {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Config,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
+    )
+
+    try {
+        Write-Verbose 'Registering plugin executables to PATH (opt-in only)'
+        Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
+            -Message 'Starting plugin PATH registration (opt-in only)' -Console -File
+
+        if (-not $Config.Requirements -or -not $Config.Requirements.Plugins) {
+            Write-Verbose 'No plugin requirements found in configuration'
+            Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
+                -Message 'No plugin requirements found in configuration' -Console -File
+            return
+        }
+
+        $pluginGroups = @($Config.Requirements.Plugins.GetEnumerator())
+        Write-Verbose "Found $($pluginGroups.Count) plugin groups"
+        Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
+            -Message "Found $($pluginGroups.Count) plugin groups to process" -Console -File
+
+        $registeredDirs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $pathsToRegister = [System.Collections.Generic.List[string]]::new()
+        # Always use Process scope only - Dev mode just skips cleanup at exit
+        $persistUserPath = $false
+
+        $existingPathEntries = $Environment.GetPathEntries()
+        $pathSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $existingPathEntries) {
+            $pathSet.Add($entry) | Out-Null
+        }
+
+        foreach ($group in $pluginGroups) {
+            try {
+                Write-Verbose "Processing plugin group: $($group.Name)"
+
+                $pluginEntries = @($group.Value.GetEnumerator())
+
+                foreach ($pluginEntry in $pluginEntries) {
+                    try {
+                        $pluginKey = $pluginEntry.Key
+                        $plugin = $pluginEntry.Value
+
+                        # Check RegisterToPath from the original Requirements data
+                        $requirementsPlugin = $Config.Requirements.Plugins[$group.Name][$pluginKey]
+                        if (-not $requirementsPlugin) {
+                            Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
+                                -Message "Could not find requirements data for $($plugin.Name) at path Plugins[$($group.Name)][$pluginKey]" -Console -File
+                            continue
+                        }
+
+                        $hasRegisterToPath = $requirementsPlugin.ContainsKey('RegisterToPath')
+
+                        # Skip if RegisterToPath is not explicitly set to $true
+                        if (-not $hasRegisterToPath) {
+                            Write-Verbose "Plugin $($plugin.Name) does not have RegisterToPath property - skipping"
+                            continue
+                        }
+                        if (-not $requirementsPlugin.RegisterToPath) {
+                            Write-Verbose "Plugin $($plugin.Name) has RegisterToPath=$($requirementsPlugin.RegisterToPath) - skipping"
+                            continue
+                        }
+
+                        Write-Verbose "Plugin $($plugin.Name) is marked for PATH registration"
+
+                        # Skip if plugin doesn't have State (not installed)
+                        $hasState = $requirementsPlugin.ContainsKey('State')
+                        if (-not $hasState) {
+                            Write-Verbose "Plugin $($plugin.Name) marked for PATH but not installed (no State property) - skipping"
+                            continue
+                        }
+
+                        # Resolve plugin installation directory
+                        $pluginRoot = $Config.Paths.App.Plugins.Root
+                        $pluginDirs = $FileSystem.GetChildItem($pluginRoot, $null, 'Directory') | Where-Object { $_.Name -match $plugin.Name }
+
+                        if (-not $pluginDirs) {
+                            Write-Verbose "Plugin $($plugin.Name) directory not found under $pluginRoot - skipping PATH registration"
+                            continue
+                        }
+
+                        $pluginDir = $pluginDirs | Select-Object -First 1
+                        $commandPath = if ($requirementsPlugin.CommandPath) { $requirementsPlugin.CommandPath } else { '' }
+                        $executableDir = if ($commandPath) {
+                            $PathProvider.CombinePath(@($pluginDir.FullName, $commandPath))
+                        } else {
+                            $pluginDir.FullName
+                        }
+
+                        if (-not $FileSystem.TestPath($executableDir)) {
+                            Write-Verbose "Executable directory not found: $executableDir - skipping PATH registration"
+                            continue
+                        }
+
+                        # Resolve to full path and add to PATH if not already present
+                        $resolvedDir = (Resolve-Path -LiteralPath $executableDir).Path
+
+                        if ($registeredDirs.Contains($resolvedDir)) {
+                            Write-Verbose "Already registered $resolvedDir to PATH in this session - skipping duplicate"
+                            continue
+                        }
+
+                        # Track for cleanup regardless of whether we add it now (store in config for access during shutdown)
+                        [System.Collections.ArrayList]$pathEntries = $Config.AddedPathEntries
+                        if (-not $pathEntries.Contains($resolvedDir)) {
+                            $pathEntries.Add($resolvedDir) | Out-Null
+                            $Config.AddedPathEntries = $pathEntries.ToArray()
+                        }
+
+                        if ($pathSet.Contains($resolvedDir)) {
+                            Write-Verbose "$resolvedDir already in PATH - tracked for cleanup"
+                            continue
+                        }
+
+                        $pathsToRegister.Add($resolvedDir)
+                        $pathSet.Add($resolvedDir) | Out-Null
+                        $registeredDirs.Add($resolvedDir) | Out-Null
+
+                        Write-Verbose "Queued $($plugin.Name) for PATH registration: $resolvedDir"
+                        Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
+                            -Message "Queued $($plugin.Name) for PATH registration: $resolvedDir" -Console -File
+                    }
+                    catch {
+                        Write-Verbose "Failed to register plugin $($plugin.Name) to PATH: $_"
+                        Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
+                            -Message "Failed to register plugin $($plugin.Name) to PATH: $_" -Console -File
+                    }
+                }
+            }
+            catch {
+                Write-Verbose "Failed to process plugin group $($group.Name): $_"
+                Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
+                    -Message "Failed to process plugin group $($group.Name): $_" -Console -File
+            }
+        }
+
+        if ($pathsToRegister.Count -gt 0) {
+            $Environment.AddPathEntries($pathsToRegister.ToArray(), $persistUserPath)
+            Write-Verbose "Registered $($pathsToRegister.Count) new PATH entries in batch"
+        }
+
+        if ($registeredDirs.Count -gt 0) {
+            Write-PSmmLog -Level NOTICE -Context 'Register-PluginsToPATH' `
+                -Message "Registered $($registeredDirs.Count) plugin(s) to PATH for current session" -Console -File
+        } else {
+            Write-Verbose 'No plugins opted in for PATH registration'
+        }
+    }
+    catch {
+        Write-PSmmLog -Level ERROR -Context 'Register-PluginsToPATH' `
+            -Message "Failed to register plugins to PATH: $_" -ErrorRecord $_ -Console -File
+        # Non-fatal - continue execution
+    }
+}
+
 function New-PSmmServiceInstance {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidGlobalVars', '', Justification = 'Temporary global variable is used to execute constructor in global scope where PSmm types are defined')]
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Low')]
@@ -190,7 +387,7 @@ function New-PSmmServiceInstance {
         Remove-Variable -Name __tempConstructor -Scope Global -ErrorAction SilentlyContinue
 
         if ($null -eq $instance) {
-            throw "Constructor returned null"
+            throw [ProcessException]::new("Constructor returned null for type instantiation")
         }
 
         return $instance
@@ -198,7 +395,8 @@ function New-PSmmServiceInstance {
     catch {
         $psmmInfo = Get-Module -Name 'PSmm'
         $psmmStatus = if ($psmmInfo) { "loaded v$($psmmInfo.Version)" } else { "not loaded" }
-        throw "Unable to instantiate [$TypeName]. PSmm module is $psmmStatus. Error: $_"
+        $ex = [ModuleLoadException]::new("Unable to instantiate [$TypeName]. PSmm module is $psmmStatus", $TypeName, $_.Exception)
+        throw $ex
     }
 }
 
@@ -248,6 +446,12 @@ function Confirm-Plugins {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
@@ -289,6 +493,25 @@ function Confirm-Plugins {
         # Iterate through plugin groups (a_GitEnv, b_ExifTool, etc.)
         $pluginGroups = $Run.App.Requirements.Plugins.GetEnumerator() | Sort-Object -Property Name
 
+        # Capture baseline plugin versions once before processing (for later health diff)
+        if (-not (Get-Variable -Name PSmm_PluginBaseline -Scope Script -ErrorAction SilentlyContinue)) {
+            $script:PSmm_PluginBaseline = @()
+            foreach ($baselineGroup in $pluginGroups) {
+                foreach ($baselinePlugin in $baselineGroup.Value.GetEnumerator()) {
+                    $state = $null
+                    if ($baselinePlugin.Value -and ($baselinePlugin.Value.PSObject.Properties.Name -contains 'State')) {
+                        $state = $baselinePlugin.Value.State
+                    }
+                    $script:PSmm_PluginBaseline += [pscustomobject]@{
+                        Name = $baselinePlugin.Value.Name
+                        Scope = $baselineGroup.Name
+                        InstalledVersion = if ($state) { $state.CurrentVersion } else { $null }
+                    }
+                }
+            }
+            Write-Verbose "Captured plugin baseline for health summary ($($script:PSmm_PluginBaseline.Count) plugins)"
+        }
+
         foreach ($pluginGroup in $pluginGroups) {
             $scopeName = $pluginGroup.Name.Substring(2)  # Remove prefix (e.g., "a_")
             Write-PSmmLog -Level NOTICE -Context "Confirm $scopeName" `
@@ -303,9 +526,13 @@ function Confirm-Plugins {
                     Config = $pluginEntry.Value
                 }
 
-                Invoke-PluginConfirmation -Config $Config -Plugin $plugin -Paths $paths -Run $Run -ScopeName $scopeName -UpdateMode $updateMode -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+                Invoke-PluginConfirmation -Config $Config -Plugin $plugin -Paths $paths -Run $Run -ScopeName $scopeName -UpdateMode $updateMode `
+                    -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
             }
         }
+
+        # Register plugin executables to PATH (opt-in via RegisterToPath metadata)
+        Register-PluginsToPATH -Config $Config -Environment $Environment -PathProvider $PathProvider -FileSystem $FileSystem
 
         # Cleanup temporary files
         #$tempPath = Join-Path -Path $paths._Temp -ChildPath '*'
@@ -399,11 +626,17 @@ function Invoke-PluginConfirmation {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
     if (-not ($Config | Get-Member -Name 'Paths' -ErrorAction SilentlyContinue)) {
-        throw 'Invoke-PluginConfirmation requires a configuration object exposing Paths; received incompatible type.'
+        throw [ValidationException]::new("Invoke-PluginConfirmation requires a configuration object exposing Paths; received incompatible type", "Config")
     }
 
     $pluginName = $Plugin.Config.Name
@@ -427,14 +660,16 @@ function Invoke-PluginConfirmation {
     if ([string]::IsNullOrEmpty($state.CurrentVersion)) {
         Write-PSmmLog -Level WARNING -Context "Check $pluginName" `
             -Message "$pluginName is not installed" -Console -File
-        Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+        Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto `
+            -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
     }
     else {
         Write-PSmmLog -Level SUCCESS -Context "Check $pluginName" `
             -Message "$pluginName is installed: $($state.CurrentVersion)" -Console -File
 
         if ($UpdateMode) {
-            $updateAvailable = Request-PluginUpdate -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+            $updateAvailable = Request-PluginUpdate -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto `
+                -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
 
             if ($updateAvailable) {
                 Write-PSmmLog -Level INFO -Context "Check $pluginName" `
@@ -536,7 +771,7 @@ function Get-InstallState {
 
         if (Test-PluginFunction -Name $versionFunctionName) {
             Write-Verbose "Using custom version detection function: $versionFunctionName"
-            $state.CurrentVersion = & $versionFunctionName -Plugin $Plugin -Paths $Paths
+            $state.CurrentVersion = & $versionFunctionName -Plugin $Plugin -Paths $Paths -FileSystem $FileSystem
         }
         elseif ($installPath) {
             # Fall back to directory name as version
@@ -607,18 +842,23 @@ function Get-LatestDownloadUrl {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
     try {
         $pluginName = $Plugin.Config.Name
-        # Mark injected but unused parameters as intentionally unused for static analysis
-        $null = $FileSystem
-        $null = $Process
         $source = $Plugin.Config.Source
 
         # Ensure State bucket exists to store version metadata
-        if (-not $Plugin.ContainsKey('Config')) { throw "Plugin hashtable missing 'Config' key" }
+        if (-not $Plugin.ContainsKey('Config')) {
+            throw [PluginRequirementException]::new("Plugin hashtable missing required 'Config' key", "Plugin")
+        }
         if (-not $Plugin.Config.ContainsKey('State') -or $null -eq $Plugin.Config.State) {
             $Plugin.Config.State = @{}
         }
@@ -631,14 +871,15 @@ function Get-LatestDownloadUrl {
                 if ($null -eq $Token) {
                     Write-Verbose 'GitHub token not provided; proceeding unauthenticated'
                 }
-                $url = Get-LatestUrlFromGitHub -Plugin $Plugin -Token $Token -Http $Http -Crypto $Crypto
+                $url = Get-LatestUrlFromGitHub -Plugin $Plugin -Token $Token -Http $Http -Crypto $Crypto `
+                    -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
             }
             'Url' {
                 $urlFunctionName = "Get-LatestUrlFromUrl-$pluginName"
 
                 if (Test-PluginFunction -Name $urlFunctionName) {
                     Write-PSmmLog -Level INFO -Context "Check $pluginName" -Message "Using custom URL function: $urlFunctionName" -Console -File
-                    $url = & $urlFunctionName -Plugin $Plugin -Paths $Paths
+                    $url = & $urlFunctionName -Plugin $Plugin -Paths $Paths -FileSystem $FileSystem
                 }
                 else {
                     Write-Warning "No custom URL function found: $urlFunctionName"
@@ -807,14 +1048,18 @@ function Invoke-Installer {
                 Write-Verbose 'Launching MSI installer...'
                 $result = $Process.StartProcess('msiexec.exe', @('/i', "`"$InstallerPath`""))
                 if (-not $result.Success) {
-                    throw "MSI installer failed with exit code: $($result.ExitCode)"
+                    $ex = [ProcessException]::new("MSI installer failed", "msiexec.exe")
+                    $ex.SetExitCode($result.ExitCode)
+                    throw $ex
                 }
             }
             '.exe' {
                 Write-Verbose 'Launching EXE installer...'
                 $result = $Process.StartProcess($InstallerPath, @())
                 if (-not $result.Success) {
-                    throw "EXE installer failed with exit code: $($result.ExitCode)"
+                    $ex = [ProcessException]::new("EXE installer failed", [System.IO.Path]::GetFileNameWithoutExtension($InstallerPath))
+                    $ex.SetExitCode($result.ExitCode)
+                    throw $ex
                 }
             }
             '.zip' {
@@ -840,28 +1085,30 @@ function Invoke-Installer {
                 }
 
                 try {
-                    $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -Process $Process
+                    $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
                 }
                 catch {
-                    throw "7z is required to extract .7z archives: $($_)"
+                    throw [PluginRequirementException]::new("7z is required to extract .7z archives: $($_)", "7z", $_.Exception)
                 }
 
                 # First, test archive integrity for clearer diagnostics (let PowerShell handle quoting)
                 $testResult = $Process.InvokeCommand($sevenZipCmd, @('t', $InstallerPath))
                 if (-not $testResult.Success) {
-                    $details = if ($null -ne $testResult.Output) { ($testResult.Output | Out-String).Trim() } else { '' }
-                    throw "7z archive test failed (exit $($testResult.ExitCode)). $details"
+                    $ex = [ProcessException]::new("7z archive test failed", "7z", $_.Exception)
+                    $ex.SetExitCode($testResult.ExitCode)
+                    throw $ex
                 }
 
                 # Extract archive
                 $result = $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$extractPath", '-y'))
                 if (-not $result.Success) {
-                    $details = if ($null -ne $result.Output) { ($result.Output | Out-String).Trim() } else { '' }
-                    throw "7z extraction failed with exit code: $($result.ExitCode). $details"
+                    $ex = [ProcessException]::new("7z extraction failed", "7z", $_.Exception)
+                    $ex.SetExitCode($result.ExitCode)
+                    throw $ex
                 }
             }
             default {
-                throw "Unsupported installer type: $extension"
+                throw [PluginRequirementException]::new("Unsupported installer type: $extension", "Installer")
             }
         }
 
@@ -926,6 +1173,12 @@ function Install-Plugin {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
@@ -941,19 +1194,22 @@ function Install-Plugin {
                 $Config.Secrets.GitHubToken -is [System.Security.SecureString]) {
                 $token = $Config.Secrets.GitHubToken
             }
-            else {
-                $tokenString = $Config.Secrets.GetGitHubToken()
-                if ($tokenString) {
-                    $secure = New-Object System.Security.SecureString
-                    foreach ($ch in $tokenString.ToCharArray()) { $secure.AppendChar($ch) }
-                    $secure.MakeReadOnly()
-                    $token = $secure
-                }
+        }
+
+        # If token not available from config, fallback to system vault
+        if ($null -eq $token -and (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue)) {
+            try {
+                $token = Get-SystemSecret -SecretType 'GitHub-Token' `
+                    -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process -Optional
+            }
+            catch {
+                Write-Verbose "Could not retrieve GitHub token from system vault: $_"
             }
         }
 
         # Get latest download URL
-        $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+        $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto `
+            -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
 
         if (-not $url) {
             Write-Warning "Could not determine download URL for: $pluginName"
@@ -1041,6 +1297,12 @@ function Request-PluginUpdate {
         $FileSystem,
 
         [Parameter(Mandatory)]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
         $Process
     )
 
@@ -1055,19 +1317,22 @@ function Request-PluginUpdate {
                 $Config.Secrets.GitHubToken -is [System.Security.SecureString]) {
                 $token = $Config.Secrets.GitHubToken
             }
-            else {
-                $tokenString = $Config.Secrets.GetGitHubToken()
-                if ($tokenString) {
-                    $secure = New-Object System.Security.SecureString
-                    foreach ($ch in $tokenString.ToCharArray()) { $secure.AppendChar($ch) }
-                    $secure.MakeReadOnly()
-                    $token = $secure
-                }
+        }
+
+        # If token not available from config, fallback to system vault
+        if ($null -eq $token -and (Get-Command -Name Get-SystemSecret -ErrorAction SilentlyContinue)) {
+            try {
+                $token = Get-SystemSecret -SecretType 'GitHub-Token' `
+                    -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process -Optional
+            }
+            catch {
+                Write-Verbose "Could not retrieve GitHub token from system vault: $_"
             }
         }
 
         # Get latest version information
-        Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process | Out-Null
+        Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto `
+            -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process | Out-Null
 
         $currentVersion = $Plugin.Config.State.CurrentVersion
         $latestVersion = $Plugin.Config.State.LatestVersion
@@ -1169,7 +1434,8 @@ function Update-Plugin {
             }
 
             # Install new version
-            Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Process $Process
+            Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto `
+                -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
         }
         else {
             Write-PSmmLog -Level INFO -Context "Update $pluginName" `

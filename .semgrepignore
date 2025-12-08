@@ -1,0 +1,16 @@
+# Ignore test harness, coverage artifacts, and generated files
+tests/**
+*.coverage-*.json
+*.coverage-*.xml
+.codacy/**
+_tmp/**
+
+# Dependency caches
+node_modules/**
+**/.venv/**
+**/.pytest_cache/**
+
+# Logs and temp
+**/*.log
+**/.DS_Store
+**/Thumbs.db

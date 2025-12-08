@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 [CmdletBinding()]
 param(
     [switch]$CodeCoverage,
@@ -46,6 +46,25 @@ function Get-DefaultBaseline {
     }
 }
 
+function Test-IsCiContext {
+    return [string]::Equals($env:GITHUB_ACTIONS, 'true', [System.StringComparison]::OrdinalIgnoreCase) -or
+        [string]::Equals($env:MEDIA_MANAGER_FORCE_EXIT, '1', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Test-ShouldPauseForExit {
+    param([switch]$CiContext)
+
+    if ($CiContext) {
+        return $false
+    }
+
+    if ($script:SkipReadKeyPreconfigured) {
+        return -not [string]::Equals($script:OriginalSkipReadKeyPreference, '1', [System.StringComparison]::OrdinalIgnoreCase)
+    }
+
+    return $true
+}
+
 function Complete-PesterRun {
     param(
         [Parameter(Mandatory)][int]$ExitCode,
@@ -62,6 +81,9 @@ function Complete-PesterRun {
 
     if ($CiContext) {
         Write-Verbose "CI context detected. Ending process with exit code $ExitCode"
+        if (Test-ShouldPauseForExit -CiContext:$CiContext) {
+            [void](Read-Host 'Press Enter to exit the test session')
+        }
         [System.Environment]::Exit($ExitCode)
     }
 
@@ -69,6 +91,9 @@ function Complete-PesterRun {
         $Host.SetShouldExit($ExitCode)
     }
 
+    if (Test-ShouldPauseForExit -CiContext:$CiContext) {
+        [void](Read-Host 'Press Enter to exit the test session')
+    }
     [System.Environment]::Exit($ExitCode)
 }
 
@@ -136,8 +161,15 @@ if ([string]::IsNullOrWhiteSpace($CoverageTarget)) {
 
 Write-Host "DEBUG TestPath: <$TestPath>"
 Write-Host "DEBUG CoverageTarget: <$CoverageTarget>"
+
+$script:OriginalSkipReadKeyPreference = $env:MEDIA_MANAGER_SKIP_READKEY
+$script:SkipReadKeyPreconfigured = -not [string]::IsNullOrWhiteSpace($script:OriginalSkipReadKeyPreference)
+
 $env:MEDIA_MANAGER_TEST_MODE = '1'
-$env:MEDIA_MANAGER_SKIP_READKEY = '1'
+if (-not $script:SkipReadKeyPreconfigured) {
+    # Default to skipping interactive ReadKey prompts inside modules under test.
+    $env:MEDIA_MANAGER_SKIP_READKEY = '1'
+}
 
 Write-Verbose "Using test path: $TestPath"
 Write-Verbose "Using coverage target: $CoverageTarget"
@@ -151,11 +183,14 @@ if ($WithPSScriptAnalyzer) {
     }
     Write-Host "Running PSScriptAnalyzer..."
     try {
-        & $analyzeScript -TargetPath (Join-Path -Path $repoRoot -ChildPath 'src') -SettingsFile (Join-Path -Path $scriptDirectory -ChildPath 'PSScriptAnalyzer.Settings.psd1')
+        & $analyzeScript -TargetPath (Join-Path -Path $repoRoot -ChildPath '') -SettingsFile (Join-Path -Path $scriptDirectory -ChildPath 'PSScriptAnalyzer.Settings.psd1')
     }
     catch {
         Write-Host 'PSScriptAnalyzer reported issues.' -ForegroundColor Red
         [Console]::Error.WriteLine($_.Exception.Message)
+        if (Test-ShouldPauseForExit -CiContext:(Test-IsCiContext)) {
+            [void](Read-Host 'Press Enter to exit the test session')
+        }
         [System.Environment]::Exit(1)
     }
 }
@@ -269,8 +304,18 @@ if ($CodeCoverage) {
             # Console/UI rendering helpers
             (Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm/Public/Storage/Show-StorageInfo.ps1')
         )
+        # Exclude entire public UI surfaces and other interactive-heavy entrypoints from unit coverage
+        $excludeDirs = @(
+            (Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm.UI/Public')
+            (Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm.Plugins/Public')
+            (Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm.Projects/Public')
+            (Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm/Public/Bootstrap')
+        )
         foreach ($f in $excludeFiles) {
             if (Test-Path -Path $f) { $excludePaths += $f }
+        }
+        foreach ($d in $excludeDirs) {
+            if (Test-Path -Path $d) { $excludePaths += $d }
         }
     }
     catch {
@@ -425,8 +470,7 @@ if ($CodeCoverage) {
     }
 }
 
-$ciContext = [string]::Equals($env:GITHUB_ACTIONS, 'true', [System.StringComparison]::OrdinalIgnoreCase) -or
-    [string]::Equals($env:MEDIA_MANAGER_FORCE_EXIT, '1', [System.StringComparison]::OrdinalIgnoreCase)
+$ciContext = Test-IsCiContext
 
 $executionState = if ($result -and $result.PSObject.Properties.Name -contains 'FailedCount' -and $result.FailedCount -gt 0) {
     'TestsFailed'
@@ -462,7 +506,9 @@ $completionResult = Complete-PesterRun -ExitCode $exitCode -Result $result -Pass
 if ($PassThru) {
     $summary = New-PesterRunSummary -Result $completionResult -ExitCode $exitCode
     $summary
-        [void](Read-Host 'Press Enter to exit the test session')
+        if (Test-ShouldPauseForExit -CiContext:$ciContext) {
+            [void](Read-Host 'Press Enter to exit the test session')
+        }
         [System.Environment]::exit($exitCode)
 }
 

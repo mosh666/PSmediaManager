@@ -8,6 +8,11 @@ Set-StrictMode -Version Latest
 .DESCRIPTION
     Contains functions to display various UI components of the PSmediaManager application,
     including headers, footers, and menu options.
+
+    Uses Write-Host for UI rendering because:
+    - UI output must go directly to console, not pipeline (prevents blank line artifacts)
+    - Interactive menu operations require direct host communication
+    - PSAvoidUsingWriteHost is intentionally used for this purpose
 #>
 
 Set-StrictMode -Version Latest
@@ -130,7 +135,7 @@ function Show-Header {
 
     # Display current project information if available and ShowProject is enabled
     if ($ShowProject -and $Config.Projects.ContainsKey('Current') -and $Config.Projects.Current.ContainsKey('Name')) {
-        Write-Output ''
+        Write-PSmmHost ''
 
         # Get project name
         $CurrentProjectName = $Config.Projects.Current.Name
@@ -213,7 +218,7 @@ function Show-Header {
     }
     elseif (-not [string]::IsNullOrWhiteSpace($ProjectName)) {
         # Fallback to legacy parameter if no current project is set
-        Write-Output ''
+        Write-PSmmHost ''
         $TitleColumns = @(
             @{
                 Text = "$($Title): $ProjectName"
@@ -294,12 +299,14 @@ function Show-MenuMain {
     )    if ($Config.Parameters.Debug -or $Config.Parameters.Dev) {
         Write-Verbose '[UI] Show-MenuMain starting diagnostics...'
         Write-Verbose ("[UI] Storage groups present: {0}" -f ($Config.Storage.Keys -join ', '))
-        if ($Config.Projects.Registry) {
+        if ($Config.Projects -is [hashtable] -and $Config.Projects.ContainsKey('Registry') -and $null -ne $Config.Projects.Registry) {
             $hasRegMaster = ($Config.Projects.Registry -is [hashtable] -and $Config.Projects.Registry.ContainsKey('Master')) -or ($null -ne $Config.Projects.Registry.PSObject.Properties['Master'])
             if ($hasRegMaster -and $null -ne $Config.Projects.Registry.Master) {
                 $keys = if ($Config.Projects.Registry.Master -is [hashtable]) { $Config.Projects.Registry.Master.Keys } else { @() }
                 Write-Verbose ("[UI] Registry Master keys: {0}" -f ($keys -join ', '))
             }
+        } else {
+            Write-Verbose '[UI] Projects.Registry not present (skipping registry diagnostics)'
         }
     }
 
@@ -313,7 +320,7 @@ function Show-MenuMain {
         }
     )
     Format-UI -Columns $FilterOptionColumns -Width $Config.UI.Width -Config $Config
-    Write-Output ''
+    Write-PSmmHost ''
 
     # Display current filter status
     if (-not [string]::IsNullOrWhiteSpace($StorageGroup)) {
@@ -327,7 +334,7 @@ function Show-MenuMain {
             }
         )
         Format-UI -Columns $FilterColumns -Width $Config.UI.Width -Config $Config
-        Write-Output ''
+        Write-PSmmHost ''
     }
 
     # Action buttons
@@ -347,7 +354,7 @@ function Show-MenuMain {
 
     )
     Format-UI -Columns $Columns -Width $Config.UI.Width -Config $Config
-    Write-Output ''
+    Write-PSmmHost ''
 
     Write-PSmmLog -Level NOTICE -Context 'Show-Projects' -Message 'Load available projects' -File
     if ($null -eq $Projects) {
@@ -395,7 +402,7 @@ function Show-MenuMain {
                 }
             )
             Format-UI -Columns $StorageGroupColumns -Width $Config.UI.Width -Config $Config
-            Write-Output ''
+            Write-PSmmHost ''
         }
 
         # Collect all drives (Master and Backup) for this storage group
@@ -584,7 +591,7 @@ function Show-MenuMain {
             }
         }
 
-        Write-Output ''
+        Write-PSmmHost ''
     }
 }
 
@@ -781,7 +788,7 @@ function Show-UnifiedDrive {
         }
     )
     Format-UI -Columns $ProjectsColumns -Width $Config.UI.Width -Config $Config
-    Write-Output ''
+    Write-PSmmHost ''
 
     # Display projects
     $Count = 0
@@ -839,7 +846,7 @@ function Show-UnifiedDrive {
     }
 
     Write-PSmmLog -Level NOTICE -Context 'Show-UnifiedDrive' -Message "Displayed $Count projects for $DriveType : $DriveLabel" -File
-    Write-Output ''
+    Write-PSmmHost ''
 }
 
 #endregion ########## Main Menu ##########
@@ -864,20 +871,28 @@ function Show-Menu_Project {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [object]$Config
+        [object]$Config,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )    # Check for running processes
     $ProcMariaDB = $null
     $ProcDigiKam = $null
 
     if ($Config.Projects.ContainsKey('Current')) {
         if ($Config.Projects.Current.ContainsKey('Databases')) {
-            $ProcMariaDB = Get-Process -Name mariadbd -ErrorAction SilentlyContinue |
-                Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+            $allMariaDB = $Process.GetProcess('mariadbd')
+            if ($null -ne $allMariaDB) {
+                $ProcMariaDB = $allMariaDB | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+            }
         }
 
         if ($Config.Projects.Current.ContainsKey('Config')) {
-            $ProcDigiKam = Get-Process -Name digikam -ErrorAction SilentlyContinue |
-                Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+            $allDigiKam = $Process.GetProcess('digikam')
+            if ($null -ne $allDigiKam) {
+                $ProcDigiKam = $allDigiKam | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+            }
         }
     }
 
@@ -1076,7 +1091,8 @@ function Show-Menu_SysInfo {
         [object]$Config
     )    $StorageColumns = @(
         @{
-            Text = '[1] TODO: Show Storage'
+            Text = '[1] Show Storage Information'
+                        TextColor = $Config.UI.ANSI.FG.Info
             Width = $Config.UI.Width
             Alignment = 'l'
         }
@@ -1085,7 +1101,8 @@ function Show-Menu_SysInfo {
 
     $ConfigColumns = @(
         @{
-            Text = '[2] TODO: Show runtime config'
+            Text = '[2] Show Runtime Configuration'
+                        TextColor = $Config.UI.ANSI.FG.Info
             Width = $Config.UI.Width
             Alignment = 'l'
         }

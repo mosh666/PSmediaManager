@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 #Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.5' }
 
 Describe 'Clear-PSmmProjectRegistry' {
@@ -30,15 +30,12 @@ Describe 'Clear-PSmmProjectRegistry' {
     }
     Context 'Registry clearing' {
         It 'Should clear existing project registry' {
-            $Config = @{
-                Projects = @{
-                    Registry = @{
-                        Master = @{ 'Project1' = 'Path1' }
-                        Backup = @{ 'Project2' = 'Path2' }
-                        LastScanned = Get-Date
-                        ProjectDirs = @{ 'Dir1' = 'Path1' }
-                    }
-                }
+            $Config = New-TestAppConfiguration
+            $Config.Projects.Registry = @{
+                Master = @{ 'Project1' = 'Path1' }
+                Backup = @{ 'Project2' = 'Path2' }
+                LastScanned = Get-Date
+                ProjectDirs = @{ 'Dir1' = 'Path1' }
             }
 
             Clear-PSmmProjectRegistry -Config $Config
@@ -50,37 +47,27 @@ Describe 'Clear-PSmmProjectRegistry' {
         }
 
         It 'Should handle Config without Registry' {
-            $Config = @{
-                Projects = @{}
-            }
-
+            $Config = New-TestAppConfiguration
+            $Config.Projects.Remove('Registry')
             { Clear-PSmmProjectRegistry -Config $Config } | Should -Not -Throw
         }
 
         It 'Should output verbose message when registry does not exist' {
-            $Config = @{
-                Projects = @{}
-            }
-
+            $Config = New-TestAppConfiguration
+            $Config.Projects.Remove('Registry')
             $verboseOutput = Clear-PSmmProjectRegistry -Config $Config -Verbose 4>&1
-
             $verboseOutput | Where-Object { $_ -match 'No project registry to clear' } | Should -Not -BeNullOrEmpty
         }
 
         It 'Should output verbose messages' {
-            $Config = @{
-                Projects = @{
-                    Registry = @{
-                        Master = @{}
-                        Backup = @{}
-                        LastScanned = Get-Date
-                        ProjectDirs = @{}
-                    }
-                }
+            $Config = New-TestAppConfiguration
+            $Config.Projects.Registry = @{
+                Master = @{}
+                Backup = @{}
+                LastScanned = Get-Date
+                ProjectDirs = @{}
             }
-
             $verboseOutput = Clear-PSmmProjectRegistry -Config $Config -Verbose 4>&1
-
             $verboseOutput | Should -Not -BeNullOrEmpty
             $verboseOutput | Where-Object { $_ -match 'Clearing project registry cache' } | Should -Not -BeNullOrEmpty
         }
@@ -88,17 +75,13 @@ Describe 'Clear-PSmmProjectRegistry' {
 
     Context 'Parameter validation' {
         It 'Should accept AppConfiguration parameter' {
-            $Config = @{
-                Projects = @{
-                    Registry = @{
-                        Master = @{}
-                        Backup = @{}
-                        LastScanned = Get-Date
-                        ProjectDirs = @{}
-                    }
-                }
+            $Config = New-TestAppConfiguration
+            $Config.Projects.Registry = @{
+                Master = @{}
+                Backup = @{}
+                LastScanned = Get-Date
+                ProjectDirs = @{}
             }
-
             { Clear-PSmmProjectRegistry -Config $Config } | Should -Not -Throw
         }
 
@@ -109,19 +92,14 @@ Describe 'Clear-PSmmProjectRegistry' {
 
     Context 'Registry structure' {
         It 'Should initialize all registry components' {
-            $Config = @{
-                Projects = @{
-                    Registry = @{
-                        Master = @{ 'Existing' = 'Data' }
-                        Backup = @{ 'Existing' = 'Data' }
-                        LastScanned = Get-Date
-                        ProjectDirs = @{ 'Existing' = 'Data' }
-                    }
-                }
+            $Config = New-TestAppConfiguration
+            $Config.Projects.Registry = @{
+                Master = @{ 'Existing' = 'Data' }
+                Backup = @{ 'Existing' = 'Data' }
+                LastScanned = Get-Date
+                ProjectDirs = @{ 'Existing' = 'Data' }
             }
-
             Clear-PSmmProjectRegistry -Config $Config
-
             $Config.Projects.Registry.ContainsKey('Master') | Should -BeTrue
             $Config.Projects.Registry.ContainsKey('Backup') | Should -BeTrue
             $Config.Projects.Registry.ContainsKey('LastScanned') | Should -BeTrue

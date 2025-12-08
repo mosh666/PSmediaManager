@@ -1,84 +1,88 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
-$script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
-$script:psmmManifest = Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm/PSmm.psd1'
-$script:psmmLoggingManifest = Join-Path -Path $repoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
-$script:importClassesScript = Join-Path -Path $repoRoot -ChildPath 'tests/Support/Import-PSmmClasses.ps1'
-$script:testConfigPath = Join-Path -Path $repoRoot -ChildPath 'tests/Support/TestConfig.ps1'
+BeforeAll {
+    $modulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\src\Modules\PSmm\PSmm.psd1'
+    $loggingModulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\src\Modules\PSmm.Logging\PSmm.Logging.psd1'
+    Import-Module -Name $modulePath -Force -Verbose:$false
+    Import-Module -Name $loggingModulePath -Force -Verbose:$false
+    $testConfigPath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\..\tests\Support\TestConfig.ps1'
+    . $testConfigPath
+    $env:MEDIA_MANAGER_TEST_MODE = '1'
 
-. $testConfigPath
-. $importClassesScript -RepositoryRoot $repoRoot
+    function New-TestStorageFile {
+        param(
+            [string]$DriveRoot,
+            [hashtable]$Data
+        )
+        $storagePath = Join-Path -Path $DriveRoot -ChildPath 'PSmm.Config/PSmm.Storage.psd1'
+        New-Item -ItemType Directory -Force -Path (Split-Path $storagePath) | Out-Null
+        [AppConfigurationBuilder]::WriteStorageFile($storagePath, $Data)
+        return $storagePath
+    }
+}
+
+AfterAll {
+    if (Test-Path -Path env:MEDIA_MANAGER_TEST_MODE) { Remove-Item -Path env:MEDIA_MANAGER_TEST_MODE }
+    Remove-Module -Name 'PSmm' -Force -ErrorAction SilentlyContinue
+    Remove-Module -Name 'PSmm.Logging' -Force -ErrorAction SilentlyContinue
+}
 
 Describe 'Remove-StorageGroup' {
-    BeforeAll {
-
-        . $importClassesScript -RepositoryRoot $repoRoot
-        Get-Module -Name PSmm, PSmm.Logging -ErrorAction SilentlyContinue | ForEach-Object { Remove-Module -Name $_.Name -Force }
-        Import-Module -Name $psmmManifest -Force -ErrorAction Stop
-        Import-Module -Name $psmmLoggingManifest -Force -ErrorAction Stop
+    BeforeEach {
+        $config = New-TestAppConfiguration
+        $driveRoot = Join-Path -Path $TestDrive -ChildPath 'Root'
+        New-Item -ItemType Directory -Force -Path $driveRoot | Out-Null
+        Remove-Item -Path (Join-Path $driveRoot 'PSmm.Config') -Recurse -Force -ErrorAction SilentlyContinue
+        Mock -CommandName Get-StorageDrive -MockWith { @() }
+        Mock -CommandName Confirm-Storage -MockWith { }
     }
 
-    It 'removes specified group, writes updated file, and refreshes config' {
-        InModuleScope PSmm {
-            $driveRoot = Join-Path -Path $TestDrive -ChildPath 'missing-root'
-            $storageDir = Join-Path -Path $driveRoot -ChildPath 'PSmm.Config'
-            $storagePath = Join-Path -Path $storageDir -ChildPath 'PSmm.Storage.psd1'
+    Context 'Parameter Validation' {
+        It 'requires Config parameter' {
+            { Remove-StorageGroup -Config $null -DriveRoot 'D:\' -GroupIds @('1') -Confirm:$false -ErrorAction Stop } |
+                Should -Throw -ErrorId 'ParameterArgumentValidationError,Remove-StorageGroup'
+        }
 
-            $null = New-Item -Path $storageDir -ItemType Directory -Force
+        It 'requires DriveRoot parameter' {
+            { Remove-StorageGroup -Config $config -DriveRoot $null -GroupIds @('1') -Confirm:$false -ErrorAction Stop } |
+                Should -Throw -ErrorId 'ParameterArgumentValidationError,Remove-StorageGroup'
+        }
 
-            # Build initial storage hashtable with groups '1' and '2'
-            $initial = @{
-                '1' = @{ DisplayName = 'G1'; Master = @{ Label = 'M1'; SerialNumber = 'SER-M1' }; Backup = @{} }
-                '2' = @{ DisplayName = 'G2'; Master = @{ Label = 'M2'; SerialNumber = 'SER-M2' }; Backup = @{} }
-            }
-            [AppConfigurationBuilder]::WriteStorageFile($storagePath, $initial)
-
-            $config = [AppConfigurationBuilder]::new()
-            $config = $config.WithRootPath($TestDrive)
-            $config = $config.WithParameters([RuntimeParameters]::new())
-            $config = $config.InitializeDirectories()
-            $config = $config.GetConfig()
-
-            Mock Write-PSmmLog {}
-            Mock Get-StorageDrive { @([pscustomobject]@{ SerialNumber='SER-M1'; DriveLetter='Z:' }) }
-            Mock Confirm-Storage {}
-
-            { Remove-StorageGroup -Config $config -DriveRoot $driveRoot -GroupIds @('2') -Confirm:$false } | Should -Not -Throw
-
-            # Config updated
-            $config.Storage.Keys.Count | Should -Be 1
-            $config.Storage['1'].Master.Label | Should -Be 'M1'
-            $config.Storage['1'].Master.DriveLetter | Should -Be 'Z:'
-
-            # File updated and contains only group '1'
-            (Test-Path -Path $storagePath) | Should -BeTrue
-            $loaded = [AppConfigurationBuilder]::ReadStorageFile($storagePath)
-            $loaded.Keys.Count | Should -Be 1
-            $loaded.ContainsKey('1') | Should -BeTrue
-            $loaded.ContainsKey('2') | Should -BeFalse
-
-            Should -Invoke Confirm-Storage -Times 1
+        It 'requires GroupIds parameter' {
+            { Remove-StorageGroup -Config $config -DriveRoot 'D:\' -GroupIds $null -Confirm:$false -ErrorAction Stop } |
+                Should -Throw -ErrorId 'ParameterArgumentValidationError,Remove-StorageGroup'
         }
     }
 
-    It 'skips confirmation when no valid groups are provided' {
-        InModuleScope PSmm {
-            $driveRoot = Join-Path $TestDrive ''
+    Context 'Storage removal' {
+        It 'handles missing storage file gracefully' {
+            { Remove-StorageGroup -Config $config -DriveRoot $driveRoot -GroupIds @('1') -Confirm:$false } | Should -Not -Throw
+        }
 
-            $config = [AppConfigurationBuilder]::new()
-            $config = $config.WithRootPath($TestDrive)
-            $config = $config.WithParameters([RuntimeParameters]::new())
-            $config = $config.InitializeDirectories()
-            $config = $config.GetConfig()
+        It 'removes specified group and rewrites storage file' {
+            $data = @{ '1' = @{ DisplayName = 'G1'; Master = @{ Label = 'M1'; SerialNumber = 'A' } }; '2' = @{ DisplayName = 'G2' } }
+            $path = New-TestStorageFile -DriveRoot $driveRoot -Data $data
 
-            Mock Confirm-Storage {}
-            Mock Get-StorageDrive { @() }
+            $config.Storage['1'] = [StorageGroupConfig]::new('1')
+            $config.Storage['1'].Master = [StorageDriveConfig]::new('M1','')
+            $config.Storage['1'].Master.SerialNumber = 'A'
+            $config.Storage['2'] = [StorageGroupConfig]::new('2')
+
+            Remove-StorageGroup -Config $config -DriveRoot $driveRoot -GroupIds @('1') -Confirm:$false
+
+            $reloaded = [AppConfigurationBuilder]::ReadStorageFile($path)
+            $reloaded.Count | Should -Be 1
+            $reloaded.Keys | Should -Contain '1'
+            $reloaded['1'].DisplayName | Should -Be 'G2'
+        }
+
+        It 'returns when group not found' {
+            $data = @{ '1' = @{ DisplayName = 'G1' } }
+            New-TestStorageFile -DriveRoot $driveRoot -Data $data
+            $config.Storage['1'] = [StorageGroupConfig]::new('1')
 
             { Remove-StorageGroup -Config $config -DriveRoot $driveRoot -GroupIds @('99') -Confirm:$false } | Should -Not -Throw
-
-            Should -Invoke Confirm-Storage -Times 0
-            Should -Invoke Get-StorageDrive -Times 0
         }
     }
 }

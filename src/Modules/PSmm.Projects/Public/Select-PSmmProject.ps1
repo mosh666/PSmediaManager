@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 function Select-PSmmProject {
@@ -40,7 +40,7 @@ function Select-PSmmProject {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,  # Uses [object] instead of [AppConfiguration] to avoid type resolution issues when module is loaded
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -49,9 +49,17 @@ function Select-PSmmProject {
         [Parameter()]
         [string]$SerialNumber = $null,
 
-        [Parameter()]
-        [IFileSystemService]$FileSystem = [FileSystemService]::new()
+        [Parameter(Mandatory)]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        $PathProvider
     )
+
+    # Validate Config is AppConfiguration type
+    if ($Config.GetType().Name -ne 'AppConfiguration') {
+        throw [ArgumentException]::new("Config parameter must be of type [AppConfiguration]", 'Config')
+    }
 
     # Build internal runtime projection for helpers
     $Run = @{
@@ -136,20 +144,20 @@ function Select-PSmmProject {
 
         if (-not $FoundProject) {
             $serialMsg = if (-not [string]::IsNullOrWhiteSpace($SerialNumber)) { " on disk with SerialNumber '$SerialNumber'" } else { "" }
-            throw "Project '$pName' not found in any storage location$serialMsg."
+            throw [ProjectException]::new("Project '$pName' not found in any storage location$serialMsg", "Project lookup failure")
         }
 
         # Get the actual storage drive information
         $storageDrive = Get-StorageDrive | Where-Object { $_.SerialNumber -eq $FoundProject.SerialNumber } | Select-Object -First 1
         if (-not $storageDrive) {
-            throw "Storage drive for project '$pName' not found or not mounted."
+            throw [StorageException]::new("Storage drive for project '$pName' not found or not mounted", $FoundProject.SerialNumber)
         }
 
         $projectBasePath = $FoundProject.Path
 
         # Verify project exists
         if (-not $FileSystem.TestPath($projectBasePath)) {
-            throw "Project '$pName' does not exist at: $projectBasePath"
+            throw [ProjectException]::new("Project '$pName' does not exist at: $projectBasePath", $projectBasePath)
         }
 
         # Initialize Current project structure if it doesn't exist
@@ -162,13 +170,13 @@ function Select-PSmmProject {
 
         # Update all project-specific paths
         $Run.Projects.Current.Path = $projectBasePath
-        $Run.Projects.Current.Config = Join-Path -Path $projectBasePath -ChildPath 'Config'
-        $Run.Projects.Current.Backup = Join-Path -Path $projectBasePath -ChildPath 'Backup'
-        $Run.Projects.Current.Databases = Join-Path -Path $projectBasePath -ChildPath 'Databases'
-        $Run.Projects.Current.Documents = Join-Path -Path $projectBasePath -ChildPath 'Documents'
-        $Run.Projects.Current.Libraries = Join-Path -Path $projectBasePath -ChildPath 'Libraries'
-        $Run.Projects.Current.Vault = Join-Path -Path $projectBasePath -ChildPath 'Vault'
-        $Run.Projects.Current.Log = Join-Path -Path $projectBasePath -ChildPath 'Log'
+        $Run.Projects.Current.Config = $PathProvider.CombinePath(@($projectBasePath,'Config'))
+        $Run.Projects.Current.Backup = $PathProvider.CombinePath(@($projectBasePath,'Backup'))
+        $Run.Projects.Current.Databases = $PathProvider.CombinePath(@($projectBasePath,'Databases'))
+        $Run.Projects.Current.Documents = $PathProvider.CombinePath(@($projectBasePath,'Documents'))
+        $Run.Projects.Current.Libraries = $PathProvider.CombinePath(@($projectBasePath,'Libraries'))
+        $Run.Projects.Current.Vault = $PathProvider.CombinePath(@($projectBasePath,'Vault'))
+        $Run.Projects.Current.Log = $PathProvider.CombinePath(@($projectBasePath,'Log'))
 
         # Store storage drive information
         $Run.Projects.Current.StorageDrive = @{

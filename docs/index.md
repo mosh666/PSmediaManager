@@ -1,19 +1,34 @@
 # PSmediaManager Documentation
 
+## Recent Updates
+
+- **v0.1.0 Released** (2025-12-08): First tagged release with complete dynamic versioning system
+- All modules now derive versions automatically from Git tags via GitVersion
+- CI automation and pre-commit hooks ensure version synchronization
+- Coverage baseline at 71.02% with comprehensive test suite (414 tests passing)
+
 Welcome to the PSmediaManager documentation portal. This site expands on the high-level README by providing deep dives into architecture, configuration, development workflow, and module responsibilities.
 
 ## Sections
 
 - [Installation](install.md)
 - [Configuration](configuration.md)
+- [Versioning](versioning.md) – Dynamic versioning with GitVersion
 - [Modules](modules.md)
 - [Development](development.md)
 - [Architecture](architecture.md)
+- [Deployment](deployment.md) – Container deployment, security hardening, CI/CD integration
+
+## What’s New (0.9.0)
+
+- Added `Get-PSmmHealth` for quick environment diagnostics (PowerShell version, modules, plugins, storage, vault). Supports `-Format` output.
+- Introduced early bootstrap services (`src/Core/BootstrapServices.ps1`) so core path/filesystem/environment/process helpers are available before module import.
+- Added Codacy and markdown lint configuration files (`.codacy.yml`, `.markdownlint.yml`) and documented upstream base image CVE suppressions in `.trivyignore`.
 
 ## Design Goals
 
 - Portable: zero mandatory global installs; side-by-side versioning.
-- Deterministic: asset patterns & explicit paths (no PATH pollution).
+- Deterministic: asset patterns & explicit paths with opt-in PATH registration (RegisterToPath adds User + Process entries, cleaned unless `-Dev`).
 - Inspectable: configuration export & redaction tooling.
 - Testable: comprehensive Pester coverage for core behaviors.
 - Extensible: plugin shell for external tooling & future integrations.

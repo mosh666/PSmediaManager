@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 #region ########## PUBLIC ##########
@@ -50,6 +50,9 @@ function Confirm-Storage {
         # Determine storage root from AppConfiguration
         $storageRoot = $Config.Storage
         $availableDrives = Get-StorageDrive
+        if ($null -eq $availableDrives) {
+            $availableDrives = @()
+        }
 
         if ($null -eq $storageRoot -or $storageRoot.Count -eq 0) {
             Write-PSmmLog -Level WARNING -Context 'Confirm-Storage' -Message 'No storage groups configured' -Console -File

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     System secret management using KeePassXC.
 
@@ -43,10 +43,8 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
-# Ensure module-scoped cache exists
-if (-not (Get-Variable -Name _VaultMasterPasswordCache -Scope Script -ErrorAction SilentlyContinue)) {
-    $script:_VaultMasterPasswordCache = $null
-}
+# Note: $script:_VaultMasterPasswordCache is declared in Initialize-SystemVault.ps1
+# Both files are dot-sourced into PSmm module and share the same module scope.
 
 function Get-KeePassCliCandidatePaths {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Returns multiple candidate paths; plural noun is intentional')]
@@ -54,19 +52,34 @@ function Get-KeePassCliCandidatePaths {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [string]$VaultPath
+        [string]$VaultPath,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider
     )
 
     $paths = [System.Collections.Generic.List[string]]::new()
 
     $programRoots = @()
-    if ($env:ProgramFiles) { $programRoots += $env:ProgramFiles }
-    if (${env:ProgramFiles(x86)}) { $programRoots += ${env:ProgramFiles(x86)} }
-    if ($env:LOCALAPPDATA) { $programRoots += (Join-Path -Path $env:LOCALAPPDATA -ChildPath 'Programs') }
+    $progFiles = $Environment.GetVariable('ProgramFiles')
+    if ($progFiles) { $programRoots += $progFiles }
+    $progFilesX86 = $Environment.GetVariable('ProgramFiles(x86)')
+    if ($progFilesX86) { $programRoots += $progFilesX86 }
+    $localAppData = $Environment.GetVariable('LOCALAPPDATA')
+    if ($localAppData) { $programRoots += $PathProvider.CombinePath(@($localAppData, 'Programs')) }
 
     foreach ($root in $programRoots | Select-Object -Unique) {
-        $candidate = Join-Path -Path $root -ChildPath 'KeePassXC'
-        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+        $candidate = $PathProvider.CombinePath(@($root, 'KeePassXC'))
+        if ($candidate -and $FileSystem.TestPath($candidate)) {
             $paths.Add((Resolve-Path -LiteralPath $candidate).Path)
         }
     }
@@ -74,19 +87,19 @@ function Get-KeePassCliCandidatePaths {
     $vaultRoot = Split-Path -Path $VaultPath -Parent
     $portableRootCandidates = @()
     if ($vaultRoot) {
-        $portableRootCandidates += (Join-Path -Path $vaultRoot -ChildPath 'PSmm.Plugins')
-        $portableRootCandidates += (Join-Path -Path $vaultRoot -ChildPath 'Plugins')
-        $portableRootCandidates += (Join-Path -Path $vaultRoot -ChildPath 'PSmediaManager\Plugins')
+        $portableRootCandidates += $PathProvider.CombinePath(@($vaultRoot, 'PSmm.Plugins'))
+        $portableRootCandidates += $PathProvider.CombinePath(@($vaultRoot, 'Plugins'))
+        $portableRootCandidates += $PathProvider.CombinePath(@($vaultRoot, 'PSmediaManager', 'Plugins'))
     }
 
     foreach ($portableRoot in ($portableRootCandidates | Select-Object -Unique)) {
-        if (-not (Test-Path -LiteralPath $portableRoot)) {
+        if (-not $FileSystem.TestPath($portableRoot)) {
             continue
         }
 
         try {
-            Get-ChildItem -Path $portableRoot -Directory -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -match 'KeePassXC' } |
+            $items = $FileSystem.GetChildItem($portableRoot, $null, 'Directory')
+            $items | Where-Object { $_.Name -match 'KeePassXC' } |
                 ForEach-Object { $paths.Add($_.FullName) }
         }
         catch {
@@ -103,7 +116,23 @@ function Resolve-KeePassCliCommand {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [string]$VaultPath
+        [string]$VaultPath,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
 
     $result = [ordered]@{
@@ -112,13 +141,12 @@ function Resolve-KeePassCliCommand {
         ResolvedExecutable = $null
     }
 
-    $cli = Get-Command 'keepassxc-cli.exe' -ErrorAction SilentlyContinue
-    if ($cli) {
-        $result.Command = $cli
+    if ($Process.TestCommand('keepassxc-cli.exe')) {
+        $result.Command = 'keepassxc-cli.exe'
         return [pscustomobject]$result
     }
 
-    $candidatePaths = Get-KeePassCliCandidatePaths -VaultPath $VaultPath
+    $candidatePaths = Get-KeePassCliCandidatePaths -VaultPath $VaultPath -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider
     $result.CandidatePaths = $candidatePaths
 
     if (-not $candidatePaths) {
@@ -128,8 +156,10 @@ function Resolve-KeePassCliCommand {
     $exeCandidates = @()
     foreach ($base in $candidatePaths) {
         try {
-            $exeCandidates += Get-ChildItem -Path $base -Filter 'keepassxc-cli.exe' -Recurse -ErrorAction SilentlyContinue |
-                Select-Object -ExpandProperty FullName
+            $items = $FileSystem.GetChildItem($base, 'keepassxc-cli.exe', $null)
+            if ($items) {
+                $exeCandidates += $items | Select-Object -ExpandProperty FullName
+            }
         }
         catch {
             Write-Verbose "Failed to inspect KeePassXC path $base : $_"
@@ -140,12 +170,33 @@ function Resolve-KeePassCliCommand {
     if ($resolvedCli) {
         $resolvedDir = Split-Path -Parent $resolvedCli
         Write-Verbose "Resolved keepassxc-cli.exe at: $resolvedCli"
-        if ($env:PATH -notlike "*${resolvedDir}*") {
-            $env:PATH = "$resolvedDir;$env:PATH"
+        $currentPath = $Environment.GetVariable('PATH')
+        if ($currentPath -notlike "*${resolvedDir}*") {
+            $Environment.AddPathEntry($resolvedDir, $false)
             Write-Verbose 'Added KeePassXC directory to PATH for current session.'
+
+            # Track in config if available (for centralized cleanup)
+            if (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
+                try {
+                    $config = Get-AppConfiguration
+                    if ($config -and $config.PSObject.Properties.Name -contains 'AddedPathEntries') {
+                        if ($config.AddedPathEntries -notcontains $resolvedDir) {
+                            [System.Collections.ArrayList]$pathEntries = $config.AddedPathEntries
+                            $pathEntries.Add($resolvedDir) | Out-Null
+                            $config.AddedPathEntries = $pathEntries.ToArray()
+                            Write-Verbose "Tracked KeePassXC PATH entry for cleanup: $resolvedDir"
+                        }
+                    }
+                }
+                catch {
+                    Write-Verbose "Could not track PATH entry in config: $_"
+                }
+            }
         }
         $result.ResolvedExecutable = $resolvedCli
-        $result.Command = Get-Command 'keepassxc-cli.exe' -ErrorAction SilentlyContinue
+        if ($Process.TestCommand('keepassxc-cli.exe')) {
+            $result.Command = 'keepassxc-cli.exe'
+        }
     }
 
     return [pscustomobject]$result
@@ -181,10 +232,50 @@ function Get-SystemSecret {
         [switch]$AsPlainText,
 
         [Parameter()]
-        [string]$VaultPath = 'd:\PSmm.Vault'
+        [string]$VaultPath,
+
+        [Parameter()]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter()]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter()]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter()]
+        [ValidateNotNull()]
+        $Process,
+
+        [Parameter()]
+        [switch]$Optional
     )
 
     try {
+        # Resolve vault path from parameter, environment, or app configuration to avoid hardcoded literals
+        if (-not $VaultPath -or [string]::IsNullOrWhiteSpace($VaultPath)) {
+            if ($env:PSMM_VAULT_PATH) {
+                $VaultPath = $env:PSMM_VAULT_PATH
+            }
+            elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
+                    try {
+                        $VaultPath = (Get-AppConfiguration).Paths.App.Vault
+                    }
+                    catch {
+                        Write-Verbose "Could not retrieve vault path from app configuration: $_"
+                    }
+            }
+            if (-not $VaultPath) {
+                if ($Optional) {
+                    Write-Verbose 'VaultPath not set; optional secret retrieval returning null.'
+                    return $null
+                }
+                throw 'VaultPath is not set. Provide -VaultPath or set PSMM_VAULT_PATH.'
+            }
+        }
         Write-Verbose "Retrieving system secret: $SecretType"
 
         # Define KeePass entry mapping
@@ -195,24 +286,31 @@ function Get-SystemSecret {
         }
 
         $entry = $entryMap[$SecretType]
-        $dbPath = Join-Path $VaultPath 'PSmm_System.kdbx'
+        $dbPath = $PathProvider.CombinePath(@($VaultPath, 'PSmm_System.kdbx'))
 
         # Check if KeePass database exists
-        if (-not (Test-Path $dbPath)) {
+        if (-not $FileSystem.TestPath($dbPath)) {
             $errorMsg = "KeePass database not found: $dbPath. Use Initialize-SystemVault to create it."
-            Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' `
-                -Message $errorMsg -Console -File
+            if ($Optional) {
+                Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
+                return $null
+            }
+            Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
             throw $errorMsg
         }
 
         Write-Verbose "Retrieving from KeePassXC database: $dbPath"
 
-        $cliResolution = Resolve-KeePassCliCommand -VaultPath $VaultPath
+        $cliResolution = Resolve-KeePassCliCommand -VaultPath $VaultPath -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
         $cli = $cliResolution.Command
 
         if (-not $cli) {
             $searched = if ($cliResolution.CandidatePaths) { $cliResolution.CandidatePaths -join ', ' } else { 'No candidate directories discovered' }
             $errorMsg = "keepassxc-cli.exe not found. Install KeePassXC or place the portable plugins folder so the CLI can be auto-resolved. Searched: $searched"
+            if ($Optional) {
+                Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
+                return $null
+            }
             Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
             throw $errorMsg
         }
@@ -224,14 +322,28 @@ function Get-SystemSecret {
         # Resolve from cache if present
         $masterPw = $script:_VaultMasterPasswordCache
         if (-not $masterPw) {
-            Write-PSmmHost "Enter vault master password (input hidden):" -ForegroundColor Yellow
-            # Prompt user explicitly (KeePassXC would otherwise prompt without context)
-            $masterPw = Read-Host 'Vault Master Password' -AsSecureString
-            # Offer to cache for this session
-            $cacheAns = Read-Host 'Cache this master password for this session? [Y/n]'
-            if ([string]::IsNullOrWhiteSpace($cacheAns) -or $cacheAns.Trim().ToLower() -eq 'y') {
-                $script:_VaultMasterPasswordCache = $masterPw
-                Write-Verbose 'Vault master password cached for this session.'
+            try {
+                Write-PSmmHost "Enter vault master password (input hidden):" -ForegroundColor Yellow
+                # Prompt user explicitly (KeePassXC would otherwise prompt without context)
+                # Wrapped in try-catch to handle console mode initialization errors (e.g., Win32 0x57)
+                $masterPw = Read-Host 'Vault Master Password' -AsSecureString -ErrorAction Stop
+                # Offer to cache for this session
+                $cacheAns = Read-Host 'Cache this master password for this session? [Y/n]' -ErrorAction Stop
+                if ([string]::IsNullOrWhiteSpace($cacheAns) -or $cacheAns.Trim().ToLower() -eq 'y') {
+                    $script:_VaultMasterPasswordCache = $masterPw
+                    Write-Verbose 'Vault master password cached for this session.'
+                }
+            }
+            catch {
+                $readHostError = $_
+                $errorMsg = "Failed to read vault master password from console: $($readHostError.Message)"
+                if ($Optional) {
+                    Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
+                    Write-Verbose "Skipping vault access because -Optional was specified and console input failed."
+                    return $null
+                }
+                # If console is unavailable and secret is mandatory, throw the error
+                throw "Cannot prompt for vault master password due to console mode error: $($readHostError.Message)"
             }
         }
         $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($masterPw)
@@ -241,19 +353,51 @@ function Get-SystemSecret {
         $tmpPw = [System.IO.Path]::GetTempFileName()
         $tmpOut = [System.IO.Path]::GetTempFileName()
         $tmpErr = [System.IO.Path]::GetTempFileName()
+        $proc = $null
         try {
+            # Resolve KeePassXC CLI path and write master password to temp file for stdin redirection
             [System.IO.File]::WriteAllText($tmpPw, "$plainMaster`n", [System.Text.Encoding]::ASCII)
-            $proc = Start-Process -FilePath 'keepassxc-cli.exe' -ArgumentList 'show', '-s', '-a', 'Password', $dbPath, $entry -NoNewWindow -Wait -PassThru -RedirectStandardInput $tmpPw -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr -ErrorAction Stop
+
+            # Use Start-Process so we can redirect stdin/stdout/stderr to files
+            # Wrapped in try-catch to handle console mode or process execution errors
+            $proc = Start-Process -FilePath $cli `
+                -ArgumentList 'show','-s','-a','Password',$dbPath,$entry `
+                -NoNewWindow -Wait -PassThru `
+                -RedirectStandardInput $tmpPw `
+                -RedirectStandardOutput $tmpOut `
+                -RedirectStandardError $tmpErr `
+                -ErrorAction Stop
+
             $secretValue = ''
-            if ($proc.ExitCode -eq 0 -and (Test-Path $tmpOut)) {
-                $secretValue = (Get-Content -Path $tmpOut -Raw -ErrorAction SilentlyContinue).Trim()
+            if ($proc.ExitCode -eq 0 -and $FileSystem.TestPath($tmpOut)) {
+                $secretValue = ($FileSystem.GetContent($tmpOut)).Trim()
+            }
+            elseif ($proc.ExitCode -ne 0 -and $FileSystem.TestPath($tmpErr)) {
+                # Log keepassxc-cli stderr for debugging
+                $cliStderr = ($FileSystem.GetContent($tmpErr)).Trim()
+                Write-Verbose "KeePassXC CLI stderr: $cliStderr"
             }
         }
         finally {
-            if (Test-Path $tmpPw) { Remove-Item $tmpPw -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $tmpOut) { Remove-Item $tmpOut -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $tmpErr) { Remove-Item $tmpErr -Force -ErrorAction SilentlyContinue }
-            $plainMaster = $null
+            try {
+                if ($FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'TestPath')) {
+                    if ($FileSystem.TestPath($tmpPw)) {
+                        if ($FileSystem.PSObject.Methods.Name -contains 'RemoveItem') { $FileSystem.RemoveItem($tmpPw, $false) } else { Remove-Item -Path $tmpPw -Force -ErrorAction SilentlyContinue }
+                    }
+                    if ($FileSystem.TestPath($tmpOut)) {
+                        if ($FileSystem.PSObject.Methods.Name -contains 'RemoveItem') { $FileSystem.RemoveItem($tmpOut, $false) } else { Remove-Item -Path $tmpOut -Force -ErrorAction SilentlyContinue }
+                    }
+                    if ($FileSystem.TestPath($tmpErr)) {
+                        if ($FileSystem.PSObject.Methods.Name -contains 'RemoveItem') { $FileSystem.RemoveItem($tmpErr, $false) } else { Remove-Item -Path $tmpErr -Force -ErrorAction SilentlyContinue }
+                    }
+                }
+                else {
+                    if (Test-Path -Path $tmpPw)   { Remove-Item -Path $tmpPw   -Force -ErrorAction SilentlyContinue }
+                    if (Test-Path -Path $tmpOut)  { Remove-Item -Path $tmpOut  -Force -ErrorAction SilentlyContinue }
+                    if (Test-Path -Path $tmpErr)  { Remove-Item -Path $tmpErr  -Force -ErrorAction SilentlyContinue }
+                }
+            }
+            finally { $plainMaster = $null }
         }
 
         if ($proc.ExitCode -eq 0 -and $secretValue) {
@@ -268,15 +412,21 @@ function Get-SystemSecret {
         else {
             $exit = if ($null -ne $proc) { $proc.ExitCode } else { $LASTEXITCODE }
             $errorMsg = "Failed to retrieve from KeePassXC (exit code: $exit). Entry may not exist: $entry"
-            Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' `
-                -Message $errorMsg -Console -File
+            if ($Optional) {
+                Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
+                return $null
+            }
+            Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' -Message $errorMsg -Console -File
             throw $errorMsg
         }
     }
     catch {
         $errorMessage = "Failed to retrieve system secret '$SecretType': $_"
-        Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' `
-            -Message $errorMessage -ErrorRecord $_ -Console -File
+        if ($Optional) {
+            Write-PSmmLog -Level NOTICE -Context 'Get-SystemSecret' -Message $errorMessage -Console -File
+            return $null
+        }
+        Write-PSmmLog -Level ERROR -Context 'Get-SystemSecret' -Message $errorMessage -ErrorRecord $_ -Console -File
         throw $errorMessage
     }
 }
@@ -323,7 +473,23 @@ function Get-SystemSecretMetadata {
         [string]$AttributeName,
 
         [Parameter()]
-        [string]$VaultPath = 'd:\_mediaManager_\Vault'
+        [string]$VaultPath = 'd:\_mediaManager_\Vault',
+
+        [Parameter()]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter()]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter()]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter()]
+        [ValidateNotNull()]
+        $Process
     )
 
     try {
@@ -334,30 +500,52 @@ function Get-SystemSecretMetadata {
         }
 
         $entry = $entryMap[$SecretType]
-        $dbPath = Join-Path $VaultPath 'PSmm_System.kdbx'
+        $dbPath = $PathProvider.CombinePath(@($VaultPath, 'PSmm_System.kdbx'))
 
-        if (-not (Test-Path $dbPath)) {
-            throw "KeePass database not found: $dbPath"
+        if (-not $FileSystem.TestPath($dbPath)) {
+            throw [ConfigurationException]::new("KeePass database not found", $dbPath)
         }
 
-        $cliCheck = Get-Command 'keepassxc-cli.exe' -ErrorAction SilentlyContinue
-        if (-not $cliCheck) {
+        if (-not $Process.TestCommand('keepassxc-cli.exe')) {
             # Attempt same auto-resolution strategy
             $pluginsRoot = (Split-Path -Parent $VaultPath)
-            $portableDir = Join-Path $pluginsRoot 'Plugins'
-            if (Test-Path $portableDir) {
-                $kpDir = Get-ChildItem -Path $portableDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'KeePassXC' } | Select-Object -First 1
+            $portableDir = $PathProvider.CombinePath(@($pluginsRoot, 'Plugins'))
+            if ($FileSystem.TestPath($portableDir)) {
+                $items = $FileSystem.GetChildItem($portableDir, $null, 'Directory')
+                $kpDir = $items | Where-Object { $_.Name -match 'KeePassXC' } | Select-Object -First 1
                 if ($kpDir) {
-                    $exe = Get-ChildItem -Path $kpDir.FullName -Filter 'keepassxc-cli.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                    $exeItems = $FileSystem.GetChildItem($kpDir.FullName, 'keepassxc-cli.exe', $null)
+                    $exe = $exeItems | Select-Object -First 1
                     if ($exe) {
                         $dir = Split-Path -Parent $exe.FullName
-                        if ($env:PATH -notlike "*${dir}*") { $env:PATH = "$dir;$env:PATH" }
-                        $cliCheck = Get-Command 'keepassxc-cli.exe' -ErrorAction SilentlyContinue
+                        $currentPath = $Environment.GetVariable('PATH')
+                        if ($currentPath -notlike "*${dir}*") {
+                            $Environment.AddPathEntry($dir, $false)
+
+                            # Track in config if available (for centralized cleanup)
+                            if (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
+                                try {
+                                    $config = Get-AppConfiguration
+                                    if ($config -and $config.PSObject.Properties.Name -contains 'AddedPathEntries') {
+                                        if ($config.AddedPathEntries -notcontains $dir) {
+                                            [System.Collections.ArrayList]$pathEntries = $config.AddedPathEntries
+                                            $pathEntries.Add($dir) | Out-Null
+                                            $config.AddedPathEntries = $pathEntries.ToArray()
+                                        }
+                                    }
+                                }
+                                catch {
+                                    Write-Verbose "Could not track PATH entry in config: $_"
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
-        if (-not $cliCheck) { throw 'keepassxc-cli.exe not found (after auto-resolution attempt)' }
+        if (-not $Process.TestCommand('keepassxc-cli.exe')) {
+            throw [PluginRequirementException]::new('keepassxc-cli.exe not found after auto-resolution attempt', 'KeePassXC')
+        }
 
         if ($AttributeName) {
             # Get specific attribute
@@ -367,7 +555,9 @@ function Get-SystemSecretMetadata {
                 return $result
             }
             else {
-                throw "Failed to retrieve attribute '$AttributeName' (exit code: $LASTEXITCODE)"
+                $ex = [ProcessException]::new("Failed to retrieve attribute '$AttributeName'", "keepassxc-cli.exe")
+                $ex.SetExitCode($LASTEXITCODE)
+                throw $ex
             }
         }
         else {
@@ -378,7 +568,9 @@ function Get-SystemSecretMetadata {
                 return $result
             }
             else {
-                throw "Failed to retrieve entry information (exit code: $LASTEXITCODE)"
+                $ex = [ProcessException]::new("Failed to retrieve entry information", "keepassxc-cli.exe")
+                $ex.SetExitCode($LASTEXITCODE)
+                throw $ex
             }
         }
     }

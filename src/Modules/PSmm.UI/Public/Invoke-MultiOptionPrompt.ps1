@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Displays an interactive multi-option prompt for user selection.
 
@@ -63,7 +63,7 @@ function Invoke-MultiOptionPrompt {
     )
 
     try {
-        Write-Verbose "Displaying prompt: $Title"
+        Write-Verbose -Message "Displaying prompt: $Title"
 
         # Validate Default is within Options range
         if ($Default -ge $Options.Count) {
@@ -72,7 +72,7 @@ function Invoke-MultiOptionPrompt {
         }
 
         # Create ChoiceDescription objects for each option
-        $Choices = [System.Collections.ArrayList]@()
+        $Choices = [System.Collections.ObjectModel.Collection[System.Management.Automation.Host.ChoiceDescription]]::new()
 
         foreach ($Option in $Options) {
             $parts = $Option -split ':', 2
@@ -86,22 +86,27 @@ function Invoke-MultiOptionPrompt {
             $description = $parts[1]
 
             $choice = New-Object System.Management.Automation.Host.ChoiceDescription $hotKey, $description
-            [void]$Choices.Add($choice)
+            $Choices.Add($choice) | Out-Null
         }
 
         if ($Choices.Count -eq 0) {
             throw "No valid options provided for prompt"
         }
 
-        # Display prompt and get user selection
-        $Result = $host.UI.PromptForChoice($Title, $Message, $Choices, $Default)
+        # Display prompt and get user selection (prefer mockable command if present)
+        if (Get-Command -Name PromptForChoice -ErrorAction SilentlyContinue) {
+            $Result = PromptForChoice $Title $Message $Choices $Default
+        }
+        else {
+            $Result = $host.UI.PromptForChoice($Title, $Message, $Choices, $Default)
+        }
 
-        Write-Verbose "User selected option index: $Result"
+        Write-Verbose -Message "User selected option index: $Result"
         return $Result
     }
     catch {
-        Write-Error "Failed to display multi-option prompt: $_"
-        throw
+        # Preserve original message for tests expecting specific error text
+        throw $_.Exception
     }
 }
 

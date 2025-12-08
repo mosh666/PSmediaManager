@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Implementation of IFileSystemService interface.
 
@@ -88,6 +88,14 @@ class FileSystemService : IFileSystemService {
         Gets child items from a directory.
     #>
     [object[]] GetChildItem([string]$path, [string]$filter, [string]$itemType) {
+        return $this.GetChildItem($path, $filter, $itemType, $false)
+    }
+
+    <#
+    .SYNOPSIS
+        Gets child items from a directory with recursion option.
+    #>
+    [object[]] GetChildItem([string]$path, [string]$filter, [string]$itemType, [bool]$recurse) {
         if ([string]::IsNullOrWhiteSpace($path)) {
             throw [ArgumentException]::new("Path cannot be empty", "path")
         }
@@ -99,6 +107,10 @@ class FileSystemService : IFileSystemService {
 
         if (-not [string]::IsNullOrWhiteSpace($filter)) {
             $params['Filter'] = $filter
+        }
+
+        if ($recurse) {
+            $params['Recurse'] = $true
         }
 
         $items = Get-ChildItem @params

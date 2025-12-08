@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     ImageMagick
 #>
@@ -10,9 +10,17 @@ Set-StrictMode -Version Latest
 function Get-CurrentVersion-ImageMagick {
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths
+        [hashtable]$Paths,
+        $FileSystem
     )
-    if ($CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }) {
+    if ($FileSystem) {
+        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
+    }
+    else {
+        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
+    }
+
+    if ($CurrentVersion) {
         #$LatestVersion = [System.IO.Path]::GetFileNameWithoutExtension($Latest.FileName).Split("-")[1,2] -join "-"
         return $CurrentVersion.BaseName.Split('-')[1, 2] -join '-'
     }
@@ -30,13 +38,13 @@ function Get-LatestUrlFromUrl-ImageMagick {
         $Response = Invoke-WebRequest -Uri $Plugin.Config.VersionUrl -TimeoutSec 10
     }
     catch {
-        throw "Failed to retrieve version information from $($Plugin.Config.VersionUrl): $($_.Exception.Message)"
+        throw [PluginRequirementException]::new("Failed to retrieve version information from $($Plugin.Config.VersionUrl)", "ImageMagick", $_.Exception)
     }
-    $Response.Content | Format-List
+    # Do not format output; we need raw string parsing
     $ZipMatches = [System.Text.RegularExpressions.Regex]::Matches($Response.Content, $Plugin.Config.AssetPattern, 'IgnoreCase')
 
     if ($ZipMatches.Count -eq 0) {
-        throw "No matching 'portable-Q16-HDRI-x64.zip' downloads found on $($Plugin.Config.VersionUrl)."
+        throw [PluginRequirementException]::new("No matching 'portable-Q16-HDRI-x64.zip' downloads found on $($Plugin.Config.VersionUrl)", "ImageMagick")
     }
 
     $Candidates = foreach ($m in $ZipMatches) {
@@ -65,7 +73,7 @@ function Get-LatestUrlFromUrl-ImageMagick {
         Select-Object -First 1
 
     if (-not $Latest) {
-        throw 'Could not determine latest version.'
+        throw [PluginRequirementException]::new('Could not determine latest version', 'ImageMagick')
     }
 
 
@@ -73,9 +81,9 @@ function Get-LatestUrlFromUrl-ImageMagick {
     $LatestInstaller = $Latest.FileName
     $Plugin.Config.State.LatestVersion = $LatestVersion
     $Plugin.Config.State.LatestInstaller = $LatestInstaller
-    $Url = ''
-    #Write-Host $Url
-    return $Url
+    # Compose direct download URL as plain string
+    $Url = "$($Plugin.Config.BaseUri)/$($LatestInstaller)"
+    return [string]$Url
 }
 
 function Get-Installer-ImageMagick {

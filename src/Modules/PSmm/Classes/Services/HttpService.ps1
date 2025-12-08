@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Implementation of IHttpService interface.
 
@@ -20,6 +20,17 @@ using namespace System.Net
     Production implementation of HTTP service.
 #>
 class HttpService : IHttpService {
+
+    [FileSystemService] $FileSystem
+
+    HttpService() {
+        try {
+            $this.FileSystem = [FileSystemService]::new()
+        }
+        catch {
+            throw [InvalidOperationException]::new('FileSystemService is required by HttpService and could not be initialized')
+        }
+    }
 
     <#
     .SYNOPSIS
@@ -61,10 +72,12 @@ class HttpService : IHttpService {
             throw [ArgumentException]::new("Output file path cannot be empty", "outFile")
         }
 
-        # Ensure directory exists
+        # Ensure directory exists via FileSystem service
         $directory = Split-Path -Path $outFile -Parent
-        if (-not [string]::IsNullOrWhiteSpace($directory) -and -not (Test-Path -Path $directory)) {
-            $null = New-Item -Path $directory -ItemType Directory -Force
+        if (-not [string]::IsNullOrWhiteSpace($directory)) {
+            if (-not $this.FileSystem.TestPath($directory)) {
+                $null = $this.FileSystem.NewItem($directory, 'Directory')
+            }
         }
 
         try {

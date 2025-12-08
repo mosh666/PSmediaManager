@@ -50,6 +50,22 @@ This document explains how PSmediaManager composes modules, services, and extern
 - **PSmm.Projects**: Maintains project registry, ensures per-project directories/databases, exposes CRUD-style cmdlets.
 - **PSmm.UI**: Provides ANSI-friendly prompts, multi-select choices, and dispatches to underlying commands.
 
+## Module Type Resolution
+
+PowerShell modules that depend on custom types defined in other modules must handle type availability carefully. In PSmediaManager:
+
+- **Type Definition**: `AppConfiguration` and related types are defined in `src/Modules/PSmm/Classes/AppConfiguration.ps1` and loaded when the PSmm module initializes.
+- **Module Load Order**: The main bootstrap sequence in `src/PSmediaManager.ps1` imports modules in dependency order: PSmm → PSmm.Logging → PSmm.Plugins → PSmm.Projects → PSmm.UI.
+- **Type Availability Pattern**: Functions in dependent modules (PSmm.Projects, PSmm.UI) that accept configuration objects use `[object]` type annotations instead of `[AppConfiguration]` to avoid type resolution failures during module parsing. Runtime validation ensures type safety:
+
+```powershell
+if ($Config.GetType().Name -ne 'AppConfiguration') {
+    throw [ArgumentException]::new("Config parameter must be of type [AppConfiguration]", 'Config')
+}
+```
+
+- **Rationale**: This pattern prevents "Unable to find type [AppConfiguration]" errors that would occur if modules tried to reference the type before the PSmm module was fully loaded. The approach maintains type safety while accommodating PowerShell's module loading mechanics.
+
 ## Data & Storage Layout
 
 ```text
@@ -88,6 +104,33 @@ Paths are derived from configuration objects to support relocating the repo or r
 4. Archives are extracted using 7Zip4PowerShell into the managed plugin directory.
 5. Commands are validated (hash/exists) before being registered for use.
 6. Plugin start/stop helpers (e.g., `Start-PSmmdigiKam`) initialize environment variables and launch processes with explicit working directories.
+
+## Environment & PATH Management
+
+PSmediaManager implements intelligent PATH management through the `EnvironmentService` to make plugin tools available without polluting the system:
+
+**Batch Operations**: Plugin directories are registered to PATH in a single batch operation using `AddPathEntries()` instead of multiple sequential calls. This improves performance and ensures atomic updates with proper ordering.
+
+**Scope Control**: PATH modifications support two scopes:
+- **Process Scope**: Always updated for immediate command availability in the current session
+- **User Scope**: Optionally persisted when `$persistUser = true`, allowing commands to remain available after session exit
+
+**Development Mode**: When PSmediaManager is launched with `-Dev`:
+- Plugin PATH entries persist to User scope (`$persistUser = true`)
+- Tools remain available in new terminal sessions without re-launching PSmediaManager
+- Useful for development workflows and debugging
+
+**Normal Mode**: In standard operation:
+- Plugin PATH entries are Process-scoped only (`$persistUser = false`)
+- All registered paths are automatically cleaned up on application exit
+- Ensures zero host system pollution
+
+**Deduplication**: The service uses `HashSet<string>` for O(1) lookups and prevents duplicate entries across multiple registration attempts. Existing PATH entries are detected upfront to avoid redundant operations.
+
+**Implementation Details**:
+- `Register-PluginsToPATH` collects all plugin directories, checks for pre-existing entries, and batch-registers new paths
+- `BootstrapServices.ps1` provides early environment service access before module imports
+- Cleanup logic in `PSmediaManager.ps1` uses `RemovePathEntries()` for efficient batch removal
 
 ## Configuration & Secrets
 

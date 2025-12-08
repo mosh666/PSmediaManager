@@ -1,8 +1,9 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$BaselinePath = (Join-Path -Path $PSScriptRoot -ChildPath '.coverage-baseline.json'),
-    [string]$LatestCoveragePath = (Join-Path -Path $PSScriptRoot -ChildPath '.coverage-latest.json')
+    [string]$LatestCoveragePath = (Join-Path -Path $PSScriptRoot -ChildPath '.coverage-latest.json'),
+    [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -37,13 +38,19 @@ if ($null -eq $baseline) {
 $latestLine = [math]::Round([double]$latest.line, 2)
 $baselineLine = [math]::Round([double]$baseline.coverage.line, 2)
 
-if ($latestLine -lt $baselineLine) {
-    throw "Latest coverage (${latestLine}%) is lower than baseline (${baselineLine}%)."
+if ($latestLine -lt $baselineLine -and -not $Force) {
+    throw "Latest coverage (${latestLine}%) is lower than baseline (${baselineLine}%). Use -Force to accept lower baseline."
 }
 
-if ($latestLine -le $baselineLine) {
-    Write-Host "Coverage ${latestLine}% did not exceed the baseline (${baselineLine}%). No update required." -ForegroundColor Yellow
+if ($latestLine -eq $baselineLine) {
+    Write-Host "Coverage ${latestLine}% matches the baseline (${baselineLine}%). No update required." -ForegroundColor Yellow
     return
+}
+
+if ($latestLine -lt $baselineLine) {
+    Write-Warning "Lowering baseline from ${baselineLine}% to ${latestLine}% (forced)."
+} else {
+    Write-Host "Increasing baseline from ${baselineLine}% to ${latestLine}%." -ForegroundColor Cyan
 }
 
 if ($PSCmdlet.ShouldProcess($BaselinePath, "Update baseline to ${latestLine}%")) {

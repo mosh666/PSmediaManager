@@ -52,6 +52,20 @@ function Get-StorageDrive {
     [CmdletBinding()] [OutputType([PSCustomObject[]],[object[]])]
     param()
 
+    $forceInlineEnumeration = $false
+    if ($env:MEDIA_MANAGER_TEST_FORCE_INLINE_STORAGE -eq '1') {
+        $forceInlineEnumeration = $true
+        Write-Verbose 'Get-StorageDrive: forcing inline enumeration via MEDIA_MANAGER_TEST_FORCE_INLINE_STORAGE.'
+    }
+
+    # Test hook: when forcing inline enumeration and the test data bag is present, use it instead of CIM calls.
+    $testData = $null
+    $useTestData = $false
+    if ($forceInlineEnumeration -and (Get-Variable -Name PSmmTestDriveData -Scope Script -ErrorAction SilentlyContinue)) {
+        $testData = $script:PSmmTestDriveData
+        if ($testData) { $useTestData = $true }
+    }
+
     # Allow tests (and non-Windows platforms) to short‑circuit via mocked Get-Command.
     if (-not (Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue)) {
         Write-Verbose 'Get-StorageDrive: CIM APIs unavailable; returning empty result.'
@@ -62,7 +76,7 @@ function Get-StorageDrive {
     # still prefer the service for consistency. Tests that mock Win32_* cmdlets will exercise
     # the inline implementation below, because mocks apply to the direct calls.
     $useInlineEnumeration = $true
-    if (Get-Command -Name 'Get-CimInstance' -ErrorAction SilentlyContinue) {
+    if (-not $forceInlineEnumeration -and (Get-Command -Name 'Get-CimInstance' -ErrorAction SilentlyContinue)) {
         # Heuristic: if class exists and no Pester mocks are detected for any of the core
         # cmdlets, we can delegate. Pester registers mocks as functions in the current scope;
         # we check for a script block source reference in command metadata.
@@ -86,21 +100,46 @@ function Get-StorageDrive {
 
     if ($useInlineEnumeration) {
         $drives = @()
-        foreach ($disk in Get-CimInstance Win32_Diskdrive) {
+        try {
+            $disks = if ($useTestData) { @($testData.Disks) } else { @(Get-CimInstance Win32_Diskdrive -ErrorAction Stop) }
+        }
+        catch {
+            Write-Verbose "Get-StorageDrive: CIM query failed, returning empty result. Details: $_"
+            return @()
+        }
+
+        foreach ($disk in $disks) {
             try {
-                $diskMetadata = Get-Disk | Where-Object { $_.Number -eq $disk.Index } | Select-Object -First 1
+                $diskMetadata = if ($useTestData -and $testData.DiskMetadata -and $testData.DiskMetadata.ContainsKey($disk.Index)) {
+                    $testData.DiskMetadata[$disk.Index]
+                } else {
+                    Get-Disk | Where-Object { $_.Number -eq $disk.Index } | Select-Object -First 1
+                }
                 if ($null -eq $diskMetadata) { continue }
-                $partitions = Get-CimAssociatedInstance -ResultClassName Win32_DiskPartition -InputObject $disk
+                $partitions = if ($useTestData -and $testData.Partitions -and $testData.Partitions.ContainsKey($disk.Index)) {
+                    $testData.Partitions[$disk.Index]
+                } else {
+                    Get-CimAssociatedInstance -ResultClassName Win32_DiskPartition -InputObject $disk
+                }
                 if ($null -eq $partitions -or $partitions.Count -eq 0) { continue }
                 foreach ($partition in $partitions) {
-                    $logicalDisks = Get-CimAssociatedInstance -ResultClassName Win32_LogicalDisk -InputObject $partition
+                    $logicalDisks = if ($useTestData -and $testData.LogicalDisks -and $testData.LogicalDisks.ContainsKey($partition.Index)) {
+                        $testData.LogicalDisks[$partition.Index]
+                    } else {
+                        Get-CimAssociatedInstance -ResultClassName Win32_LogicalDisk -InputObject $partition
+                    }
                     if ($null -eq $logicalDisks -or $logicalDisks.Count -eq 0) { continue }
                     foreach ($logicalDisk in $logicalDisks) {
                         try {
                             $totalSpace = [math]::Round($logicalDisk.Size / 1GB, 3)
                             $freeSpace = [math]::Round($logicalDisk.FreeSpace / 1GB, 3)
                             $usedSpace = [math]::Round($totalSpace - $freeSpace, 3)
-                            $volume = Get-Volume | Where-Object { $_.DriveLetter -eq $logicalDisk.DeviceID.Trim(':') } | Select-Object -First 1
+                            $driveLetter = $logicalDisk.DeviceID.Trim(':')
+                            $volume = if ($useTestData -and $testData.Volumes -and $testData.Volumes.ContainsKey($driveLetter)) {
+                                $testData.Volumes[$driveLetter]
+                            } else {
+                                Get-Volume | Where-Object { $_.DriveLetter -eq $driveLetter } | Select-Object -First 1
+                            }
                             if ($null -eq $volume) { continue }
                             $isUsbBus = $null -ne $diskMetadata.BusType -and ([string]$diskMetadata.BusType) -eq 'USB'
                             $isUsbIface = -not [string]::IsNullOrWhiteSpace($disk.InterfaceType) -and $disk.InterfaceType -eq 'USB'
@@ -126,11 +165,17 @@ function Get-StorageDrive {
                                 IsRemovable = [bool]$isRemovable
                             }
                         }
-                        catch { continue }
+                        catch {
+                            Write-Verbose "Get-StorageDrive: error processing logical disk '$($logicalDisk.DeviceID)': $_"
+                            continue
+                        }
                     }
                 }
             }
-            catch { continue }
+            catch {
+                Write-Verbose "Get-StorageDrive: error processing disk index '$($disk.Index)': $_"
+                continue
+            }
         }
         return $drives
     }

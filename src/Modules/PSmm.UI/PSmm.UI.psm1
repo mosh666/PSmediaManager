@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     PowerShell module for PSmediaManager UI components.
 
@@ -26,14 +26,24 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Get module paths
-$PublicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
-$PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
+# Get module paths (service-aware - check variable existence first to avoid StrictMode errors)
+$servicesVar = Get-Variable -Name 'Services' -Scope Script -ErrorAction SilentlyContinue
+$hasServices = ($null -ne $servicesVar) -and ($null -ne $servicesVar.Value)
+$pathProvider = if ($hasServices -and $servicesVar.Value.PathProvider) { $servicesVar.Value.PathProvider } else { $null }
+$fileSystem   = if ($hasServices -and $servicesVar.Value.FileSystem) { $servicesVar.Value.FileSystem } else { $null }
+
+if ($pathProvider) {
+    $PublicPath  = $pathProvider.CombinePath(@($PSScriptRoot,'Public'))
+    $PrivatePath = $pathProvider.CombinePath(@($PSScriptRoot,'Private'))
+} else {
+    $PublicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
+    $PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
+}
 
 # Import all public and private functions
 try {
     # Import public functions
-    if (Test-Path $PublicPath) {
+    if ((($fileSystem) -and $fileSystem.TestPath($PublicPath)) -or (-not $fileSystem -and (Test-Path $PublicPath))) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PublicFunctions.Count -gt 0) {
@@ -57,7 +67,7 @@ try {
     }
 
     # Import private functions
-    if (Test-Path $PrivatePath) {
+    if ((($fileSystem) -and $fileSystem.TestPath($PrivatePath)) -or (-not $fileSystem -and (Test-Path $PrivatePath))) {
         $PrivateFunctions = @(Get-ChildItem -Path "$PrivatePath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PrivateFunctions.Count -gt 0) {
@@ -78,7 +88,12 @@ try {
     }
     else {
         Write-Verbose "Creating Private functions directory: $PrivatePath"
-        New-Item -Path $PrivatePath -ItemType Directory -Force | Out-Null
+        if ($fileSystem -and ($fileSystem | Get-Member -Name 'NewItem' -ErrorAction SilentlyContinue)) {
+            $null = $fileSystem.NewItem($PrivatePath, 'Directory')
+        }
+        else {
+            throw "FileSystem service is required to create Private functions directory: $PrivatePath"
+        }
     }
 }
 catch {

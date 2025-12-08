@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Builder pattern for constructing AppConfiguration instances.
 
@@ -40,6 +40,12 @@ class AppConfigurationBuilder {
     hidden [AppConfiguration]$_config
     hidden [bool]$_built = $false
 
+    # Service dependencies
+    hidden [object]$_fileSystem
+    hidden [object]$_environment
+    hidden [object]$_pathProvider
+    hidden [object]$_process
+
     AppConfigurationBuilder() {
         $this.InitializeConfig()
     }
@@ -64,7 +70,7 @@ class AppConfigurationBuilder {
         $this.EnsureNotBuilt()
 
         if ([string]::IsNullOrWhiteSpace($pathHint)) {
-            throw "Root path cannot be null or empty"
+            throw [ValidationException]::new("Root path cannot be null or empty", "rootPath")
         }
 
         $resolvedPath = [System.IO.Path]::GetFullPath($pathHint)
@@ -73,15 +79,77 @@ class AppConfigurationBuilder {
 
         $paths = $null
         if ($looksLikeRepoRoot) {
-            # In test mode, keep runtime root within test directory to avoid creating folders on system drive
-            $isTestMode = $env:MEDIA_MANAGER_TEST_MODE -eq '1'
+            # CRITICAL: Determine where to place runtime folders based on context
+            # - During TESTS: Use TEMP environment to avoid polluting any drive
+            # - During PRODUCTION: Use drive root where PSmediaManager is located
+
+            # NOTE: PowerShell classes are compiled at module load time. After modifying this
+            # file, you MUST restart PowerShell/VS Code to pick up changes. The test runner
+            # caches class definitions and won't see updates until the session is restarted.
+
+            # Detect test mode via multiple signals to ensure robustness
+            $isTestMode = $false
+
+            # Check explicit environment variable
+            if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
+                $isTestMode = $true
+            }
+
+            # Check if called from Pester by examining call stack
+            if (-not $isTestMode) {
+                try {
+                    $callStack = Get-PSCallStack
+                    $isPesterContext = $callStack | Where-Object {
+                        $_.Command -match 'Invoke-Pester|Should|It|Describe|Context|BeforeAll|AfterAll' -or
+                        $_.ScriptName -match '\.Tests\.ps1$'
+                    }
+                    if ($isPesterContext) {
+                        $isTestMode = $true
+                    }
+                } catch {
+                    # Ignore errors in call stack inspection
+                    Write-Verbose "Unable to inspect call stack: $_"
+                }
+            }
+
+            # Check for Pester module or preference variable
+            if (-not $isTestMode) {
+                $pesterLoaded = Get-Module -Name Pester -ErrorAction SilentlyContinue
+                $pesterPref = Get-Variable -Name 'PesterPreference' -Scope Global -ErrorAction SilentlyContinue
+                if ($pesterLoaded -or $pesterPref) {
+                    $isTestMode = $true
+                }
+            }
+
             $runtimeRoot = if ($isTestMode) {
-                # Use the test root itself for runtime folders instead of drive root
-                $resolvedPath
+                # Test mode: Use TEMP environment to avoid creating folders on any real drive
+                $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::User)
+                if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                    $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::Process)
+                }
+                if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                    $tempPath = [System.IO.Path]::GetTempPath()
+                }
+                [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
             } else {
-                # In production, use drive root for runtime folders (PSmm.Log, PSmm.Plugins, PSmm.Vault)
+                # Production mode: Use drive root where PSmediaManager repository is located
+                # e.g., if repo is at D:\PSmediaManager, folders go to D:\PSmm.Log, D:\PSmm.Plugins, etc.
+                # CRITICAL: NEVER use C:\ as runtime root - always fallback to TEMP if that happens
                 $driveRoot = [System.IO.Path]::GetPathRoot($resolvedPath)
-                if ([string]::IsNullOrWhiteSpace($driveRoot)) { $resolvedPath } else { $driveRoot }
+                if ([string]::IsNullOrWhiteSpace($driveRoot) -or $driveRoot -ieq 'C:\' -or $driveRoot -ieq 'C:') {
+                    # Fallback to TEMP for safety (prevents polluting C:\ system drive)
+                    Write-Warning "[AppConfigurationBuilder] Detected C:\ as runtime root - redirecting to TEMP"
+                    $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::User)
+                    if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                        $tempPath = [Environment]::GetEnvironmentVariable('TEMP', [EnvironmentVariableTarget]::Process)
+                    }
+                    if ([string]::IsNullOrWhiteSpace($tempPath)) {
+                        $tempPath = [System.IO.Path]::GetTempPath()
+                    }
+                    [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Runtime')
+                } else {
+                    $driveRoot
+                }
             }
             $paths = [AppPaths]::new($resolvedPath, $runtimeRoot)
         }
@@ -95,6 +163,14 @@ class AppConfigurationBuilder {
     hidden [void] ApplyPaths([AppPaths]$paths) {
         $this._config.Paths = $paths
         $this._config.Secrets = [AppSecrets]::new($paths.App.Vault)
+
+        # Inject services into Secrets if available
+        if ($null -ne $this._fileSystem) {
+            $this._config.Secrets.FileSystem = $this._fileSystem
+            $this._config.Secrets.Environment = $this._environment
+            $this._config.Secrets.PathProvider = $this._pathProvider
+            $this._config.Secrets.Process = $this._process
+        }
 
         # Initialize logging with date-based filename anchored to runtime root
         $timestamp = Get-Date -Format 'yyyyMMdd'
@@ -136,6 +212,30 @@ class AppConfigurationBuilder {
         return $this
     }
 
+    [AppConfigurationBuilder] WithServices([object]$fileSystem, [object]$environment, [object]$pathProvider, [object]$process) {
+        $this.EnsureNotBuilt()
+        $this._fileSystem = $fileSystem
+        $this._environment = $environment
+        $this._pathProvider = $pathProvider
+        $this._process = $process
+
+        # Inject services into config
+        $this._config.FileSystem = $fileSystem
+        $this._config.Environment = $environment
+        $this._config.PathProvider = $pathProvider
+        $this._config.Process = $process
+
+        # Inject services into Secrets if it exists
+        if ($null -ne $this._config.Secrets) {
+            $this._config.Secrets.FileSystem = $fileSystem
+            $this._config.Secrets.Environment = $environment
+            $this._config.Secrets.PathProvider = $pathProvider
+            $this._config.Secrets.Process = $process
+        }
+
+        return $this
+    }
+
     [AppConfigurationBuilder] WithLogging([LoggingConfiguration]$logging) {
         $this.EnsureNotBuilt()
         $this._config.Logging = $logging
@@ -151,8 +251,8 @@ class AppConfigurationBuilder {
     [AppConfigurationBuilder] LoadConfigurationFile([string]$configPath) {
         $this.EnsureNotBuilt()
 
-        if (-not (Test-Path -Path $configPath)) {
-            throw "Configuration file not found: $configPath"
+        if (-not (Test-Path -Path $configPath -PathType Leaf)) {
+            throw [ConfigurationException]::new("Configuration file not found: $configPath", $configPath)
         }
 
         try {
@@ -240,7 +340,7 @@ class AppConfigurationBuilder {
             }
         }
         catch {
-            throw "Failed to load configuration file '$configPath': $_"
+                throw [ConfigurationException]::new("Failed to load configuration file '$configPath': $_", $configPath, $_.Exception)
         }
 
         return $this
@@ -250,17 +350,20 @@ class AppConfigurationBuilder {
         $this.EnsureNotBuilt()
 
         if (-not (Test-Path -Path $requirementsPath)) {
-            throw "Requirements file not found: $requirementsPath"
+            throw [ConfigurationException]::new("Requirements file not found: $requirementsPath", $requirementsPath)
         }
 
         try {
-            $this._config.Requirements = Import-PowerShellDataFile -Path $requirementsPath
+                $requirementsContent = Import-PowerShellDataFile -Path $requirementsPath -ErrorAction Stop
         }
         catch {
-            throw "Failed to load requirements file '$requirementsPath': $_"
+            throw [ConfigurationException]::new("Failed to load requirements file '$requirementsPath': $_", $requirementsPath, $_.Exception)
         }
 
-        return $this
+            # Store the loaded requirements in the configuration
+            $this._config.Requirements = $requirementsContent
+
+            return $this
     }
 
     [AppConfigurationBuilder] LoadStorageFile([string]$storagePath) {
@@ -272,18 +375,19 @@ class AppConfigurationBuilder {
         }
 
         try {
-            $storageData = Import-PowerShellDataFile -Path $storagePath
+            # Storage definitions are PowerShell data files (PSD1), not JSON
+            $storageContent = Import-PowerShellDataFile -Path $storagePath -ErrorAction Stop
         }
         catch {
-            throw "Failed to load storage file '$storagePath': $_"
+            throw [ConfigurationException]::new("Failed to load storage file '$storagePath': $_", $storagePath, $_.Exception)
         }
 
-        if (-not ($storageData -is [hashtable]) -or -not $storageData.ContainsKey('Storage')) {
-            throw "Storage file is invalid. Expected a hashtable with 'Storage' root."
+        if (-not ($storageContent -is [System.Collections.IDictionary] -or $null -ne $storageContent.PSObject.Properties)) {
+            throw [ConfigurationException]::new("Storage file is invalid. Expected a hashtable with 'Storage' root.", $storagePath)
         }
 
-        foreach ($groupKey in $storageData.Storage.Keys) {
-            $groupTable = $storageData.Storage[$groupKey]
+        foreach ($groupKey in $storageContent.Storage.Keys) {
+            $groupTable = $storageContent.Storage[$groupKey]
             $group = [StorageGroupConfig]::new([string]$groupKey)
             if ($groupTable.ContainsKey('DisplayName')) { $group.DisplayName = $groupTable.DisplayName }
 
@@ -323,6 +427,14 @@ class AppConfigurationBuilder {
 
         if ($null -eq $this._config.Secrets) {
             $this._config.Secrets = [AppSecrets]::new($this._config.Paths.App.Vault)
+        }
+
+        # Ensure services are injected before loading secrets
+        if ($null -ne $this._fileSystem) {
+            $this._config.Secrets.FileSystem = $this._fileSystem
+            $this._config.Secrets.Environment = $this._environment
+            $this._config.Secrets.PathProvider = $this._pathProvider
+            $this._config.Secrets.Process = $this._process
         }
 
         $this._config.Secrets.LoadSecrets()
@@ -390,11 +502,11 @@ class AppConfigurationBuilder {
 
         # Validate required properties
         if ($null -eq $this._config.Paths) {
-            throw "Root path must be set before building"
+            throw [ValidationException]::new("Root path must be set before building", "Paths")
         }
 
         if ($null -eq $this._config.Parameters) {
-            throw "Runtime parameters must be set before building"
+            throw [ValidationException]::new("Runtime parameters must be set before building", "Parameters")
         }
 
         # Ensure initialization is complete
@@ -408,7 +520,7 @@ class AppConfigurationBuilder {
 
     hidden [void] EnsureNotBuilt() {
         if ($this._built) {
-            throw "Configuration has already been built and cannot be modified"
+            throw [ValidationException]::new("Configuration has already been built and cannot be modified", "_built")
         }
     }
 
@@ -470,14 +582,15 @@ class AppConfigurationBuilder {
         # Convert to .psd1 format
         $psd1Content = [AppConfigurationBuilder]::ConvertStorageToPsd1($renumbered)
 
-        # Ensure directory exists
+        # Ensure directory exists via FileSystem service
         $configRoot = Split-Path -Path $storagePath -Parent
-        if (-not (Test-Path -Path $configRoot)) {
-            $null = New-Item -Path $configRoot -ItemType Directory -Force
+        $fs = [FileSystemService]::new()
+        if (-not $fs.TestPath($configRoot)) {
+            $null = $fs.NewItem($configRoot, 'Directory')
         }
 
-        # Write to file
-        Set-Content -Path $storagePath -Value $psd1Content -Encoding UTF8
+        # Write to file via FileSystem service
+        $fs.SetContent($storagePath, $psd1Content)
     }
 
     <#

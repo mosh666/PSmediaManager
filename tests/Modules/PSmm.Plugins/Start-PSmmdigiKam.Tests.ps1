@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 Describe 'Start-PSmmdigiKam' {
@@ -57,14 +57,54 @@ Port=%%DatabasePort%%
         $null = New-Item -Path $script:cfg.Projects.Current.Path -ItemType Directory -Force
     }
 
+    BeforeEach {
+        # Mock FileSystemService
+        $script:mockFS = [PSCustomObject]@{
+            PSTypeName = 'FileSystemService'
+        }
+        $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'TestPath' -Value { param($path) Test-Path $path }
+        $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'NewDirectory' -Value { param($path) New-Item -Path $path -ItemType Directory -Force }
+        $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'CopyItem' -Value { param($src, $dest) Copy-Item -Path $src -Destination $dest -Force }
+        $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'GetChildItem' -Value {
+            param($path, $filter, $itemType)
+            $params = @{ Path = $path; ErrorAction = 'SilentlyContinue' }
+            if ($filter) { $params['Filter'] = $filter }
+            if ($itemType -eq 'Directory') { $params['Directory'] = $true }
+            Get-ChildItem @params
+        }
+        $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'GetContent' -Value { param($path) Get-Content -Path $path -Raw }
+        $script:mockFS | Add-Member -MemberType ScriptMethod -Name 'SetContent' -Value { param($path, $content) Set-Content -Path $path -Value $content -Force }
+
+        # Mock PathProvider
+        $script:mockPath = [PSCustomObject]@{
+            PSTypeName = 'PathProvider'
+        }
+        $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'Join' -Value {
+            $parts = if ($args.Count -eq 1 -and $args[0] -is [System.Array]) { @($args[0]) } else { @($args) }
+            [IO.Path]::Combine([string[]]$parts)
+        } -Force
+        $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'CombinePath' -Value {
+            $parts = if ($args.Count -eq 1 -and $args[0] -is [System.Array]) { @($args[0]) } else { @($args) }
+            [IO.Path]::Combine([string[]]$parts)
+        } -Force
+        $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'GetDirectoryName' -Value { param($path) Split-Path -Path $path -Parent }
+        $script:mockPath | Add-Member -MemberType ScriptMethod -Name 'GetFileName' -Value { param($path) Split-Path -Path $path -Leaf }
+
+        # Mock Process
+        $script:mockProcess = [PSCustomObject]@{
+            PSTypeName = 'ProcessService'
+        }
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'StartProcess' -Value { param($exe, $args, $env) [pscustomobject]@{ Id = 42 } }
+    }
+
     It 'launches digiKam using project config and sets DIGIKAM_APPDIR' {
         $projectPath = $script:cfg.Projects.Current.Path
-        $expectedAppDir = Join-Path (Join-Path $projectPath 'Config') 'digiKam'
+        $expectedAppDir = Join-Path $projectPath 'Config/digiKam'
 
         Mock Write-PSmmLog {} -ModuleName PSmm.Plugins
         Mock Start-Process { [pscustomobject]@{ Id = 42 } } -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Start-PSmmdigiKam -Config $script:cfg -Verbose } | Should -Not -Throw
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $script:cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -Verbose } | Should -Not -Throw
         $env:DIGIKAM_APPDIR | Should -Be $expectedAppDir
     }
 
@@ -77,7 +117,7 @@ Port=%%DatabasePort%%
         Mock Read-Host { '' } -ModuleName PSmm.Plugins
         Mock Initialize-PSmmProjectDigiKamConfig { throw 'Should not be invoked' } -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -Verbose } | Should -Not -Throw
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -Verbose } | Should -Not -Throw
         Should -Invoke Write-Warning -ModuleName PSmm.Plugins -ParameterFilter { $Message -like 'digiKam cannot be started*' } -Times 1
         Should -Invoke Initialize-PSmmProjectDigiKamConfig -ModuleName PSmm.Plugins -Times 0
     }
@@ -86,7 +126,7 @@ Port=%%DatabasePort%%
         $cfg = [AppConfiguration]::new()
         $cfg.Projects = @{}
 
-        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg } | Should -Throw -ExceptionType ([ConfigurationException])
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess } | Should -Throw -ExceptionType ([ConfigurationException])
     }
 
     It 'logs verbose cancellation when ShouldProcess declines' {
@@ -99,7 +139,7 @@ Port=%%DatabasePort%%
         Mock Start-Process { throw 'Should not be called' } -ModuleName PSmm.Plugins
         Mock Write-Verbose {} -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -WhatIf } | Should -Not -Throw
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess -WhatIf } | Should -Not -Throw
 
         Should -Invoke Write-Verbose -ModuleName PSmm.Plugins -ParameterFilter { $Message -eq 'Start digiKam operation cancelled by user' } -Times 1
         Should -Invoke Initialize-PSmmProjectDigiKamConfig -ModuleName PSmm.Plugins -Times 0
@@ -126,7 +166,7 @@ Port=%%DatabasePort%%
         } -ModuleName PSmm.Plugins
         Mock Start-Process { throw 'Should not run when exe missing' } -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg } | Should -Throw -ExceptionType ([PluginRequirementException])
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess } | Should -Throw -ExceptionType ([PluginRequirementException])
     }
 
     It 'throws when digiKam configuration file is missing' {
@@ -152,7 +192,7 @@ Port=%%DatabasePort%%
         } -ModuleName PSmm.Plugins
         Mock Start-Process { throw 'Should not launch when config missing' } -ModuleName PSmm.Plugins
 
-        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg } | Should -Throw -ExceptionType ([ConfigurationException])
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess } | Should -Throw -ExceptionType ([ConfigurationException])
     }
 
     It 'throws a ProcessException when Start-Process returns null' {
@@ -178,8 +218,10 @@ Port=%%DatabasePort%%
             }
         } -ModuleName PSmm.Plugins
         Mock Start-Process { return $null } -ModuleName PSmm.Plugins
+        # Override Process service to simulate a null process return
+        $script:mockProcess | Add-Member -MemberType ScriptMethod -Name 'StartProcess' -Force -Value { param($exe, $args, $env) $null }
 
-        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg } | Should -Throw -ExceptionType ([ProcessException])
+        { PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess } | Should -Throw -ExceptionType ([ProcessException])
     }
 
     It 'logs error details when project setup fails' {
@@ -196,7 +238,7 @@ Port=%%DatabasePort%%
 
         $caughtError = $null
         try {
-            PSmm.Plugins\Start-PSmmdigiKam -Config $cfg | Out-Null
+            PSmm.Plugins\Start-PSmmdigiKam -Config $cfg -FileSystem $script:mockFS -PathProvider $script:mockPath -Process $script:mockProcess | Out-Null
         }
         catch {
             $caughtError = $_

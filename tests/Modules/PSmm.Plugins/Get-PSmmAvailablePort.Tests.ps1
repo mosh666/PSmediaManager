@@ -1,9 +1,13 @@
-﻿#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 Describe 'Get-PSmmAvailablePort' {
     BeforeAll {
-        $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+Set-StrictMode -Version Latest
+
+$script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+
+# Preload PSmm types
+. (Join-Path -Path $script:repoRoot -ChildPath 'tests/Preload-PSmmTypes.ps1')
         $script:pluginsManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Plugins/PSmm.Plugins.psd1'
         $script:psmmManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm/PSmm.psd1'
         $script:loggingManifest = Join-Path -Path $script:repoRoot -ChildPath 'src/Modules/PSmm.Logging/PSmm.Logging.psd1'
@@ -144,5 +148,20 @@ Describe 'Get-PSmmAvailablePort' {
         { PSmm.Plugins\Get-PSmmAvailablePort -Config $config -ProjectName 'Verbose-Test' -Verbose 4>&1 } | Should -Not -Throw
 
         $config.Projects.PortRegistry['Verbose-Test'] | Should -Be 3310
+    }
+
+    It 'logs and rethrows unexpected errors from port discovery' {
+        $config.Projects.PortRegistry = @{}
+
+        Mock Write-PSmmLog { } -ModuleName PSmm.Plugins
+        Mock Get-NetTCPConnection {
+            throw [System.Exception]::new('Network enumeration failure')
+        } -ModuleName PSmm.Plugins
+
+        { PSmm.Plugins\Get-PSmmAvailablePort -Config $config -ProjectName 'ErrProject' } | Should -Throw '*Network enumeration failure*'
+
+        Should -Invoke Write-PSmmLog -ModuleName PSmm.Plugins -ParameterFilter {
+            $Level -eq 'ERROR' -and $Context -eq 'Get-PSmmAvailablePort' -and $Message -like '*ErrProject*'
+        } -Times 1
     }
 }

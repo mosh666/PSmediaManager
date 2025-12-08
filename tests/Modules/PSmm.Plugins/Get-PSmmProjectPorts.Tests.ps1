@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.5.4
+#Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
 Describe 'Get-PSmmProjectPorts' {
@@ -30,6 +30,7 @@ Describe 'Get-PSmmProjectPorts' {
         if (-not $config.Projects.ContainsKey('PortRegistry')) {
             $config.Projects.PortRegistry = @{}
         }
+        $script:mockProcess = [pscustomobject]@{}
     }
 
     It 'returns sorted allocations with default output' {
@@ -42,7 +43,7 @@ Describe 'Get-PSmmProjectPorts' {
             param($Level, $Message, $Context, $ErrorRecord, [switch]$Console, [switch]$File)
         } -ModuleName PSmm.Plugins
 
-        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config
+        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -Process $script:mockProcess
 
         $result.Count | Should -Be 2
         $result[0].ProjectName | Should -Be 'Alpha'
@@ -60,7 +61,7 @@ Describe 'Get-PSmmProjectPorts' {
         Mock Get-NetTCPConnection { [pscustomobject]@{ OwningProcess = 456 } } -ModuleName PSmm.Plugins
         Mock Get-Process { [pscustomobject]@{ Id = 456; ProcessName = 'mariadbd' } } -ModuleName PSmm.Plugins
 
-        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -IncludeUsage
+        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -Process $script:mockProcess -IncludeUsage
 
         $result.Count | Should -Be 1
         $result[0].InUse | Should -BeTrue
@@ -79,7 +80,7 @@ Describe 'Get-PSmmProjectPorts' {
         Mock Get-NetTCPConnection { @() } -ModuleName PSmm.Plugins
         Mock Get-Process { throw 'should not be called when no connection exists' } -ModuleName PSmm.Plugins
 
-        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -IncludeUsage
+        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -Process $script:mockProcess -IncludeUsage
 
         $result.Count | Should -Be 1
         $result[0].InUse | Should -BeFalse
@@ -87,6 +88,25 @@ Describe 'Get-PSmmProjectPorts' {
         $result[0].ProcessName | Should -Be ''
         Should -Invoke Get-NetTCPConnection -ModuleName PSmm.Plugins -Times 1
         Should -Invoke Get-Process -ModuleName PSmm.Plugins -Times 0
+    }
+
+    It 'marks port as free when listener exists but owning process cannot be resolved' {
+        $config.Projects.PortRegistry = @{ 'Zeta' = 3355 }
+
+        Mock Write-PSmmLog {
+            param($Level, $Message, $Context, $ErrorRecord, [switch]$Console, [switch]$File)
+        } -ModuleName PSmm.Plugins
+        Mock Get-NetTCPConnection { [pscustomobject]@{ OwningProcess = 789 } } -ModuleName PSmm.Plugins
+        Mock Get-Process { $null } -ModuleName PSmm.Plugins
+
+        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -Process $script:mockProcess -IncludeUsage
+
+        $result.Count | Should -Be 1
+        $result[0].InUse | Should -BeFalse
+        $result[0].ProcessId | Should -Be 0
+        $result[0].ProcessName | Should -Be ''
+        Should -Invoke Get-NetTCPConnection -ModuleName PSmm.Plugins -Times 1
+        Should -Invoke Get-Process -ModuleName PSmm.Plugins -Times 1
     }
 
     It 'sets usage to Unknown when usage determination fails' {
@@ -98,7 +118,7 @@ Describe 'Get-PSmmProjectPorts' {
         Mock Get-NetTCPConnection { throw 'network query failed' } -ModuleName PSmm.Plugins
         Mock Get-Process { throw 'should not be called' } -ModuleName PSmm.Plugins
 
-        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -IncludeUsage
+        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -Process $script:mockProcess -IncludeUsage
 
         $result.Count | Should -Be 1
         $result[0].InUse | Should -Be 'Unknown'
@@ -116,7 +136,7 @@ Describe 'Get-PSmmProjectPorts' {
             param($Level, $Message, $Context, $ErrorRecord, [switch]$Console, [switch]$File)
         } -ModuleName PSmm.Plugins
 
-        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config
+        $result = PSmm.Plugins\Get-PSmmProjectPorts -Config $config -Process $script:mockProcess
 
         $result | Should -BeNullOrEmpty
         Should -Invoke Write-Warning -ModuleName PSmm.Plugins -ParameterFilter { $Message -like 'No port allocations*' } -Times 1
@@ -137,7 +157,7 @@ Describe 'Get-PSmmProjectPorts' {
 
         $caughtError = $null
         try {
-            PSmm.Plugins\Get-PSmmProjectPorts -Config $config | Out-Null
+            PSmm.Plugins\Get-PSmmProjectPorts -Config $config -Process $script:mockProcess | Out-Null
         }
         catch {
             $caughtError = $_
@@ -163,7 +183,7 @@ Describe 'Get-PSmmProjectPorts' {
 
         $caughtError = $null
         try {
-            PSmm.Plugins\Get-PSmmProjectPorts -Config $config | Out-Null
+            PSmm.Plugins\Get-PSmmProjectPorts -Config $config -Process $script:mockProcess | Out-Null
         }
         catch {
             $caughtError = $_

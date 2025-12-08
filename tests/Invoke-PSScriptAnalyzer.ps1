@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh
 # Invoke-PSScriptAnalyzer.ps1
 # Runs PSScriptAnalyzer against the repository root (default) using optional settings,
 # excluding the `tests` folder and other noisy directories. Writes results to

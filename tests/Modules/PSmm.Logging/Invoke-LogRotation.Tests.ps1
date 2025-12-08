@@ -4,6 +4,8 @@ Set-StrictMode -Version Latest
 Describe 'Invoke-LogRotation' {
     BeforeAll {
         $script:repoRoot = (Resolve-Path -Path (Join-Path $PSScriptRoot '..\..\..')).Path
+        $script:preloadTypes = Join-Path $script:repoRoot 'tests/Preload-PSmmTypes.ps1'
+        if (Test-Path $script:preloadTypes) { . $script:preloadTypes }
         . (Join-Path $repoRoot 'tests/Support/Import-PSmmClasses.ps1') -RepositoryRoot $repoRoot
         try {
             $script:fileSystemFactory = { [FileSystemService]::new() }
@@ -58,7 +60,7 @@ Describe 'Invoke-LogRotation' {
         Test-Path -Path (Join-Path $dir 'f1.log') | Should -BeTrue
     }
 
-    It 'uses default FileSystemService and reports when nothing is deleted' {
+    It 'reports when nothing is deleted' {
         $dir = Join-Path $TestDrive 'logs-nodeletes'
         $null = New-Item -ItemType Directory -Path $dir -Force
 
@@ -66,7 +68,8 @@ Describe 'Invoke-LogRotation' {
         'keep' | Set-Content -Path $file
         [System.IO.File]::SetLastWriteTime($file, (Get-Date))
 
-        { Invoke-LogRotation -Path $dir -MaxAgeDays 1 -MaxFiles 5 -Confirm:$false -Verbose } | Should -Not -Throw
+        $fs = & $script:fileSystemFactory
+        { Invoke-LogRotation -Path $dir -MaxAgeDays 1 -MaxFiles 5 -Confirm:$false -FileSystem $fs -Verbose } | Should -Not -Throw
         Test-Path -Path $file | Should -BeTrue
     }
 }

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     PowerShell module for bootstrapping PSmediaManager.
 
@@ -23,15 +23,33 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Get module paths
-$ClassesPath = Join-Path -Path $PSScriptRoot -ChildPath 'Classes'
-$PublicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
-$PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
+# Module-level vault master password cache shared by Initialize-SystemVault and Get-SystemSecret
+# Preserve existing cache value across module re-imports within the same session
+if (-not (Get-Variable -Name _VaultMasterPasswordCache -Scope Script -ErrorAction SilentlyContinue)) {
+    $script:_VaultMasterPasswordCache = $null
+}
+
+# Get module paths (service-aware - check variable existence first to avoid StrictMode errors)
+$servicesVar = Get-Variable -Name 'Services' -Scope Script -ErrorAction SilentlyContinue
+$hasServices = ($null -ne $servicesVar) -and ($null -ne $servicesVar.Value)
+$pathProvider = if ($hasServices -and $servicesVar.Value.PathProvider) { $servicesVar.Value.PathProvider } else { $null }
+$fileSystem   = if ($hasServices -and $servicesVar.Value.FileSystem) { $servicesVar.Value.FileSystem } else { $null }
+
+if ($pathProvider) {
+    $ClassesPath = $pathProvider.CombinePath(@($PSScriptRoot,'Classes'))
+    $PublicPath  = $pathProvider.CombinePath(@($PSScriptRoot,'Public'))
+    $PrivatePath = $pathProvider.CombinePath(@($PSScriptRoot,'Private'))
+}
+else {
+    $ClassesPath = Join-Path -Path $PSScriptRoot -ChildPath 'Classes'
+    $PublicPath  = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
+    $PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
+}
 
 # Import all classes, public and private functions
 try {
     # Import classes first (order matters for dependencies)
-    if (Test-Path $ClassesPath) {
+    if ((($fileSystem) -and $fileSystem.TestPath($ClassesPath)) -or (-not $fileSystem -and (Test-Path $ClassesPath))) {
         # Load classes in dependency order
         # 1. Interfaces and base classes (no dependencies)
         # 2. Exception classes (inherit from base)
@@ -40,24 +58,28 @@ try {
         # 5. Builder classes (use configuration)
         # 6. DI container (uses all above)
         $ClassFiles = @(
-            'Interfaces.ps1', # Interface definitions (no dependencies)
-            'Exceptions.ps1', # Exception classes (no dependencies)
+            # Interfaces (required before implementations and exception classes that may inherit from them)
+            'Interfaces.ps1',              # Interface contracts (no dependencies)
+            'Exceptions.ps1',              # Exception classes (no dependencies)
+            # Service implementations (in dependency order)
             'Services\FileSystemService.ps1', # File system service (implements IFileSystemService)
             'Services\EnvironmentService.ps1', # Environment service (implements IEnvironmentService)
-            'Services\HttpService.ps1', # HTTP service (implements IHttpService)
-            'Services\ProcessService.ps1', # Process service (implements IProcessService)
-            'Services\CimService.ps1', # CIM service (implements ICimService)
-            'Services\GitService.ps1', # Git service (implements IGitService)
-            'Services\CryptoService.ps1', # Crypto service (implements ICryptoService)
+            'Services\ProcessService.ps1',  # Process service (implements IProcessService)
+            'Services\HttpService.ps1',    # HTTP service (implements IHttpService)
+            'Services\CimService.ps1',     # CIM service (implements ICimService)
+            'Services\GitService.ps1',     # Git service (implements IGitService)
+            'Services\CryptoService.ps1',  # Crypto service (implements ICryptoService)
             'Services\StorageService.ps1', # Storage service (implements IStorageService)
-            'AppConfiguration.ps1', # Configuration classes (uses exceptions and interfaces)
-            'AppConfigurationBuilder.ps1' # Builder (uses configuration and exceptions)
+            # Configuration classes (use services and interfaces)
+            'AppConfiguration.ps1',        # Configuration classes (uses exceptions and interfaces)
+            'ConfigValidator.ps1',         # Configuration validator (Phase 10)
+            'AppConfigurationBuilder.ps1'  # Builder (uses configuration and exceptions)
         )
 
         $importDiagnostics = [System.Collections.Generic.List[object]]::new()
         foreach ($ClassFile in $ClassFiles) {
-            $ClassPath = Join-Path -Path $ClassesPath -ChildPath $ClassFile
-            if (Test-Path $ClassPath) {
+            $ClassPath = if ($pathProvider) { $pathProvider.CombinePath(@($ClassesPath,$ClassFile)) } else { Join-Path -Path $ClassesPath -ChildPath $ClassFile }
+            if ((($fileSystem) -and $fileSystem.TestPath($ClassPath)) -or (-not $fileSystem -and (Test-Path $ClassPath))) {
                 Write-Verbose "[ClassImport] BEGIN $ClassFile"
                 $sw = [System.Diagnostics.Stopwatch]::StartNew()
                 try {
@@ -96,7 +118,7 @@ try {
     }
 
     # Import public functions
-    if (Test-Path $PublicPath) {
+    if ((($fileSystem) -and $fileSystem.TestPath($PublicPath)) -or (-not $fileSystem -and (Test-Path $PublicPath))) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PublicFunctions.Count -gt 0) {
@@ -120,7 +142,7 @@ try {
     }
 
     # Import private functions
-    if (Test-Path $PrivatePath) {
+    if ((($fileSystem) -and $fileSystem.TestPath($PrivatePath)) -or (-not $fileSystem -and (Test-Path $PrivatePath))) {
         $PrivateFunctions = @(Get-ChildItem -Path "$PrivatePath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PrivateFunctions.Count -gt 0) {
@@ -141,7 +163,12 @@ try {
     }
     else {
         Write-Verbose "Creating Private functions directory: $PrivatePath"
-        New-Item -Path $PrivatePath -ItemType Directory -Force | Out-Null
+        if ($fileSystem -and ($fileSystem | Get-Member -Name 'NewItem' -ErrorAction SilentlyContinue)) {
+            $null = $fileSystem.NewItem($PrivatePath, 'Directory')
+        }
+        else {
+            throw "FileSystem service is required to create Private functions directory: $PrivatePath"
+        }
     }
 }
 catch {
@@ -161,15 +188,13 @@ Export-ModuleMember -Function @(
     'Test-DuplicateSerial',
     'Show-StorageInfo',
     'Export-SafeConfiguration',
-    # KeePassXC Secret Management Functions
+    'Get-PSmmHealth',
+    # KeePassXC Secret Management Functions (Public API)
     'Get-SystemSecret',
-    'Get-SystemSecretMetadata',
     'Initialize-SystemVault',
     'Save-SystemSecret',
     # Drive Root Launcher
-    'New-DriveRootLauncher'
+    'New-DriveRootLauncher',
+    # Host output helper
+    'Write-PSmmHost'
 )
-
-# Ensure host output helper is exported so scripts (outside the module)
-# can call it after importing PSmm. This centralizes host I/O.
-Export-ModuleMember -Function 'Write-PSmmHost'

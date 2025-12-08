@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Clears the project registry cache, forcing a full rescan on next access.
 
@@ -29,8 +29,13 @@ function Clear-PSmmProjectRegistry {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config
+        [object]$Config  # Uses [object] instead of [AppConfiguration] to avoid type resolution issues when module is loaded
     )
+
+    # Validate Config is AppConfiguration type
+    if ($Config.GetType().Name -ne 'AppConfiguration') {
+        throw [ArgumentException]::new("Config parameter must be of type [AppConfiguration]", 'Config')
+    }
 
     try {
         if ($Config.Projects.ContainsKey('Registry')) {

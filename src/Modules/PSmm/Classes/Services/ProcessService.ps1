@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Implementation of IProcessService interface.
 

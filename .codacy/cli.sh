@@ -145,5 +145,13 @@ fi
 if [ "$#" -eq 1 ] && [ "$1" = "download" ]; then
     echo "Codacy cli v2 download succeeded"
 else
-    eval "$run_command $*"
+    # Allow Semgrep-specific extra args via SEMGREP_EXTRA_ARGS when tool is semgrep
+    final_args="$*"
+    if echo "$final_args" | grep -q -- "-t semgrep"; then
+        if [ -n "$SEMGREP_EXTRA_ARGS" ]; then
+            echo "Applying SEMGREP_EXTRA_ARGS: $SEMGREP_EXTRA_ARGS"
+            final_args="$final_args $SEMGREP_EXTRA_ARGS"
+        fi
+    fi
+    eval "$run_command $final_args"
 fi

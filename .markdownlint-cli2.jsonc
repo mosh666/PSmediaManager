@@ -1,0 +1,8 @@
+{
+  // Lint all Markdown files, ignore node_modules
+  "globs": ["**/*.md", "#node_modules"],
+  // Emit SARIF file for GitHub code scanning
+  "outputFormatters": [
+    [ "markdownlint-cli2-formatter-sarif", { "name": "markdownlint.sarif" } ]
+  ]
+}
