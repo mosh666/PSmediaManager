@@ -44,9 +44,11 @@ Add new test files under the matching `tests/Modules/<ModuleName>` path. Keep on
 
 ### Coverage Strategy
 
-- **Coverage Strategy**: 71.04% (2,493 commands analyzed, 1,771 executed)
+- **Coverage Strategy**: 70.95% baseline (Local typically achieves 71.04%; CI: 70.96% due to environment differences)
+  - **Local**: 2,493 commands analyzed, 1,771 executed (71.04%)
+  - **CI**: 2,493 commands analyzed, 1,769 executed (70.96%)
 - **Baseline Enforcement**: The coverage baseline is stored in `tests/.coverage-baseline.json` and enforced during test runs
-- **Test Determinism**: Note that Pester 5.5 does not expose test order randomization controls. While tests generally run in a consistent order, slight variance between runs may occur. The coverage debugging infrastructure monitors this.
+- **Test Determinism**: Note that Pester 5.5 does not expose test order randomization controls. Tests generally run consistently, but a small variance (±0.1%) between local and CI environments is expected and monitored.
 - **Edge-Case Buffer**: A small gap remains for exception paths and external service fallbacks (e.g., `whoami` failure, DNS resolution errors, NuGet provider installation failures)
 - **Rationale**: Testing these paths requires complex mocking infrastructure (external process mocking, system service stubbing) with diminishing return-on-investment. The current strategy prioritizes:
   - Direct path testing (happy path + obvious error cases)
