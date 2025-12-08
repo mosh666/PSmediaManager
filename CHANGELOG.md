@@ -70,6 +70,7 @@ All notable changes to this project will be documented in this file.
 - **Testing**: Expanded coverage exclusions to skip public UI/Plugin/Project surfaces and Bootstrap functions
 - **Coverage**: Raised baseline to 71.02% (1,769 executed / 2,491 analyzed commands) after re-enabling storage wizard logging tests and refreshing JaCoCo/latest coverage snapshots
 - **Testing**: Enhanced `Update-CoverageBaseline.ps1` with `-Force` parameter to allow intentional baseline adjustments while preventing accidental regressions
+- **Docs**: Synced README and development guide coverage metrics to the current 71.02% baseline and refreshed JaCoCo counts (1,769 / 2,491)
 - **Environment**: Refactored `EnvironmentService` to use batch PATH operations with `HashSet` for efficient deduplication and ordering
 - **Environment**: Improved PATH management with separate Process and User scope handling - Process scope always updated, User scope only when `$persistUser` is true
 - **Environment**: Enhanced `Register-PluginsToPATH` to batch-register all plugin directories in a single operation instead of multiple sequential calls

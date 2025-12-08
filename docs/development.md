@@ -44,9 +44,9 @@ Add new test files under the matching `tests/Modules/<ModuleName>` path. Keep on
 
 ### Coverage Strategy
 
-- **Coverage Strategy**: 68.2% (2,569 commands analyzed, 1,752 executed)
+- **Coverage Strategy**: 71.02% (2,491 commands analyzed, 1,769 executed)
 - **Baseline Enforcement**: The coverage baseline is stored in `tests/.coverage-baseline.json` and enforced during test runs
-- **Edge-Case Buffer**: A 0.42% gap represents uncovered exception paths and external service fallbacks (e.g., `whoami` failure, DNS resolution errors, NuGet provider installation failures)
+- **Edge-Case Buffer**: A small gap remains for exception paths and external service fallbacks (e.g., `whoami` failure, DNS resolution errors, NuGet provider installation failures)
 - **Rationale**: Testing these paths requires complex mocking infrastructure (external process mocking, system service stubbing) with diminishing return-on-investment. The current strategy prioritizes:
   - Direct path testing (happy path + obvious error cases)
   - Integration testing (multi-function workflows)
@@ -147,7 +147,7 @@ Running `./tests/Invoke-Pester.ps1 -WithPSScriptAnalyzer` automatically invokes 
 pwsh -NoProfile -File .\.codacy\Invoke-CodacyWSL.ps1 -RepositoryPath . -Verbose
 ```
 
-- Coverage improvements must be accompanied by an updated `tests/.coverage-baseline.json`. The harness exits non-zero if coverage falls below the baseline (currently 65.43%).
+- Coverage improvements must be accompanied by an updated `tests/.coverage-baseline.json`. The harness exits non-zero if coverage falls below the baseline (currently 71.02%).
 - Issue/PR templates and CODEOWNERS live under `.github/`; use them so reviewers get adequate context and the right maintainers are auto-assigned.
 
 ## Recent Bootstrap Fixes (Phase 10+)

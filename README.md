@@ -2,10 +2,9 @@
 
 ## Latest Changes
 
-- Pinned Codacy CLI v2 to `v2.2.0` in CI for deterministic SARIF output and reproducible scans
-- Pinned `markdownlint-cli2` GitHub Action to commit `30a0e04f1870d58f8d717450cc6134995f993c63` to satisfy supply-chain scanning and prevent unpinned third-party action warnings
-- Re-enabled storage wizard logging paths (no USB drives, excluded fixed drives, wizard start) with explicit mocks so tests assert warnings and return `false` when no eligible drives exist
-- Stabilized logging test suite by preloading PSmm classes and injecting `FileSystem` instances in rotation tests to prevent hangs and module-scoped mock conflicts
+- Refreshed coverage artifacts and lowered the enforced baseline to **71.02%** (1,769 / 2,491); aligned README and development guide to the current counts
+- Pruned legacy `.disabled` test fixtures after consolidating coverage, ensuring the Pester suite reflects active scenarios only
+- Reaffirmed Codacy/MCP post-edit workflow and coverage baseline update path (`tests/Update-CoverageBaseline.ps1 [-Force]`) for anyone adjusting tests locally
 
 See CHANGELOG.md for details.
 

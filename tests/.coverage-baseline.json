@@ -1,9 +1,9 @@
 {
   "metadata": {
     "description": "Line coverage baseline enforced by CI. Update via tests/Update-CoverageBaseline.ps1 after legitimate coverage improvements.",
-      "lastUpdated": "2025-12-08T01:34:00.0000000+01:00"
+    "lastUpdated": "2025-12-08T01:42:20.0066215+01:00"
   },
   "coverage": {
-    "line": 71.03
+    "line": 71.02
   }
 }
