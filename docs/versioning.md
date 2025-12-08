@@ -7,9 +7,9 @@ PSmediaManager and all its modules use **dynamic versioning** derived completely
 ## Version Strategy
 
 ### Current Status
-- **State**: Unreleased (no tags yet)
-- **Next Release**: `v0.1.0` (first official version)
-- **Development Branch**: `dev` produces versions like `0.1.0-alpha.5+abc1234`
+- **State**: First tagged release `v0.1.0` created; ongoing development on `dev`
+- **Current Release**: `v0.1.0`
+- **Development Branch**: `dev` produces prerelease builds like `0.1.0-alpha.N+<sha>`
 
 ### Semantic Versioning
 
@@ -88,6 +88,32 @@ Since PowerShell module manifests run in restricted language mode and cannot exe
 # Update all module manifests
 .\Update-ModuleVersions.ps1 -UpdateManifests
 ```
+
+### CI Automation (GitHub Actions)
+
+Run the build script automatically in CI to keep manifests in sync during pipelines. Add a step (already present in `ci.yml` after PowerShell setup) like:
+
+```yaml
+- name: Update module versions from Git
+  run: |
+    $pwsh = "$env:PWSH_754_PATH"
+    & $pwsh -NoProfile -ExecutionPolicy Bypass -File .\Update-ModuleVersions.ps1 -UpdateManifests
+```
+
+### Local Automation (Pre-commit Hook)
+
+Use the provided hook to auto-update manifests before every commit:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Hook location: `.githooks/pre-commit.ps1`
+
+Behavior:
+- Runs `Update-ModuleVersions.ps1 -UpdateManifests`
+- Stages updated `.psd1` manifests automatically
+- Fails the commit if version sync fails
 
 ### Dynamic Version Helper
 

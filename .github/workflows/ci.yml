@@ -73,6 +73,11 @@ jobs:
           $pwsh = "$env:PWSH_754_PATH"
           & $pwsh -NoLogo -NoProfile -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber"
 
+      - name: Update module versions from Git
+        run: |
+          $pwsh = "$env:PWSH_754_PATH"
+          & $pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Update-ModuleVersions.ps1 -UpdateManifests
+
       - name: Run Script Analyzer
         run: |
           $pwsh = "$env:PWSH_754_PATH"

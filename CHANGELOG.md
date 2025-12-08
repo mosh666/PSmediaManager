@@ -29,6 +29,7 @@ These changes will be included in the first release (v0.1.0).
   - Updated all module manifests to derive versions from Git dynamically
   - Added comprehensive versioning documentation at `docs/versioning.md`
   - All modules now share synchronized version from Git tags
+- **Automation**: Added CI step to run `Update-ModuleVersions.ps1 -UpdateManifests` and documented an opt-in pre-commit hook (`.githooks/pre-commit.ps1`; enable with `git config core.hooksPath .githooks`) to keep manifests in sync locally.
 
 ### Fixed (Unreleased)
 - **Projects**: Fixed `[AppConfiguration]` type resolution errors in `PSmm.Projects` module functions by changing parameter types from `[AppConfiguration]` to `[object]` and adding runtime type validation in `Select-PSmmProject`, `New-PSmmProject`, and `Clear-PSmmProjectRegistry` - this prevents type lookup failures when modules are loaded before types are available in the session scope
