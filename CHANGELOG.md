@@ -19,6 +19,22 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 <!-- markdownlint-disable MD024 -->
 ## [Unreleased] - Development on `dev` branch
 
+### Changed
+
+- **BREAKING**: Removed deprecated `Version` property from `AppConfiguration` class in favor of `AppVersion` as the single source of truth for version information
+  - Removed `[version]$Version` property from `src/Modules/PSmm/Classes/AppConfiguration.ps1`
+  - Removed `WithVersion()` builder method from `src/Modules/PSmm/Classes/AppConfigurationBuilder.ps1`
+  - Updated `Export-SafeConfiguration` to exclude deprecated `Version` field from configuration exports
+  - Removed `.WithVersion([version]'1.0.0')` initialization call from `src/PSmediaManager.ps1`
+  - Updated `ToString()` method to display only `AppVersion` in consistent format
+
+### Fixed
+
+- **Versioning**: Corrected duplicate SHA in `AppVersion` string generation
+  - Fixed `Get-ApplicationVersion` function in `src/Modules/PSmm/Public/Bootstrap/Invoke-PSmm.ps1` to use GitVersion's `SemVer` field directly (which already includes SHA)
+  - Removed redundant SHA append in git describe fallback path
+  - Version string now correctly displays as `v0.1.0-17-g1f72ffd` instead of `v0.1.0-17-g1f72ffd-1f72ffd`
+
 ### Removed
 
 - **Documentation**: Removed obsolete versioning quick reference and investigation report (`.github/VERSIONING_QUICK_REFERENCE.md` and `.github/VERSION_INVESTIGATION_REPORT.md`) as comprehensive documentation is now available in `docs/versioning.md` and this CHANGELOG
