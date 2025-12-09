@@ -430,6 +430,47 @@ class AppConfigurationBuilder {
             return $this
     }
 
+    [AppConfigurationBuilder] LoadPluginsFile([string]$pluginsPath, [string]$scope = 'Global') {
+        $this.EnsureNotBuilt()
+
+        if (-not (Test-Path -Path $pluginsPath)) {
+            throw [ConfigurationException]::new("Plugins file not found: $pluginsPath", $pluginsPath)
+        }
+
+        try {
+            $pluginsContent = Import-PowerShellDataFile -Path $pluginsPath -ErrorAction Stop
+        }
+        catch {
+            throw [ConfigurationException]::new("Failed to load plugins file '$pluginsPath': $_", $pluginsPath, $_.Exception)
+        }
+
+        if (-not ($pluginsContent -is [hashtable]) -or -not $pluginsContent.ContainsKey('Plugins')) {
+            throw [ConfigurationException]::new("Plugins file is invalid. Expected a hashtable with 'Plugins' root.", $pluginsPath)
+        }
+
+        if (-not $this._config.Plugins) {
+            $this._config.Plugins = @{ Global = $null; Project = $null; Resolved = $null; Paths = @{ Global = $null; Project = $null } }
+        }
+
+        $normalizedScope = if ([string]::IsNullOrWhiteSpace($scope)) { 'Global' } else { $scope }
+
+        switch -Regex ($normalizedScope) {
+            '^Project$' {
+                $this._config.Plugins.Project = $pluginsContent.Plugins
+                $this._config.Plugins.Paths.Project = $pluginsPath
+            }
+            default {
+                $this._config.Plugins.Global = $pluginsContent.Plugins
+                $this._config.Plugins.Paths.Global = $pluginsPath
+            }
+        }
+
+        # Reset resolved cache to force re-merge on next confirmation
+        $this._config.Plugins.Resolved = $null
+
+        return $this
+    }
+
     [AppConfigurationBuilder] LoadStorageFile([string]$storagePath) {
         $this.EnsureNotBuilt()
 

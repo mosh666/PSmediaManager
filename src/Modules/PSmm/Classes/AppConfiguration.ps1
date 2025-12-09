@@ -584,6 +584,7 @@ class AppConfiguration {
     [LoggingConfiguration]$Logging
     [Dictionary[string, StorageGroupConfig]]$Storage
     [hashtable]$Requirements
+    [hashtable]$Plugins
     [hashtable]$UI
     [hashtable]$Projects
     # Internal, structured error tracking persisted with configuration
@@ -601,6 +602,7 @@ class AppConfiguration {
         $this.Parameters = [RuntimeParameters]::new()
         $this.Logging = [LoggingConfiguration]::new()
         $this.Storage = [Dictionary[string, StorageGroupConfig]]::new()
+        $this.Plugins = @{ Global = $null; Project = $null; Resolved = $null; Paths = @{ Global = $null; Project = $null } }
         $this.InternalErrorMessages = @{
             Storage = @{}
         }
@@ -625,6 +627,7 @@ class AppConfiguration {
         $this.Logging = [LoggingConfiguration]::new($logPath)
 
         $this.Storage = [Dictionary[string, StorageGroupConfig]]::new()
+        $this.Plugins = @{ Global = $null; Project = $null; Resolved = $null; Paths = @{ Global = $null; Project = $null } }
         $this.InternalErrorMessages = @{
             Storage = @{}
         }

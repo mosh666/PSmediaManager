@@ -229,7 +229,7 @@ function Invoke-PSmm {
             Write-PSmmLog -Level NOTICE -Context 'Get-AppVersion' -Message 'Getting PSmediaManager version from Git' -Console -File
             $GitPath = Join-Path -Path $Config.Paths.RepositoryRoot -ChildPath '.git'
             $gitVersionExecutable = $null
-            if ($Config.Requirements -and $Config.Requirements.Plugins -and $Config.Requirements.Plugins.b_GitEnv -and $Config.Requirements.Plugins.b_GitEnv.GitVersion) {
+            if ($Config.Plugins -and $Config.Plugins.Resolved -and $Config.Plugins.Resolved.b_GitEnv -and $Config.Plugins.Resolved.b_GitEnv.GitVersion -and ($Config.Plugins.Resolved.b_GitEnv.GitVersion.Mandatory -or $Config.Plugins.Resolved.b_GitEnv.GitVersion.Enabled)) {
                 # Try to resolve plugins path for GitVersion lookup
                 $pluginsPath = $null
                 try {
@@ -241,7 +241,7 @@ function Invoke-PSmm {
                     Write-Verbose "Could not resolve plugins path from Config.Paths: $_"
                 }
 
-                $gitVersionExecutable = Get-LocalPluginExecutablePath -PluginConfig $Config.Requirements.Plugins.b_GitEnv.GitVersion -PluginsRootPath $pluginsPath
+                $gitVersionExecutable = Get-LocalPluginExecutablePath -PluginConfig $Config.Plugins.Resolved.b_GitEnv.GitVersion -PluginsRootPath $pluginsPath
             }
             $Config.AppVersion = Get-ApplicationVersion -GitPath $GitPath -GitVersionExecutablePath $gitVersionExecutable
             Write-PSmmLog -Level NOTICE -Context 'Get-AppVersion' -Message "Current PSmediaManager version: $($Config.AppVersion)" -Console -File

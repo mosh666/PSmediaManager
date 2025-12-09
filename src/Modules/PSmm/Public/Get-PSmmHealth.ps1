@@ -74,23 +74,34 @@ function Get-PSmmHealth {
         if ($modules -isnot [object[]]) { $modules = @($modules) }
         # Plugin state (cached)
         $plugins = @()
-        if ($Run -and $Run.App -and $Run.App.Requirements -and $Run.App.Requirements.Plugins) {
-            foreach ($scope in $Run.App.Requirements.Plugins.GetEnumerator()) {
+        $pluginManifest = $null
+        if ($Run -and $Run.App -and $Run.App.Plugins -and $Run.App.Plugins.Manifest) {
+            $pluginManifest = $Run.App.Plugins.Manifest
+        }
+        elseif ($Config -and $Config.Plugins -and $Config.Plugins.Resolved) {
+            $pluginManifest = $Config.Plugins.Resolved
+        }
+
+        if ($pluginManifest) {
+            foreach ($scope in $pluginManifest.GetEnumerator()) {
                 foreach ($pl in $scope.Value.GetEnumerator()) {
+                    if (-not ($pl.Value.Mandatory -or $pl.Value.Enabled)) { continue }
                     $state = $pl.Value.State
                     $prevMatch = $null
                     if ($PreviousPlugins) {
                         $prevMatch = $PreviousPlugins | Where-Object { $_.Name -eq $pl.Value.Name } | Select-Object -First 1
                     }
+                    $latestVer = if ($state -and $state.PSObject.Properties.Name -contains 'LatestVersion') { $state.LatestVersion } else { $null }
+                    $currentVer = if ($state -and $state.PSObject.Properties.Name -contains 'CurrentVersion') { $state.CurrentVersion } else { $null }
                     $plugins += [pscustomobject]@{
                         Name = $pl.Value.Name
                         Scope = $scope.Name
-                        InstalledVersion = $state.CurrentVersion
-                        LatestVersion = $state.LatestVersion
-                        UpdateAvailable = if ($state.LatestVersion -and $state.CurrentVersion -and $state.LatestVersion -gt $state.CurrentVersion) { $true } else { $false }
+                        InstalledVersion = $currentVer
+                        LatestVersion = $latestVer
+                        UpdateAvailable = if ($latestVer -and $currentVer -and $latestVer -gt $currentVer) { $true } else { $false }
                         PreviousVersion = if ($prevMatch) { $prevMatch.InstalledVersion } else { $null }
-                        Changed = if ($prevMatch -and $prevMatch.InstalledVersion -ne $state.CurrentVersion) { $true } else { $false }
-                        Upgraded = if ($prevMatch -and $prevMatch.InstalledVersion -and $state.CurrentVersion -and ([version]$state.CurrentVersion -gt [version]$prevMatch.InstalledVersion)) { $true } else { $false }
+                        Changed = if ($prevMatch -and $prevMatch.InstalledVersion -ne $currentVer) { $true } else { $false }
+                        Upgraded = if ($prevMatch -and $prevMatch.InstalledVersion -and $currentVer -and ([version]$currentVer -gt [version]$prevMatch.InstalledVersion)) { $true } else { $false }
                     }
                 }
             }

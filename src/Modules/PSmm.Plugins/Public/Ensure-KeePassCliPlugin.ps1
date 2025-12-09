@@ -40,9 +40,10 @@ function Install-KeePassXC {
         _Temp = $Config.Paths.App.Plugins.Temp
     }
 
-    $pluginConfig = $Config.Requirements.Plugins.c_Misc.KeePassXC
+    $pluginsManifest = if ($Config.Plugins -and $Config.Plugins.Resolved) { $Config.Plugins.Resolved } else { Resolve-PluginsConfig -Config $Config }
+    $pluginConfig = $pluginsManifest.c_Misc.KeePassXC
     if (-not $pluginConfig) {
-        throw 'KeePassXC plugin configuration is missing from requirements.'
+        throw 'KeePassXC plugin configuration is missing from plugin manifest.'
     }
 
     $plugin = @{

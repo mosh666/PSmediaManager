@@ -182,7 +182,7 @@ function Resolve-PluginCommandPath {
     added paths in $Config.AddedPathEntries for later cleanup.
 
 .PARAMETER Config
-    Application configuration with Requirements.Plugins and AddedPathEntries.
+    Application configuration with Plugins.Resolved and AddedPathEntries.
 
 .PARAMETER Environment
     Environment service for PATH manipulation.
@@ -218,14 +218,14 @@ function Register-PluginsToPATH {
         Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
             -Message 'Starting plugin PATH registration (opt-in only)' -Console -File
 
-        if (-not $Config.Requirements -or -not $Config.Requirements.Plugins) {
-            Write-Verbose 'No plugin requirements found in configuration'
+        if (-not $Config.Plugins -or -not $Config.Plugins.Resolved) {
+            Write-Verbose 'No plugin manifest found in configuration'
             Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
-                -Message 'No plugin requirements found in configuration' -Console -File
+                -Message 'No plugin manifest found in configuration' -Console -File
             return
         }
 
-        $pluginGroups = @($Config.Requirements.Plugins.GetEnumerator())
+        $pluginGroups = @($Config.Plugins.Resolved.GetEnumerator())
         Write-Verbose "Found $($pluginGroups.Count) plugin groups"
         Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
             -Message "Found $($pluginGroups.Count) plugin groups to process" -Console -File
@@ -252,30 +252,34 @@ function Register-PluginsToPATH {
                         $pluginKey = $pluginEntry.Key
                         $plugin = $pluginEntry.Value
 
-                        # Check RegisterToPath from the original Requirements data
-                        $requirementsPlugin = $Config.Requirements.Plugins[$group.Name][$pluginKey]
-                        if (-not $requirementsPlugin) {
+                        $resolvedPlugin = $Config.Plugins.Resolved[$group.Name][$pluginKey]
+                        if (-not $resolvedPlugin) {
                             Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
-                                -Message "Could not find requirements data for $($plugin.Name) at path Plugins[$($group.Name)][$pluginKey]" -Console -File
+                                -Message "Could not find plugin data for $($plugin.Name) at path Plugins[$($group.Name)][$pluginKey]" -Console -File
                             continue
                         }
 
-                        $hasRegisterToPath = $requirementsPlugin.ContainsKey('RegisterToPath')
+                        if (-not ($resolvedPlugin.Mandatory -or $resolvedPlugin.Enabled)) {
+                            Write-Verbose "Plugin $($plugin.Name) is not enabled for current scope - skipping PATH registration"
+                            continue
+                        }
+
+                        $hasRegisterToPath = $resolvedPlugin.ContainsKey('RegisterToPath')
 
                         # Skip if RegisterToPath is not explicitly set to $true
                         if (-not $hasRegisterToPath) {
                             Write-Verbose "Plugin $($plugin.Name) does not have RegisterToPath property - skipping"
                             continue
                         }
-                        if (-not $requirementsPlugin.RegisterToPath) {
-                            Write-Verbose "Plugin $($plugin.Name) has RegisterToPath=$($requirementsPlugin.RegisterToPath) - skipping"
+                        if (-not $resolvedPlugin.RegisterToPath) {
+                            Write-Verbose "Plugin $($plugin.Name) has RegisterToPath=$($resolvedPlugin.RegisterToPath) - skipping"
                             continue
                         }
 
                         Write-Verbose "Plugin $($plugin.Name) is marked for PATH registration"
 
                         # Skip if plugin doesn't have State (not installed)
-                        $hasState = $requirementsPlugin.ContainsKey('State')
+                        $hasState = $resolvedPlugin.ContainsKey('State')
                         if (-not $hasState) {
                             Write-Verbose "Plugin $($plugin.Name) marked for PATH but not installed (no State property) - skipping"
                             continue
@@ -291,7 +295,7 @@ function Register-PluginsToPATH {
                         }
 
                         $pluginDir = $pluginDirs | Select-Object -First 1
-                        $commandPath = if ($requirementsPlugin.CommandPath) { $requirementsPlugin.CommandPath } else { '' }
+                        $commandPath = if ($resolvedPlugin.CommandPath) { $resolvedPlugin.CommandPath } else { '' }
                         $executableDir = if ($commandPath) {
                             $PathProvider.CombinePath(@($pluginDir.FullName, $commandPath))
                         } else {
@@ -400,6 +404,159 @@ function New-PSmmServiceInstance {
     }
 }
 
+function Resolve-PluginsConfig {
+    [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Config
+    )
+
+    if (-not $Config.Plugins) {
+        throw [ConfigurationException]::new('Plugin manifest not loaded in configuration', 'Plugins')
+    }
+
+    $globalPath = $null
+    $projectPath = $null
+    try { if ($Config.Plugins.Paths) { $globalPath = $Config.Plugins.Paths.Global } } catch { Write-Debug "Failed to retrieve global plugin path: $_" }
+    try { if ($Config.Plugins.Paths) { $projectPath = $Config.Plugins.Paths.Project } } catch { Write-Debug "Failed to retrieve project plugin path: $_" }
+
+    $globalManifest = if ($Config.Plugins.Global -and $Config.Plugins.Global.ContainsKey('Plugins')) {
+        $Config.Plugins.Global.Plugins
+    } else {
+        $Config.Plugins.Global
+    }
+
+    if (-not $globalManifest) {
+        throw [ConfigurationException]::new('Global plugin manifest is missing or invalid', $globalPath)
+    }
+
+    $projectManifest = $null
+
+    # Use already-loaded project manifest when present
+    if ($Config.Plugins.Project) {
+        $projectManifest = if ($Config.Plugins.Project.ContainsKey('Plugins')) { $Config.Plugins.Project.Plugins } else { $Config.Plugins.Project }
+    }
+    else {
+        # Attempt to auto-load project plugins manifest if a project is selected
+        $candidateProjectPath = $null
+        try {
+            if ($Config.Projects -and $Config.Projects.Current -and $Config.Projects.Current.Path) {
+                $candidateProjectPath = Join-Path -Path $Config.Projects.Current.Path -ChildPath 'Config/PSmm/PSmm.Plugins.psd1'
+            }
+        } catch { Write-Debug "Failed to construct project plugin path: $_" }
+
+        if ($candidateProjectPath -and (Test-Path -Path $candidateProjectPath)) {
+            $projectPath = $candidateProjectPath
+            $projectManifestRaw = Import-PowerShellDataFile -Path $candidateProjectPath -ErrorAction Stop
+            $projectManifest = if ($projectManifestRaw.ContainsKey('Plugins')) { $projectManifestRaw.Plugins } else { $projectManifestRaw }
+            $Config.Plugins.Project = $projectManifest
+        }
+        elseif ($candidateProjectPath) {
+            $projectPath = $candidateProjectPath
+        }
+    }
+
+    $previousResolved = $Config.Plugins.Resolved
+    $resolved = @{}
+
+    foreach ($groupName in ($globalManifest.Keys | Sort-Object)) {
+        $resolved[$groupName] = @{}
+        foreach ($pluginKey in ($globalManifest[$groupName].Keys | Sort-Object)) {
+            $source = $globalManifest[$groupName][$pluginKey]
+            $clone = @{}
+            foreach ($prop in $source.Keys) {
+                $clone[$prop] = $source[$prop]
+            }
+
+            if (-not $clone.ContainsKey('Mandatory')) { $clone.Mandatory = $false }
+            $clone.Mandatory = [bool]$clone.Mandatory
+
+            if (-not $clone.ContainsKey('Enabled')) { $clone.Enabled = $clone.Mandatory }
+            else { $clone.Enabled = [bool]$clone.Enabled -or $clone.Mandatory }
+
+            if ($previousResolved -and $previousResolved.ContainsKey($groupName)) {
+                $prevGroup = $previousResolved[$groupName]
+                if ($prevGroup.ContainsKey($pluginKey) -and $prevGroup[$pluginKey].ContainsKey('State')) {
+                    $clone.State = $prevGroup[$pluginKey].State
+                }
+            }
+
+            $resolved[$groupName][$pluginKey] = $clone
+        }
+    }
+
+    if ($projectManifest) {
+        foreach ($groupName in ($projectManifest.Keys | Sort-Object)) {
+            foreach ($pluginKey in ($projectManifest[$groupName].Keys | Sort-Object)) {
+                if (-not $resolved.ContainsKey($groupName) -or -not $resolved[$groupName].ContainsKey($pluginKey)) {
+                    $msg = "Plugin '$pluginKey' in group '$groupName' is not defined in global manifest. (Global: $globalPath; Project: $projectPath)"
+                    throw [ConfigurationException]::new($msg, $projectPath)
+                }
+
+                $target = $resolved[$groupName][$pluginKey]
+                $projectEntry = $projectManifest[$groupName][$pluginKey]
+
+                $conflicts = @()
+                foreach ($prop in $projectEntry.Keys) {
+                    if ($prop -eq 'Enabled') { continue }
+
+                    if ($prop -eq 'Mandatory') {
+                        if ([bool]$target.Mandatory -ne [bool]$projectEntry.Mandatory) {
+                            $conflicts += $prop
+                        }
+                        continue
+                    }
+
+                    if (-not $target.ContainsKey($prop)) {
+                        $conflicts += $prop
+                        continue
+                    }
+
+                    if ($target[$prop] -ne $projectEntry[$prop]) {
+                        $conflicts += $prop
+                    }
+                }
+
+                if ($conflicts.Count -gt 0) {
+                    $fields = ($conflicts -join ', ')
+                    $msg = "Plugin '$pluginKey' has conflicting definitions for field(s): $fields. Global: $globalPath; Project: $projectPath"
+                    throw [ConfigurationException]::new($msg, $projectPath)
+                }
+
+                $projectEnabled = $true
+                if ($projectEntry.ContainsKey('Enabled')) { $projectEnabled = [bool]$projectEntry.Enabled }
+
+                if ($target.Mandatory -and -not $projectEnabled) {
+                    $pluginName = if ($target.ContainsKey('Name') -and $target.Name) { $target.Name } else { $pluginKey }
+                    $msg = "Project manifest cannot disable mandatory plugin '$pluginName'. Global: $globalPath; Project: $projectPath"
+                    throw [ConfigurationException]::new($msg, $projectPath)
+                }
+
+                if ($projectEntry.ContainsKey('State') -and -not $target.State) {
+                    $target.State = $projectEntry.State
+                }
+
+                if ($projectEnabled) {
+                    $target.Enabled = $true
+                }
+            }
+        }
+    }
+
+    if (-not $Config.Plugins.Paths) {
+        $Config.Plugins.Paths = @{ Global = $globalPath; Project = $projectPath }
+    }
+    else {
+        if (-not $Config.Plugins.Paths.ContainsKey('Global')) { $Config.Plugins.Paths.Global = $globalPath }
+        if ($projectPath) { $Config.Plugins.Paths.Project = $projectPath }
+    }
+
+    $Config.Plugins.Resolved = $resolved
+    return $resolved
+}
+
 <#
 .SYNOPSIS
     Confirms all required external plugins are installed and up to date.
@@ -407,6 +564,9 @@ function New-PSmmServiceInstance {
 .DESCRIPTION
     Validates external plugin installations, downloads missing plugins,
     and optionally updates existing plugins to the latest versions.
+
+.OUTPUTS
+    System.Collections.Hashtable
 
 .PARAMETER Config
     Application configuration object (AppConfiguration).
@@ -455,6 +615,8 @@ function Confirm-Plugins {
         $Process
     )
 
+    $resolvedPlugins = Resolve-PluginsConfig -Config $Config
+
     # Adapt typed Config into internal hashtable for helper reuse
     $Run = @{
         App = @{
@@ -472,8 +634,8 @@ function Confirm-Plugins {
             Parameters = @{
                 Update = $Config.Parameters.Update
             }
-            Requirements = @{
-                Plugins = $Config.Requirements.Plugins
+            Plugins = @{
+                Manifest = $resolvedPlugins
             }
             Secrets = @{
                 GitHub = @{}
@@ -491,13 +653,15 @@ function Confirm-Plugins {
         # GitHub token is managed via KeePassXC; no file-path fallback is needed
 
         # Iterate through plugin groups (a_GitEnv, b_ExifTool, etc.)
-        $pluginGroups = $Run.App.Requirements.Plugins.GetEnumerator() | Sort-Object -Property Name
+        $pluginGroups = $Run.App.Plugins.Manifest.GetEnumerator() | Sort-Object -Property Name
 
         # Capture baseline plugin versions once before processing (for later health diff)
         if (-not (Get-Variable -Name PSmm_PluginBaseline -Scope Script -ErrorAction SilentlyContinue)) {
             $script:PSmm_PluginBaseline = @()
             foreach ($baselineGroup in $pluginGroups) {
                 foreach ($baselinePlugin in $baselineGroup.Value.GetEnumerator()) {
+                    $isInstalled = ($baselinePlugin.Value.ContainsKey('State') -and $baselinePlugin.Value.State -and $baselinePlugin.Value.State.CurrentVersion)
+                    if (-not ($baselinePlugin.Value.Mandatory -or $baselinePlugin.Value.Enabled -or $isInstalled)) { continue }
                     $state = $null
                     if ($baselinePlugin.Value -and ($baselinePlugin.Value.PSObject.Properties.Name -contains 'State')) {
                         $state = $baselinePlugin.Value.State
@@ -518,12 +682,19 @@ function Confirm-Plugins {
                 -Message "Checking for $scopeName plugins" -Console -File
 
             # Iterate through plugins in this group
-            $pluginsInGroup = $pluginGroup.Value.GetEnumerator() | Sort-Object -Property Name
+            $pluginsInGroup = $pluginGroup.Value.GetEnumerator() | Sort-Object -Property @{ Expression = { -not ($_.Value.Mandatory) } }, Name
 
             foreach ($pluginEntry in $pluginsInGroup) {
                 $plugin = @{
                     Key = $pluginEntry.Key
                     Config = $pluginEntry.Value
+                }
+                $hasInstalledState = ($plugin.Config.ContainsKey('State') -and $plugin.Config.State -and $plugin.Config.State.CurrentVersion)
+                $shouldProcess = $plugin.Config.Mandatory -or $plugin.Config.Enabled -or ($updateMode -and $hasInstalledState)
+
+                if (-not $shouldProcess) {
+                    Write-Verbose "Skipping plugin $($plugin.Config.Name) (not enabled for current scope)"
+                    continue
                 }
 
                 Invoke-PluginConfirmation -Config $Config -Plugin $plugin -Paths $paths -Run $Run -ScopeName $scopeName -UpdateMode $updateMode `
@@ -648,12 +819,12 @@ function Invoke-PluginConfirmation {
     $Plugin.Config.State = $state
 
     # Store state in Run configuration
-    $scopeKey = $Run.App.Requirements.Plugins.GetEnumerator() |
+    $scopeKey = $Run.App.Plugins.Manifest.GetEnumerator() |
         Where-Object { $_.Name.Substring(2) -eq $ScopeName } |
         Select-Object -ExpandProperty Name -First 1
 
     if ($scopeKey) {
-        $Run.App.Requirements.Plugins.$scopeKey.$($Plugin.Key).State = $state
+        $Run.App.Plugins.Manifest.$scopeKey.$($Plugin.Key).State = $state
     }
 
     # Handle installation or update
@@ -684,7 +855,7 @@ function Invoke-PluginConfirmation {
     $Plugin.Config.State = $state
 
     if ($scopeKey) {
-        $Run.App.Requirements.Plugins.$scopeKey.$($Plugin.Key).State = $state
+        $Run.App.Plugins.Manifest.$scopeKey.$($Plugin.Key).State = $state
     }
 }
 

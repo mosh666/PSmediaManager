@@ -205,6 +205,35 @@ function Select-PSmmProject {
         # Sync Current project back to Config if using AppConfiguration
         $Config.Projects.Current = $Run.Projects.Current
 
+        # Load project-specific plugin manifest and install enabled optional plugins
+        if (-not $Config.Plugins) {
+            $Config.Plugins = @{ Global = $null; Project = $null; Resolved = $null; Paths = @{ Global = $null; Project = $null } }
+        }
+
+        $projectPluginsPath = $PathProvider.CombinePath(@($Run.Projects.Current.Config,'PSmm','PSmm.Plugins.psd1'))
+        $Config.Plugins.Paths.Project = $projectPluginsPath
+
+        if ($FileSystem.TestPath($projectPluginsPath)) {
+            $projectPlugins = Import-PowerShellDataFile -Path $projectPluginsPath -ErrorAction Stop
+            $Config.Plugins.Project = if ($projectPlugins.ContainsKey('Plugins')) { $projectPlugins.Plugins } else { $projectPlugins }
+        }
+        else {
+            $Config.Plugins.Project = $null
+        }
+
+        try {
+            $httpService = [HttpService]::new()
+            $cryptoService = [CryptoService]::new()
+            $environmentService = [EnvironmentService]::new()
+            $processService = [ProcessService]::new()
+
+            Confirm-Plugins -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $FileSystem -Environment $environmentService -PathProvider $PathProvider -Process $processService
+        }
+        catch {
+            Write-Warning "Failed to confirm project plugins for '$pName': $_"
+            throw
+        }
+
         Write-Verbose "Project '$pName' selected successfully"
     }
     catch {

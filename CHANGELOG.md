@@ -21,11 +21,62 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 
 ### Added
 
+- _No changes yet_
+
 ### Changed
+
+- _No changes yet_
 
 ### Fixed
 
+- _No changes yet_
+
 ### Removed
+
+- _No changes yet_
+
+## [0.1.2] - 2025-12-09
+
+Manifest-based plugin system with project-level overrides and improved diagnostics.
+
+### Added
+
+- **Plugin System**: Created separate `PSmm.Plugins.psd1` manifest for plugin definitions (extracted from `PSmm.Requirements.psd1`)
+- **Plugin System**: Added `Mandatory` and `Enabled` flags to plugin definitions for fine-grained control
+- **Plugin System**: Implemented project-level plugin manifest support allowing projects to enable/disable optional plugins
+- **Plugin System**: Added `Resolve-PluginsConfig` function to merge global and project-specific plugin configurations with conflict validation
+- **Plugin System**: Added `LoadPluginsFile` method to `AppConfigurationBuilder` for loading plugin manifests
+- **Configuration**: Added `Plugins` property to `AppConfiguration` class with `Global`, `Project`, `Resolved`, and `Paths` sub-properties
+- **Configuration**: Plugin paths are now tracked in `Config.Plugins.Paths.Global` and `Config.Plugins.Paths.Project`
+- **Projects**: Project selection (`Select-PSmmProject`) now automatically loads project-specific plugin manifest and confirms enabled plugins
+- **Tasks**: Added "Codacy: PMD Only (WSL Wrapper)" task to `.vscode/tasks.json`
+
+### Changed
+
+- **Plugin System**: Refactored all plugin references from `Config.Requirements.Plugins` to `Config.Plugins.Resolved` throughout codebase
+- **Plugin System**: Plugin confirmation now respects `Mandatory` and `Enabled` flags, only processing applicable plugins
+- **Plugin System**: `Register-PluginsToPATH` now checks both `Mandatory` and `Enabled` flags before PATH registration
+- **Plugin System**: `Confirm-Plugins` now accepts resolved plugin manifest instead of raw requirements
+- **Plugin System**: `Install-KeePassXC` now uses `Resolve-PluginsConfig` to access plugin definitions
+- **Configuration**: `PSmm.Requirements.psd1` now only contains PowerShell version and module requirements (plugins removed)
+- **Configuration**: Plugin state persistence moved to resolved manifest structure
+- **Logging**: `Enable-GitHooks.ps1` now uses `Write-Information` instead of `Write-Host` for better PowerShell integration
+- **Entry Point**: `PSmediaManager.ps1` now loads `PSmm.Plugins.psd1` during configuration initialization
+- **Export**: `Export-SafeConfiguration` now includes `Plugins` section with manifest and paths
+- **Health Check**: `Get-PSmmHealth` updated to read from `Config.Plugins.Resolved` and check `Mandatory`/`Enabled` flags
+- **UI**: Version display in header now uses `$Config.AppVersion` directly without "v" prefix (prefix included in version string)
+- **Testing**: Updated code coverage baseline from 70.94% to 69.87% line coverage
+
+### Fixed
+
+- **Plugin System**: Project-level plugin manifests can now properly override `Enabled` flag for optional plugins
+- **Plugin System**: Conflict detection prevents project manifests from redefining plugin properties (except `Enabled`)
+- **Plugin System**: Mandatory plugins cannot be disabled by project manifests (enforced with validation)
+- **Configuration**: Plugin state is now properly preserved across configuration reloads
+
+### Removed
+
+- **Configuration**: Removed `Plugins` section from `PSmm.Requirements.psd1` (moved to separate `PSmm.Plugins.psd1`)
 
 ## [0.1.1] - 2025-12-08
 

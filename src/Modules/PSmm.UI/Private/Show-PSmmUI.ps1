@@ -80,7 +80,7 @@ function Show-Header {
             Italic = $true
         }
         @{
-            Text = "v$($Config.AppVersion)"
+            Text = $Config.AppVersion
             Width = 'auto'
             Alignment = 'r'
             TextColor = $Config.UI.ANSI.FG.Accent

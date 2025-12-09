@@ -331,6 +331,7 @@ try {
     $tempConfig = $configBuilder.GetConfig()
     $defaultConfigPath = $tempConfig.GetConfigPath('App')
     $requirementsPath = $tempConfig.GetConfigPath('Requirements')
+    $pluginsPath = $tempConfig.GetConfigPath('Plugins')
 
     # Load configuration files using the builder (before Build() is called)
     if ($script:Services.FileSystem.TestPath($defaultConfigPath)) {
@@ -347,6 +348,14 @@ try {
     }
     else {
         Write-Warning "Requirements file not found: $requirementsPath"
+    }
+
+    if ($script:Services.FileSystem.TestPath($pluginsPath)) {
+        $null = $configBuilder.LoadPluginsFile($pluginsPath, 'Global')
+        Write-Verbose "Loaded plugins manifest: $pluginsPath"
+    }
+    else {
+        Write-Warning "Plugins manifest not found: $pluginsPath"
     }
 
     # Load on-drive storage config scoped to the current running drive

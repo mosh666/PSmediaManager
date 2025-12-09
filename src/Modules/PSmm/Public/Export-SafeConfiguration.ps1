@@ -757,6 +757,26 @@ function Export-SafeConfiguration {
             $appName = _GetMemberValue -InputObject $Configuration -Name 'InternalName'
             $appVersionValue = _GetMemberValue -InputObject $Configuration -Name 'AppVersion'
 
+            # Plugins block: capture resolved plugins manifest and paths
+            $plugins = $null
+            $pluginsSource = _GetMemberValue -InputObject $Configuration -Name 'Plugins'
+            if ($null -ne $pluginsSource) {
+                $plugins = @{}
+                if ($pluginsSource -is [System.Collections.IDictionary]) {
+                    foreach ($pk in @('Global', 'Project', 'Resolved', 'Paths')) {
+                        if ($pluginsSource.ContainsKey($pk)) {
+                            $plugins[$pk] = _PlainCopy -Obj $pluginsSource[$pk]
+                        }
+                    }
+                } else {
+                    foreach ($pk in @('Global', 'Project', 'Resolved', 'Paths')) {
+                        $val = $null
+                        try { $val = $pluginsSource.$pk } catch { $val = $null }
+                        if ($null -ne $val) { $plugins[$pk] = _PlainCopy -Obj $val }
+                    }
+                }
+            }
+
             # Compose snapshot
             return @{
                 App = @{
@@ -769,6 +789,7 @@ function Export-SafeConfiguration {
                 Storage = $storage
                 StorageRegistry = $storageRegistry
                 Projects = $projects
+                Plugins = $plugins
                 UI = $ui
                 Requirements = $requirements
                 ErrorMessages = $errors

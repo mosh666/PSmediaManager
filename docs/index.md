@@ -2,6 +2,10 @@
 
 ## Recent Updates
 
+- **v0.1.2 Released** (2025-12-09): Manifest-based plugin system with project-level overrides
+  - New `PSmm.Plugins.psd1` manifest with `Mandatory`/`Enabled` flags
+  - Project plugin manifests auto-loaded during project selection
+  - Plugin health/export reporting updated to use resolved manifest
 - **v0.1.1 Released** (2025-12-08): Patch release with documentation improvements
   - Added comprehensive troubleshooting guide covering all component issues
   - Created complete public API reference with 35+ exported functions documented
