@@ -21,19 +21,30 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 
 ### Added
 
-- _No changes yet_
+- **Architecture**: Documented global service injection pattern for cross-module dependency injection
+- **Code Quality**: Added PSAvoidGlobalVars to PSScriptAnalyzer exclusions with architectural justification
 
 ### Changed
 
-- _No changes yet_
+- **Plugin System**: FFmpeg and MKVToolNix plugins now use native 7z.exe extraction instead of 7Zip4PowerShell module
+- **Plugin System**: 7-Zip plugin installer now uses native silent installation instead of 7Zip4PowerShell extraction
+- **Service Layer**: Modules now imported with `-Global` flag for proper class visibility across dependent modules
+- **Service Layer**: Services now exposed globally via `$global:PSmmServices` for cross-module access
+- **Configuration**: Select-PSmmProject now uses pre-instantiated global services when available
+- **Bootstrap**: Improved GitVersion fallback logging verbosity
+- **Health Check**: Fixed property names in Get-PSmmHealth summary output (PowerShell.CurrentVersion, PowerShell.RequiredVersion, Storage.GroupCount)
+- **Testing**: Updated code coverage baseline from 69.87% to 69.23% line coverage
 
 ### Fixed
 
-- _No changes yet_
+- **Code Quality**: Removed trailing whitespace from FFmpeg.ps1, MKVToolNix.ps1, and PSmediaManager.ps1 (19 violations)
+- **Code Quality**: Achieved zero PSScriptAnalyzer violations across entire codebase
 
 ### Removed
 
-- _No changes yet_
+- **Dependencies**: Removed 7Zip4PowerShell PowerShell module dependency from requirements
+- **CI/CD**: Removed 7Zip4PowerShell from GitHub Actions workflow module installation
+- **Documentation**: Removed 7Zip4PowerShell from README.md and install.md installation instructions
 
 ## [0.1.2] - 2025-12-09
 
