@@ -79,7 +79,7 @@ On first run PSmediaManager will initialize required directories and you can beg
 If you see module import or analyzer warnings, pre-install the recommended PSGallery modules (optional) and re-run:
 
 ```pwsh
-Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
+Install-Module Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
 ./Start-PSmediaManager.ps1
 ```
 
@@ -231,7 +231,7 @@ Minimum PowerShell: 7.5.4 (see `src/Config/PSmm/PSmm.Requirements.psd1`).
 Required Gallery Modules (installed on-demand or pre-install manually):
 
 ```pwsh
-Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
+Install-Module Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
 ```
 
 External Tools Managed via Plugins:
