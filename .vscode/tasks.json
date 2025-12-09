@@ -34,6 +34,25 @@
 			],
 			"problemMatcher": [],
 			"group": "none"
+		},
+		{
+			"label": "Codacy: PMD Only (WSL Wrapper)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-File",
+				".\\.codacy\\Invoke-CodacyWSL.ps1",
+				"-RepositoryPath",
+				".",
+				"-CliArguments",
+				"analyze",
+				"--tool",
+				"pmd",
+				"-Verbose"
+			],
+			"problemMatcher": [],
+			"group": "none"
 		}
 	]
 }

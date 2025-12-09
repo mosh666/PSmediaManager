@@ -58,27 +58,62 @@ Practices:
 
 ## PSmm.Plugins
 
-External tool acquisition & lifecycle management.
+External tool acquisition & lifecycle management with manifest-based configuration.
 
 Key Functions:
 
 ```text
 Confirm-Plugins
+Resolve-PluginsConfig
 Install-KeePassXC
 Start-PSmmdigiKam / Stop-PSmmdigiKam
 Get-PSmmAvailablePort / Get-PSmmProjectPorts
 Initialize-PSmmProjectDigiKamConfig
 ```
 
+### Plugin Manifest System
+
+Plugins are defined in `src/Config/PSmm/PSmm.Plugins.psd1` (global defaults) with optional project-level overrides:
+
+- **Global Manifest**: Authoritative definitions for all available plugins
+- **Project Manifest**: Per-project `Config/PSmm/PSmm.Plugins.psd1` can override `Enabled` flag for optional plugins
+- **Resolution**: `Resolve-PluginsConfig` merges configurations with conflict validation
+
+### Plugin Properties
+
+Each plugin includes:
+- `Mandatory`: Core requirement (`$true`) vs optional tool (`$false`)
+- `Enabled`: Activation state (overridable per-project for optional plugins)
+- `Source`: Acquisition method (`GitHub`, `Url`)
+- `AssetPattern`: Regex for deterministic asset selection
+- `Command`: Executable filename
+- `CommandPath`: Relative path within plugin directory
+- `RegisterToPath`: Whether to add to Process PATH
+
 Asset Patterns:
 
 - Regex-like patterns ensure deterministic selection (e.g. portable ImageMagick builds).
+- Patterns support version capture groups for automated version resolution.
 
 Extension:
 
-1. Add definition entry to `PSmm.Requirements.psd1`.
-2. Implement acquisition logic if special handling needed.
-3. Add tests for version resolution.
+1. Add definition entry to `src/Config/PSmm/PSmm.Plugins.psd1`.
+2. Set appropriate `Mandatory` and `Enabled` flags.
+3. Implement acquisition logic if special handling needed.
+4. Add tests for version resolution.
+5. Document any project-level override requirements.
+
+### Configuration Access
+
+After `Invoke-PSmm` or `Select-PSmmProject`:
+
+```powershell
+$resolvedPlugins = $Config.Plugins.Resolved
+$isFFmpegEnabled = $Config.Plugins.Resolved.c_Misc.FFmpeg.Enabled
+$pluginState = $Config.Plugins.Resolved.b_GitEnv.GitVersion.State
+```
+
+See [Configuration](configuration.md) for detailed plugin manifest documentation.
 
 ## PSmm.Projects
 

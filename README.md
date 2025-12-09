@@ -235,17 +235,24 @@ Required Gallery Modules (installed on-demand or pre-install manually):
 Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
 ```
 
-External Tools Managed via Plugins (examples):
+External Tools Managed via Plugins:
 
+Plugin definitions are now managed in `src/Config/PSmm/PSmm.Plugins.psd1` with support for per-project configuration. See [Plugin Orchestration](#plugin-orchestration) for details.
+
+Mandatory plugins (automatically installed):
 - 7-Zip (GitHub `ip7z/7zip` assets)
 - PortableGit / GitVersion / Git LFS
-- ExifTool, FFmpeg, ImageMagick
+- ExifTool
 - KeePassXC CLI
-- MKVToolNix
 - MariaDB
 - digiKam
 
-Each plugin definition includes: source type (GitHub/Url), asset pattern for reliable version resolution, command path, and executable name. See `PSmm.Requirements.psd1` for the authoritative list.
+Optional plugins (enable per-project as needed):
+- FFmpeg
+- ImageMagick
+- MKVToolNix
+
+Each plugin definition includes: source type (GitHub/Url), asset pattern for reliable version resolution, command path, executable name, and mandatory/enabled flags.
 
 Tip: Run `Confirm-Plugins` after pulling new changes to ensure newly added tools are acquired.
 
@@ -321,21 +328,86 @@ Projects encapsulate directories, database initialization (MariaDB/digiKam coord
 
 ## Plugin Orchestration
 
-`PSmm.Plugins` centralizes acquisition & verification:
+`PSmm.Plugins` centralizes acquisition & verification of external tools with a flexible manifest-based system.
 
-- Deterministic asset selection using regex-like `AssetPattern` strings.
-- Version discovery (e.g. remote `VersionUrl` endpoints).
-- Start/Stop helpers for digiKam integration.
-- Port management functions for local services.
+### Plugin Manifest System
 
-Workflow:
+Plugin definitions are stored in `src/Config/PSmm/PSmm.Plugins.psd1` (global defaults) with support for project-level overrides:
+
+- **Global Manifest** (`PSmm.Plugins.psd1`): Defines all available plugins with their properties
+- **Project Manifest** (optional, per-project `Config/PSmm/PSmm.Plugins.psd1`): Overrides `Enabled` flag for optional plugins
+- **Resolved Configuration**: Merged at runtime via `Resolve-PluginsConfig` with conflict validation
+
+### Plugin Properties
+
+Each plugin definition includes:
+
+- **Mandatory** (`$true`/`$false`): Core plugins required by all projects
+- **Enabled** (`$true`/`$false`): Whether plugin is active (can be overridden per-project for optional plugins)
+- **Source**: Acquisition source type (`GitHub`, `Url`)
+- **AssetPattern**: Regex-like pattern for deterministic asset selection
+- **Command**: Executable name
+- **CommandPath**: Relative path within plugin directory to executable
+- **RegisterToPath**: Whether to add plugin directory to Process PATH during session
+
+Example plugin definition:
+
+```powershell
+FFmpeg = @{
+    Mandatory = $false
+    Enabled   = $false
+    Source = 'Url'
+    BaseUri = 'https://www.gyan.dev'
+    VersionUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z'
+    CommandPath = 'bin'
+    Command = 'ffmpeg.exe'
+    Name = 'ffmpeg'
+    RegisterToPath = $true
+}
+```
+
+### Project-Level Plugin Configuration
+
+Projects can enable optional plugins by creating a project-specific manifest:
+
+```powershell
+# ProjectRoot/Config/PSmm/PSmm.Plugins.psd1
+@{
+    Plugins = @{
+        c_Misc = @{
+            FFmpeg = @{ Enabled = $true }
+            ImageMagick = @{ Enabled = $true }
+        }
+    }
+}
+```
+
+Rules:
+- Project manifests can only override the `Enabled` flag for optional plugins
+- Mandatory plugins cannot be disabled
+- Conflicting property definitions (other than `Enabled`) trigger validation errors
+- Project manifests are loaded automatically when selecting a project via `Select-PSmmProject`
+
+### Workflow
 
 ```pwsh
-Confirm-Plugins          # Acquire/mirror required external tools
+Confirm-Plugins          # Acquire/verify required & enabled external tools
 Install-KeePassXC        # Example targeted installer
 Start-PSmmdigiKam        # Launch digiKam with managed paths
 Stop-PSmmdigiKam         # Graceful stop
 ```
+
+### Available Plugins
+
+Managed external tools include:
+
+- **a_Essentials**: 7-Zip (mandatory)
+- **b_GitEnv**: PortableGit, GitVersion, Git LFS (all mandatory)
+- **c_Misc**: ExifTool (mandatory), FFmpeg, ImageMagick, KeePassXC (mandatory), MKVToolNix
+- **d_Database**: MariaDB (mandatory)
+- **e_Management**: digiKam (mandatory)
+
+See `src/Config/PSmm/PSmm.Plugins.psd1` for the authoritative list and complete definitions.
 
 ## Logging
 

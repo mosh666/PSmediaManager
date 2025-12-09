@@ -8,11 +8,25 @@ PSmediaManager employs layered configuration objects and safe export capabilitie
 - `AppConfigurationBuilder`: fluent builder aggregating sources.
 - Secret abstraction: retrieval via KeePassXC CLI wrappers (not in plain text config).
 
+## Configuration Files
+
+PSmediaManager uses several configuration files located in `src/Config/PSmm/`:
+
+- **PSmm.App.psd1**: Application-level settings (paths, logging, UI preferences)
+- **PSmm.Requirements.psd1**: PowerShell version and required PSGallery modules
+- **PSmm.Plugins.psd1**: Global plugin manifest with definitions for all external tools
+- **PSmm.Storage.psd1**: Storage group configuration (created on-drive during first-run setup)
+
+Additionally, projects can provide:
+- **[ProjectRoot]/Config/PSmm/PSmm.Plugins.psd1**: Project-specific plugin overrides (optional)
+
 ## Layering Model
 
 1. Internal defaults.
 2. Environment-derived values (paths, OS specifics).
-3. User overrides (future: persisted user config file or project-scoped settings).
+3. Global configuration files (App, Requirements, Plugins).
+4. Project-specific overrides (when a project is selected).
+5. Runtime state and resolved values.
 
 ## Safe Export
 
@@ -29,6 +43,100 @@ Automatic handling includes:
 - Redaction for known secret placeholders.
 
 > **GitHub best practice:** When opening a bug report, attach the sanitized output from `Export-SafeConfiguration` so maintainers can reproduce issues without exposing secrets. Security vulnerabilities should follow [SECURITY.md](../SECURITY.md) and leverage GitHub Security Advisories when possible.
+
+## Plugin Configuration
+
+PSmediaManager uses a manifest-based plugin system with global defaults and optional project-level overrides.
+
+### Global Plugin Manifest
+
+Located at `src/Config/PSmm/PSmm.Plugins.psd1`, this file defines all available external tools with their properties:
+
+- **Mandatory**: Core plugins required by all projects (`$true`) vs optional tools (`$false`)
+- **Enabled**: Default activation state (can be overridden per-project for optional plugins)
+- **Source**: Acquisition method (`GitHub`, `Url`)
+- **AssetPattern**: Regex pattern for deterministic asset selection
+- **Command**: Executable filename
+- **CommandPath**: Relative path within plugin directory
+- **RegisterToPath**: Whether to add to Process PATH during session
+
+Example:
+
+```powershell
+@{
+    Plugins = @{
+        c_Misc = @{
+            FFmpeg = @{
+                Mandatory = $false
+                Enabled   = $false
+                Source = 'Url'
+                BaseUri = 'https://www.gyan.dev'
+                VersionUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z'
+                CommandPath = 'bin'
+                Command = 'ffmpeg.exe'
+                Name = 'ffmpeg'
+                RegisterToPath = $true
+            }
+        }
+    }
+}
+```
+
+### Project-Level Plugin Overrides
+
+Projects can enable optional plugins by creating `[ProjectRoot]/Config/PSmm/PSmm.Plugins.psd1`:
+
+```powershell
+@{
+    Plugins = @{
+        c_Misc = @{
+            FFmpeg = @{ Enabled = $true }
+            ImageMagick = @{ Enabled = $true }
+        }
+    }
+}
+```
+
+**Rules:**
+- Project manifests can only override the `Enabled` flag for optional plugins
+- Mandatory plugins cannot be disabled
+- All other properties must match the global manifest (conflicts trigger validation errors)
+- Project manifests are automatically loaded when selecting a project via `Select-PSmmProject`
+
+### Plugin Resolution
+
+The `Resolve-PluginsConfig` function merges global and project configurations:
+
+1. Loads global manifest from `PSmm.Plugins.psd1`
+2. Loads project manifest if available (and if a project is selected)
+3. Validates no conflicting property definitions (except `Enabled`)
+4. Enforces that mandatory plugins remain enabled
+5. Preserves plugin state (CurrentVersion, LatestVersion) across reloads
+6. Stores resolved configuration in `Config.Plugins.Resolved`
+
+Access pattern:
+
+```powershell
+# After Invoke-PSmm or Select-PSmmProject:
+$resolvedPlugins = $Config.Plugins.Resolved
+
+# Check if a plugin is enabled for current scope:
+$isFFmpegEnabled = $Config.Plugins.Resolved.c_Misc.FFmpeg.Enabled
+
+# Plugin paths are tracked separately:
+$globalManifestPath = $Config.Plugins.Paths.Global
+$projectManifestPath = $Config.Plugins.Paths.Project  # null if no project manifest
+```
+
+### Adding New Plugins
+
+1. Add definition to `src/Config/PSmm/PSmm.Plugins.psd1` under appropriate group
+2. Set `Mandatory = $true` for core tools, `$false` for optional tools
+3. Set `Enabled = $true` for mandatory plugins or default-enabled optional tools
+4. Provide accurate `AssetPattern` and `Command` details
+5. Set `RegisterToPath = $true` if the tool should be available in PATH
+6. Document any special acquisition logic if needed
+7. Run `Confirm-Plugins` to test acquisition
 
 ## Secrets Management
 
