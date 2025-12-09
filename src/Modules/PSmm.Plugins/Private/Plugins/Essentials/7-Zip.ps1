@@ -35,7 +35,8 @@ function Invoke-Installer-7z {
     )
     try {
         $ExtractPath = Join-Path -Path $Paths.Root -ChildPath (Split-Path $InstallerPath -LeafBase)
-        Expand-7Zip -ArchiveFileName $InstallerPath -TargetPath $ExtractPath
+        $process = Start-Process -FilePath $InstallerPath -ArgumentList "/S /D=$($ExtractPath)\" -Wait -PassThru
+        $process | Out-Null
         Write-PSmmLog -Level SUCCESS -Context "Install $($Plugin.Config.Name)" -Message "Installation completed for $($InstallerPath)" -Console -File
     }
     catch {
