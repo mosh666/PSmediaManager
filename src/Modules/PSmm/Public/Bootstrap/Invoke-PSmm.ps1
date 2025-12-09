@@ -409,7 +409,7 @@ function Get-ApplicationVersion {
                 }
             }
             else {
-                Write-Warning 'GitVersion did not return version information'
+                Write-Verbose 'GitVersion did not return version information; attempting git describe fallback'
             }
         }
 
