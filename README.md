@@ -1,11 +1,11 @@
 # PSmediaManager
 
-## Latest Changes - v0.1.2
+## Latest Changes - v0.1.3
 
-- **Plugin System**: Introduced dedicated `PSmm.Plugins.psd1` manifest with `Mandatory`/`Enabled` flags for deterministic plugin control
-- **Projects**: Project selection now auto-loads project plugin manifests, enabling optional tools per project while enforcing mandatory plugins
-- **Configuration**: New plugin resolution pipeline (`Resolve-PluginsConfig`) with state preservation, PATH checks, and export/health reporting updates
-- **Tooling**: Added Codacy PMD-only task and improved git hook helper logging; coverage baseline adjusted for latest test run
+- **Dependencies**: Removed 7Zip4PowerShell PowerShell module dependency; FFmpeg and MKVToolNix now use native 7z.exe extraction
+- **Architecture**: Implemented global service injection pattern (`$global:PSmmServices`) for cross-module dependency management
+- **Code Quality**: Achieved zero PSScriptAnalyzer violations with justified architectural pattern exclusions
+- **Service Layer**: Modules imported with `-Global` flag for proper class visibility across dependent modules
 
 See [CHANGELOG.md](CHANGELOG.md) for complete details.
 
@@ -18,7 +18,7 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/mosh666/PSmediaManager)](https://github.com/mosh666/PSmediaManager/releases)
 
-> **Status**: Version v0.1.2 available. APIs and structure may evolve.
+> **Status**: Version v0.1.3 available. APIs and structure may evolve.
 >
 > **Versioning**: All modules derive their version dynamically from Git tags using GitVersion. See [docs/versioning.md](docs/versioning.md) for details.
 

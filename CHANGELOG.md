@@ -21,6 +21,26 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 
 ### Added
 
+- _No changes yet_
+
+### Changed
+
+- _No changes yet_
+
+### Fixed
+
+- _No changes yet_
+
+### Removed
+
+- _No changes yet_
+
+## [0.1.3] - 2025-12-09
+
+Code quality improvements, architectural pattern implementation, and dependency reduction.
+
+### Added
+
 - **Architecture**: Documented global service injection pattern for cross-module dependency injection
 - **Code Quality**: Added PSAvoidGlobalVars to PSScriptAnalyzer exclusions with architectural justification
 
