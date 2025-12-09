@@ -1,12 +1,11 @@
 # PSmediaManager
 
-## Latest Changes - v0.1.1
+## Latest Changes - v0.1.2
 
-- **Documentation**: Added comprehensive troubleshooting guide covering startup, storage, plugins, performance, and development issues
-- **Documentation**: Created complete public API reference documenting all 35+ exported functions across 5 modules with stability markers
-- **Automation**: Added `tools/Enable-GitHooks.ps1` helper script to simplify git hook setup for automatic version synchronization
-- **Versioning**: Fixed duplicate SHA in `AppVersion` string generation (now correctly displays as `v0.1.0-17-g1f72ffd` instead of `v0.1.0-17-g1f72ffd-1f72ffd`)
-- **Testing**: Fixed code coverage variance and test isolation issues
+- **Plugin System**: Introduced dedicated `PSmm.Plugins.psd1` manifest with `Mandatory`/`Enabled` flags for deterministic plugin control
+- **Projects**: Project selection now auto-loads project plugin manifests, enabling optional tools per project while enforcing mandatory plugins
+- **Configuration**: New plugin resolution pipeline (`Resolve-PluginsConfig`) with state preservation, PATH checks, and export/health reporting updates
+- **Tooling**: Added Codacy PMD-only task and improved git hook helper logging; coverage baseline adjusted for latest test run
 
 See [CHANGELOG.md](CHANGELOG.md) for complete details.
 
@@ -19,7 +18,7 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/mosh666/PSmediaManager)](https://github.com/mosh666/PSmediaManager/releases)
 
-> **Status**: Version v0.1.1 available. APIs and structure may evolve.
+> **Status**: Version v0.1.2 available. APIs and structure may evolve.
 >
 > **Versioning**: All modules derive their version dynamically from Git tags using GitVersion. See [docs/versioning.md](docs/versioning.md) for details.
 

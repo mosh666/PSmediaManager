@@ -199,7 +199,7 @@ git push origin main --tags
 # For a patch release
 git checkout main
 git cherry-pick <commit-sha>
-git tag -a v0.1.1 -m "Hotfix 0.1.1"
+git tag -a v0.1.2 -m "Release 0.1.2"
 git push origin main --tags
 ```
 

@@ -21,6 +21,26 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 
 ### Added
 
+- _No changes yet_
+
+### Changed
+
+- _No changes yet_
+
+### Fixed
+
+- _No changes yet_
+
+### Removed
+
+- _No changes yet_
+
+## [0.1.2] - 2025-12-09
+
+Manifest-based plugin system with project-level overrides and improved diagnostics.
+
+### Added
+
 - **Plugin System**: Created separate `PSmm.Plugins.psd1` manifest for plugin definitions (extracted from `PSmm.Requirements.psd1`)
 - **Plugin System**: Added `Mandatory` and `Enabled` flags to plugin definitions for fine-grained control
 - **Plugin System**: Implemented project-level plugin manifest support allowing projects to enable/disable optional plugins
