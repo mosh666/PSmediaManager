@@ -80,11 +80,42 @@ function Invoke-Installer-ffmpeg {
     param (
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        [string]$InstallerPath
+        [string]$InstallerPath,
+        $Process,
+        $FileSystem
     )
     try {
         $ExtractPath = $Paths.Root
-        Expand-7Zip -ArchiveFileName $InstallerPath -TargetPath $ExtractPath
+
+        # Ensure extraction directory exists
+        if ($FileSystem -and -not $FileSystem.TestPath($ExtractPath)) {
+            $FileSystem.NewItem($ExtractPath, 'Directory')
+        }
+        elseif (-not $FileSystem -and -not (Test-Path $ExtractPath)) {
+            New-Item -Path $ExtractPath -ItemType Directory -Force | Out-Null
+        }
+
+        # Use 7z.exe to extract the archive
+        if ($Process) {
+            $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
+        }
+        else {
+            $sevenZipCmd = '7z'
+        }
+
+        # Extract archive
+        $result = if ($Process) {
+            $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$ExtractPath", '-y'))
+        }
+        else {
+            & $sevenZipCmd x $InstallerPath "-o$ExtractPath" -y
+        }
+
+        if ($Process -and -not $result.Success) {
+            $ex = [System.Exception]::new("7z extraction failed with exit code: $($result.ExitCode)")
+            throw $ex
+        }
+
         Write-PSmmLog -Level SUCCESS -Context "Install $($Plugin.Config.Name)" -Message "Installation completed for $($InstallerPath)" -Console -File
     }
     catch {

@@ -180,8 +180,10 @@ try {
         if ($script:Services.FileSystem.TestPath($manifestPath)) {
             try {
                 Write-Verbose "Importing module: $moduleName"
-                # Removed -Global flag for proper module scoping
-                Import-Module -Name $manifestPath -Force -ErrorAction Stop -Verbose:($VerbosePreference -eq 'Continue')
+                # Import modules with global scope so class definitions are available to dependent code.
+                # This is necessary for service instantiation and type resolution in functions that
+                # reference classes from PSmm (e.g., [HttpService], [CryptoService], etc.)
+                Import-Module -Name $manifestPath -Force -Global -ErrorAction Stop -Verbose:($VerbosePreference -eq 'Continue')
                 $loadedModules++
             }
             catch {
@@ -228,6 +230,10 @@ try {
     $script:Services.Cim     = [CimService]::new()
     $script:Services.Storage = [StorageService]::new()
     $script:Services.Git     = [GitService]::new()
+
+    # Expose services globally so modules can access them without circular dependencies
+    $global:PSmmServices = $script:Services
+
     Write-Verbose "Full service layer available"
 }
 catch {
@@ -634,7 +640,7 @@ finally {
                     if ($health) {
                         $pluginChanges = @($health.Plugins | Where-Object { $_.Changed }).Count
                         $upgrades = @($health.Plugins | Where-Object { $_.Upgraded }).Count
-                        $summaryLine = "Health: PS=$($health.PowerShell.Current) (Req $($health.PowerShell.Required), OK=$($health.PowerShell.VersionOk)); Modules=$(@($health.Modules).Count); Plugins=$(@($health.Plugins).Count); Changed=$pluginChanges; Upgraded=$upgrades; Storage=$(@($health.Storage).Count); GitHubToken=$($health.Vault.GitHubTokenPresent)"
+                        $summaryLine = "Health: PS=$($health.PowerShell.CurrentVersion) (Req $($health.PowerShell.RequiredVersion), OK=$($health.PowerShell.VersionOk)); Modules=$(@($health.Modules).Count); Plugins=$(@($health.Plugins).Count); Changed=$pluginChanges; Upgraded=$upgrades; Storage=$($health.Storage.GroupCount); GitHubToken=$($health.Vault.GitHubTokenPresent)"
                         Write-PSmmLog -Level NOTICE -Context 'Health Summary' -Message $summaryLine -File
                     }
                 }

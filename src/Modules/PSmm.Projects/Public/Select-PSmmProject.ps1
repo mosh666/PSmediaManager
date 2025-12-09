@@ -222,10 +222,20 @@ function Select-PSmmProject {
         }
 
         try {
-            $httpService = [HttpService]::new()
-            $cryptoService = [CryptoService]::new()
-            $environmentService = [EnvironmentService]::new()
-            $processService = [ProcessService]::new()
+            # Use pre-instantiated services from global context when available,
+            # otherwise instantiate new ones (for standalone/test usage)
+            if ($global:PSmmServices) {
+                $httpService = $global:PSmmServices.Http
+                $cryptoService = $global:PSmmServices.Crypto
+                $environmentService = $global:PSmmServices.Environment
+                $processService = $global:PSmmServices.Process
+            }
+            else {
+                $httpService = [HttpService]::new()
+                $cryptoService = [CryptoService]::new()
+                $environmentService = [EnvironmentService]::new()
+                $processService = [ProcessService]::new()
+            }
 
             Confirm-Plugins -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $FileSystem -Environment $environmentService -PathProvider $PathProvider -Process $processService
         }

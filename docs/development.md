@@ -36,6 +36,58 @@ pwsh -NoProfile -File ./tools/Enable-GitHooks.ps1
 - Avoid one-letter variable names; prefer meaningful semantic names.
 - Use `Set-StrictMode -Version Latest` and avoid implicit type conversions.
 
+## Architectural Patterns
+
+### Global Service Injection
+
+PSmediaManager uses a **global service injection pattern** for cross-module dependency management:
+
+**Pattern Overview**:
+- Services (HttpService, CryptoService, FileSystemService, etc.) are instantiated once in `src/PSmediaManager.ps1`
+- The service collection is exposed via `$global:PSmmServices` for access by dependent modules
+- Modules check for pre-instantiated services before creating new instances
+
+**Rationale**:
+- **Avoids circular dependencies**: Modules can depend on services without importing the PSmm module
+- **Enables testability**: Services can be mocked by replacing `$global:PSmmServices` in tests
+- **Single source of truth**: All modules use the same service instances, ensuring consistent behavior
+- **Proper cleanup**: Services are managed centrally and cleaned up in the finally block
+
+**Implementation Example** (`Select-PSmmProject.ps1`):
+
+```powershell
+if ($global:PSmmServices) {
+    $httpService = $global:PSmmServices.Http
+    $cryptoService = $global:PSmmServices.Crypto
+}
+else {
+    # Fallback for standalone/test usage
+    $httpService = [HttpService]::new()
+    $cryptoService = [CryptoService]::new()
+}
+```
+
+**PSScriptAnalyzer Configuration**:
+The `PSAvoidGlobalVars` rule is intentionally excluded in `tests/PSScriptAnalyzer.Settings.psd1` because global service injection is an architectural pattern, not a code smell. This exclusion is documented with a justification comment.
+
+### Module Class Visibility
+
+Modules that define PowerShell classes must be imported with the `-Global` flag to ensure type definitions are visible to dependent code:
+
+**Pattern**:
+
+```powershell
+Import-Module -Name $manifestPath -Force -Global
+```
+
+**Rationale**:
+- PowerShell class definitions are scoped to the module session state by default
+- Dependent modules need access to service classes (HttpService, CryptoService, etc.)
+- Global import makes types available across the entire session without requiring re-imports
+- This is required for service instantiation and type resolution in functions
+
+**Alternative Considered**: Using `[object]` type hints with runtime validation was attempted but added unnecessary complexity and reduced type safety. Global import is the idiomatic PowerShell pattern for this scenario.
+
 ## Testing
 
 Run the exact harness that CI executes so analyzer, tests, and coverage behave identically:

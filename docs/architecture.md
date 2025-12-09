@@ -101,7 +101,7 @@ Paths are derived from configuration objects to support relocating the repo or r
 1. Definitions live in `src/Config/PSmm/PSmm.Requirements.psd1` with fields: source, repo/base URI, asset pattern, command path, command name.
 2. `Confirm-Plugins` iterates each definition, checking existing archives / extracted binaries.
 3. Missing assets trigger download via HttpService or GitHub release APIs.
-4. Archives are extracted using 7Zip4PowerShell into the managed plugin directory.
+4. Archives are extracted using the native 7z.exe command into the managed plugin directory.
 5. Commands are validated (hash/exists) before being registered for use.
 6. Plugin start/stop helpers (e.g., `Start-PSmmdigiKam`) initialize environment variables and launch processes with explicit working directories.
 

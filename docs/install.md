@@ -31,7 +31,7 @@ This script orchestrates module loading without mutating your global profile.
 Pre-install to speed up first run (optional):
 
 ```pwsh
-Install-Module 7Zip4PowerShell,Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
+Install-Module Pester,PSLogs,PSScriptAnalyzer,PSScriptTools -Scope CurrentUser -Repository PSGallery
 ```
 
 ## Portable Philosophy
