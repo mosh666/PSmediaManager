@@ -10,12 +10,13 @@
 .PARAMETER Config
     The AppConfiguration object containing application state and settings.
 
+.PARAMETER ServiceContainer
+    ServiceContainer instance providing access to all application services (FileSystem, Process, PathProvider, etc.).
 
 .EXAMPLE
-    Invoke-PSmmUI -Config $appConfig
+    Invoke-PSmmUI -Config $appConfig -ServiceContainer $ServiceContainer
 
-    Launches the UI using the AppConfiguration object.
-
+    Launches the UI using the AppConfiguration and ServiceContainer objects.
 
 .NOTES
     This function runs in an interactive loop until the user chooses to quit (Q).
@@ -25,6 +26,8 @@
     - UI output must go directly to console, not pipeline (prevents blank line artifacts)
     - Interactive menu operations require direct host communication
     - PSAvoidUsingWriteHost is intentionally used for this purpose
+
+    BREAKING CHANGE (v0.2.0): Replaced individual service parameters with -ServiceContainer parameter.
 #>
 
 #Requires -Version 7.5.4
@@ -39,16 +42,13 @@ function Invoke-PSmmUI {
 
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        $Process,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNull()]
-        $FileSystem,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNull()]
-        $PathProvider
+        $ServiceContainer
     )
+
+    # Resolve services from container
+    $Process = $ServiceContainer.Resolve('Process')
+    $FileSystem = $ServiceContainer.Resolve('FileSystem')
+    $PathProvider = $ServiceContainer.Resolve('PathProvider')
 
     # PS 7.5.4+ baseline and entrypoint import order guarantee core types are available
     # Defensive: ensure AppConfiguration class is loaded (runtime resilience against import order issues)
@@ -128,7 +128,7 @@ function Invoke-PSmmUI {
             $loopProjects = $null
             try {
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $($Config.Storage.Keys.Count)" -File
-                $loopProjects = Get-PSmmProjects -Config $Config -FileSystem $FileSystem
+                $loopProjects = Get-PSmmProjects -Config $Config -ServiceContainer $ServiceContainer
                 $masterCount = if ($loopProjects.Master) { $loopProjects.Master.Keys.Count } else { 0 }
                 $backupCount = if ($loopProjects.Backup) { $loopProjects.Backup.Keys.Count } else { 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Projects loaded. Master drives: $masterCount, Backup drives: $backupCount" -File
@@ -225,7 +225,7 @@ function Invoke-PSmmUI {
                             Write-PSmmHost "Filtering to Storage Group $MatchingKey" -ForegroundColor Green
                         }
                         else {
-                            Write-Warning "Invalid storage group '$GroupSelection'. Available: $($Config.Storage.Keys -join ', ')"
+                            Write-PSmmLog -Level WARNING -Message "Invalid storage group '$GroupSelection'. Available: $($Config.Storage.Keys -join ', ')" -Console
                         }
                     }
                     Start-Sleep -Seconds 1
@@ -236,7 +236,7 @@ function Invoke-PSmmUI {
                         New-PSmmProject -Config $Config
                     }
                     catch {
-                        Write-Warning "Failed to create project: $_"
+                        Write-PSmmLog -Level WARNING -Message "Failed to create project: $_" -Console
                         Pause
                     }
                 }
@@ -247,7 +247,7 @@ function Invoke-PSmmUI {
                         $Process.StartProcess('KeePassXC.exe', @())
                     }
                     catch {
-                        Write-Warning "Failed to start KeePassXC: $_"
+                        Write-PSmmLog -Level WARNING -Message "Failed to start KeePassXC: $_" -Console
                         Pause
                     }
                 }
@@ -277,7 +277,7 @@ function Invoke-PSmmUI {
                         }
                     }
                     catch {
-                        Write-Warning "Failed to manage storage: $_"
+                        Write-PSmmLog -Level WARNING -Message "Failed to manage storage: $_" -Console
                     }
                     # No Pause here - ManageStorage handles its own pauses
                 }
@@ -408,7 +408,7 @@ function Invoke-PSmmUI {
                             }
                         }
                         catch {
-                            Write-Warning "Failed to select project: $_"
+                            Write-PSmmLog -Level WARNING -Message "Failed to select project: $_" -Console
                             Pause
                         }
                     }
@@ -421,7 +421,7 @@ function Invoke-PSmmUI {
         } while ($Selection -ne 'Q')
     }
     catch {
-        Write-Error "UI error: $_"
+        Write-PSmmLog -Level ERROR -Context 'UI' -Message "UI error: $_" -Console
         throw
     }
     finally {

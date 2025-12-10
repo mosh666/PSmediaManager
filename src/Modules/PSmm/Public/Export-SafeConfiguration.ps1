@@ -20,11 +20,11 @@
 .PARAMETER Path
     Destination .psd1 file path. Parent directory will be created if missing.
 
-.PARAMETER FileSystem
-    Optional object with a SetContent method. If omitted or invalid, falls back to Set-Content.
+.PARAMETER ServiceContainer
+    ServiceContainer instance for accessing FileSystem service. If omitted, falls back to native cmdlets.
 
 .EXAMPLE
-    Export-SafeConfiguration -Configuration $appConfig -Path (Join-Path -Path $appConfig.Paths.Log -ChildPath 'PSmediaManager-Run.psd1')
+    Export-SafeConfiguration -Configuration $appConfig -Path (Join-Path -Path $appConfig.Paths.Log -ChildPath 'PSmediaManager-Run.psd1') -ServiceContainer $ServiceContainer
 
 .OUTPUTS
     String (path) - Returns the path written on success.
@@ -32,6 +32,8 @@
 .NOTES
     This function intentionally does NOT round-trip the full configuration. It is a diagnostic artifact.
     If shape changes, extend the sanitization helper instead of writing raw object.
+
+    BREAKING CHANGE (v0.2.0): Replaced -FileSystem parameter with -ServiceContainer parameter.
 #>
 
 #Requires -Version 7.5.4
@@ -51,7 +53,7 @@ function Export-SafeConfiguration {
         [string]$Path,
 
         [Parameter()]
-        [object]$FileSystem
+        [object]$ServiceContainer
     )
 
     try {
@@ -1293,11 +1295,22 @@ function Export-SafeConfiguration {
         $content = _ToPsd1 -Data $stringified
         if (-not $content) { throw 'Export produced empty content.' }
 
+        # Resolve FileSystem service from container if available
+        $fileSystem = $null
+        if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Match('Resolve').Count -gt 0)) {
+            try {
+                $fileSystem = $ServiceContainer.Resolve('FileSystem')
+            }
+            catch {
+                Write-Verbose "[SafeExport] ServiceContainer.Resolve('FileSystem') failed: $_"
+            }
+        }
+
         # Ensure directory exists (use FileSystem service or fallback to native cmdlets)
         $parent = Split-Path -Parent $Path
         if (-not [string]::IsNullOrWhiteSpace($parent)) {
-            if ($null -ne $FileSystem -and ($FileSystem.PSObject.Methods.Match('TestPath').Count -gt 0) -and ($FileSystem.PSObject.Methods.Match('NewItem').Count -gt 0)) {
-                if (-not $FileSystem.TestPath($parent)) { $null = $FileSystem.NewItem($parent, 'Directory') }
+            if ($null -ne $fileSystem -and ($fileSystem.PSObject.Methods.Match('TestPath').Count -gt 0) -and ($fileSystem.PSObject.Methods.Match('NewItem').Count -gt 0)) {
+                if (-not $fileSystem.TestPath($parent)) { $null = $fileSystem.NewItem($parent, 'Directory') }
             }
             else {
                 # Fallback to native PowerShell cmdlets
@@ -1308,9 +1321,9 @@ function Export-SafeConfiguration {
         }
 
         # Write using file system service or fallback to native Set-Content
-        if ($null -ne $FileSystem -and ($FileSystem.PSObject.Methods.Match('SetContent').Count -gt 0)) {
+        if ($null -ne $fileSystem -and ($fileSystem.PSObject.Methods.Match('SetContent').Count -gt 0)) {
             try {
-                $FileSystem.SetContent($Path, $content)
+                $fileSystem.SetContent($Path, $content)
             }
             catch {
                 throw "[SafeExport] FileSystem.SetContent failed: $_"

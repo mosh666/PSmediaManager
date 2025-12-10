@@ -18,23 +18,20 @@ function Get-PSmmProjects {
         Application configuration object (AppConfiguration).
         Preferred modern approach with strongly-typed configuration.
 
-        .EXAMPLE
-            $projects = Get-PSmmProjects -Config $appConfig -Force
-            # Forces a full rescan, ignoring cached data
-
     .PARAMETER Force
         Forces a full rescan of all drives, bypassing the registry cache.
 
-    .PARAMETER FileSystem
-        File system service for testing. Defaults to FileSystemService instance.
+    .PARAMETER ServiceContainer
+        ServiceContainer instance providing access to FileSystem service.
+        If omitted, creates a new FileSystemService instance or falls back to cmdlets.
 
     .EXAMPLE
-        $projects = Get-PSmmProjects -Config $appConfig
+        $projects = Get-PSmmProjects -Config $appConfig -ServiceContainer $ServiceContainer
         # Returns: @{ Master = @{ DriveLabel = @(ProjectObjects...) }; Backup = @{ ... } }
 
     .EXAMPLE
-        $projects = Get-PSmmProjects -Run $Run -Force
-        # (Legacy) Forces a full rescan, ignoring cached data
+        $projects = Get-PSmmProjects -Config $appConfig -Force
+        # Forces a full rescan, ignoring cached data
 
     .OUTPUTS
         Hashtable containing Master and Backup projects, organized by drive label.
@@ -44,6 +41,8 @@ function Get-PSmmProjects {
         Projects are expected to be in a 'Projects' folder at the root of each drive.
         The _GLOBAL_ project is automatically excluded from results.
         Registry cache includes LastScanned timestamp for cache invalidation.
+
+        BREAKING CHANGE (v0.2.0): Replaced -FileSystem parameter with -ServiceContainer parameter.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Function retrieves multiple project configurations')]
     [CmdletBinding()]
@@ -57,8 +56,32 @@ function Get-PSmmProjects {
         [switch]$Force,
 
         [Parameter()]
-        $FileSystem = $null
+        $ServiceContainer = $null
     )
+
+    # Resolve FileSystem service from container or create fallback
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer) {
+        try {
+            if ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve') {
+                $FileSystem = $ServiceContainer.Resolve('FileSystem')
+            }
+        }
+        catch {
+            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+        }
+    }
+
+    # Fallback: create new FileSystemService or use cmdlets
+    if ($null -eq $FileSystem) {
+        try {
+            $FileSystem = [FileSystemService]::new()
+        }
+        catch {
+            Write-Verbose "FileSystemService type not available, using PowerShell cmdlets directly"
+            $FileSystem = $null
+        }
+    }
 
     # Ensure Projects.Registry exists on Config
     if (-not $Config.Projects.ContainsKey('Registry') -or $null -eq $Config.Projects.Registry) {
@@ -71,18 +94,6 @@ function Get-PSmmProjects {
     }
 
     try {
-        # Use default FileSystemService if not provided
-        # Create it here after the module is fully loaded to avoid type errors
-        if ($null -eq $FileSystem) {
-            try {
-                $FileSystem = [FileSystemService]::new()
-            }
-            catch {
-                # If FileSystemService type isn't available, create a wrapper using PowerShell cmdlets
-                Write-Verbose "FileSystemService type not available, using PowerShell cmdlets directly"
-                $FileSystem = $null  # We'll handle this with direct cmdlet calls
-            }
-        }
         $isTestMode = [string]::Equals($env:MEDIA_MANAGER_TEST_MODE, '1', [System.StringComparison]::OrdinalIgnoreCase)
 
         # Local reference to registry

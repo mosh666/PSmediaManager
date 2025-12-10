@@ -237,7 +237,16 @@ function Select-PSmmProject {
                 $processService = [ProcessService]::new()
             }
 
-            Confirm-Plugins -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $FileSystem -Environment $environmentService -PathProvider $PathProvider -Process $processService
+            # Create ServiceContainer for plugin confirmation
+            $pluginServiceContainer = [ServiceContainer]::new()
+            $pluginServiceContainer.RegisterSingleton('Http', $httpService)
+            $pluginServiceContainer.RegisterSingleton('Crypto', $cryptoService)
+            $pluginServiceContainer.RegisterSingleton('FileSystem', $FileSystem)
+            $pluginServiceContainer.RegisterSingleton('Environment', $environmentService)
+            $pluginServiceContainer.RegisterSingleton('PathProvider', $PathProvider)
+            $pluginServiceContainer.RegisterSingleton('Process', $processService)
+
+            Confirm-Plugins -Config $Config -ServiceContainer $pluginServiceContainer
         }
         catch {
             Write-Warning "Failed to confirm project plugins for '$pName': $_"

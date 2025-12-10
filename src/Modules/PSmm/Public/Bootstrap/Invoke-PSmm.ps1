@@ -173,8 +173,17 @@ function Invoke-PSmm {
 
             #region ----- Verify Required Plugins
             Write-PSmmLog -Level NOTICE -Context 'Confirm-Plugins' -Message 'Checking required plugins' -Console -File
-            Confirm-Plugins -Config $Config -Http $httpService -Crypto $cryptoService `
-                -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
+
+            # Create temporary ServiceContainer for plugin confirmation with available services
+            $pluginServiceContainer = [ServiceContainer]::new()
+            $pluginServiceContainer.RegisterSingleton('Http', $httpService)
+            $pluginServiceContainer.RegisterSingleton('Crypto', $cryptoService)
+            $pluginServiceContainer.RegisterSingleton('FileSystem', $fileSystemService)
+            $pluginServiceContainer.RegisterSingleton('Environment', $environmentService)
+            $pluginServiceContainer.RegisterSingleton('PathProvider', $pathProviderService)
+            $pluginServiceContainer.RegisterSingleton('Process', $processService)
+
+            Confirm-Plugins -Config $Config -ServiceContainer $pluginServiceContainer
             Write-Verbose "Required plugins verified"
             #endregion ----- Verify Required Plugins
 
