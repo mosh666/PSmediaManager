@@ -1,9 +1,21 @@
 # PSmediaManager
 
-## Latest Changes - v0.1.3
+## Latest Changes - v0.2.0 (Unreleased)
+
+**BREAKING CHANGES:**
+- **Architecture**: Replaced `$global:PSmmServices` hashtable with formal `ServiceContainer` class for dependency injection
+- **API**: All public functions now require `-ServiceContainer` parameter instead of individual service parameters
+- **Plugins**: Plugin functions must now accept and use `ServiceContainer` for service access
+- **Migration**: See [CHANGELOG.md](CHANGELOG.md) for detailed migration guide from v0.1.x to v0.2.0
+
+**Bug Fixes:**
+- **Plugins**: Fixed MariaDB installer null reference errors by improving version metadata handling
+- **Plugins**: Fixed plugin confirmation PATH registration by properly resolving services from ServiceContainer
+
+### Previous Release - v0.1.3
 
 - **Dependencies**: Removed 7Zip4PowerShell PowerShell module dependency; FFmpeg and MKVToolNix now use native 7z.exe extraction
-- **Architecture**: Implemented global service injection pattern (`$global:PSmmServices`) for cross-module dependency management
+- **Architecture**: Implemented global service injection pattern (`$global:PSmmServices`) for cross-module dependency management (now replaced with ServiceContainer in v0.2.0)
 - **Code Quality**: Achieved zero PSScriptAnalyzer violations with justified architectural pattern exclusions
 - **Service Layer**: Modules imported with `-Global` flag for proper class visibility across dependent modules
 
@@ -47,7 +59,7 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 
 ## Features
 
-- Modular architecture (`PSmm`, `PSmm.Logging`, `PSmm.Plugins`, `PSmm.Projects`, `PSmm.UI`).
+- Modular architecture (`PSmm`, `PSmm.Logging`, `PSmm.Plugins`, `PSmm.Projects`, `PSmm.UI`) with formal dependency injection via `ServiceContainer`.
 - Portable – run directly from a cloned repository; avoids machine-global mutation.
 - Plugin acquisition with explicit pinned asset patterns (GitHub / direct URLs).
 - Safe configuration exporting with redaction & structured formatting.

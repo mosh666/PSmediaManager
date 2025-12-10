@@ -21,19 +21,93 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 
 ### Added
 
-- _No changes yet_
+- **Architecture**: Introduced formal `ServiceContainer` class for dependency injection with singleton lifetime management
+- **Architecture**: Added `RegisterSingleton()`, `Resolve()`, `Has()`, `GetServiceNames()`, `Count()`, and `Clear()` methods to ServiceContainer
 
 ### Changed
 
-- _No changes yet_
+- **BREAKING CHANGE**: Replaced `$global:PSmmServices` hashtable with `ServiceContainer` class for service management
+- **BREAKING CHANGE**: All public functions now require `ServiceContainer` parameter instead of individual service parameters
+- **BREAKING CHANGE**: `Export-SafeConfiguration` signature changed to accept `-ServiceContainer` instead of `-FileSystem`
+- **BREAKING CHANGE**: `Show-PSmmUI` / `Invoke-PSmmUI` signature changed to accept `-ServiceContainer` instead of individual service parameters
+- **BREAKING CHANGE**: All plugin functions must now accept and use `ServiceContainer` for accessing services
+- **Architecture**: ServiceContainer exposes services via `$global:PSmmServiceContainer` instead of `$global:PSmmServices`
+- **Architecture**: Module loaders now use ServiceContainer for all file system operations
+
+### Migration Guide (v0.1.x → v0.2.0)
+
+#### For Module Developers
+
+**Old Pattern (v0.1.x):**
+
+```powershell
+function My-Function {
+    param(
+        $FileSystem,
+        $Environment,
+        $PathProvider
+    )
+    $exists = $FileSystem.TestPath($path)
+}
+
+# Called as:
+My-Function -FileSystem $Services.FileSystem -Environment $Services.Environment
+```
+
+**New Pattern (v0.2.0+):**
+
+```powershell
+function My-Function {
+    param(
+        [Parameter(Mandatory)]
+        [ServiceContainer]$ServiceContainer
+    )
+    $fileSystem = $ServiceContainer.Resolve('FileSystem')
+    $exists = $fileSystem.TestPath($path)
+}
+
+# Called as:
+My-Function -ServiceContainer $ServiceContainer
+```
+
+#### For Plugin Developers
+
+**Old Pattern:** Plugins used direct cmdlets or mixed service/cmdlet patterns
+**New Pattern:** All plugins must accept `ServiceContainer` and use service abstraction layer exclusively
+
+```powershell
+function Install-MyPlugin {
+    param(
+        [hashtable]$Plugin,
+        [hashtable]$Paths,
+        [ServiceContainer]$ServiceContainer
+    )
+    
+    $fileSystem = $ServiceContainer.Resolve('FileSystem')
+    $process = $ServiceContainer.Resolve('Process')
+    
+    # Use services instead of direct cmdlets
+    if ($fileSystem.TestPath($path)) {
+        $items = $fileSystem.GetChildItem($path, '*', 'File', $false)
+    }
+}
+```
+
+#### Accessing Services Globally
+
+**Old:** `$global:PSmmServices.FileSystem`
+**New:** `$global:PSmmServiceContainer.Resolve('FileSystem')`
 
 ### Fixed
 
-- _No changes yet_
+- **Plugins - MariaDB**: Fixed `Invoke-Installer-MariaDB` null reference error by deriving target version from available sources (Config.Version, State.LatestVersion, or installer name) instead of assuming Config.Version exists
+- **Plugins - MariaDB**: Added fallback version detection to handle cases where version metadata is incomplete during installation
+- **Plugins - Confirm**: Fixed null reference error in `Confirm-Plugins` by resolving Environment, PathProvider, and FileSystem services from ServiceContainer before PATH registration
+- **Plugins - Confirm**: Added guard condition to prevent PATH registration when required services are unavailable to avoid crashing on cleanup
 
 ### Removed
 
-- _No changes yet_
+- **BREAKING CHANGE**: Removed `$global:PSmmServices` hashtable (replaced with ServiceContainer)
 
 ## [0.1.3] - 2025-12-09
 

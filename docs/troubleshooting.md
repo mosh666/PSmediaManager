@@ -168,14 +168,15 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 ### Plugin installation fails
 
-**Symptoms:** `Install-KeePassXC` or other plugin installation fails.
+**Symptoms:** `Install-KeePassXC`, `Install-MariaDB`, or other plugin installation fails with errors during bootstrap.
 
 **Causes:**
 
 - Network connectivity issues
 - Insufficient disk space
 - Antivirus blocking downloads
-- Missing system dependencies
+- Missing system dependencies (e.g., 7z.exe for archive extraction)
+- Incomplete plugin configuration or missing version metadata
 
 **Solutions:**
 
@@ -202,6 +203,16 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
     - Windows Defender: Settings → Virus & threat protection → Manage settings → Add exclusions
     - Third-party antivirus: Consult documentation for your software
 
+1. Verify 7z.exe availability:
+
+    Many plugins require 7z.exe for archive extraction:
+
+    ```powershell
+    where.exe 7z
+    ```
+
+    If not found, ensure 7-Zip is installed or add it to PATH.
+
 1. Check system dependencies:
 
     ```powershell
@@ -209,6 +220,46 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
     ```
 
     Shows system health and missing dependencies.
+
+1. Review plugin logs:
+
+    Check the log file (typically `D:\PSmm.Log\20251210-PSmm-*.log`) for detailed error messages. Look for:
+    - "Failed to resolve services from ServiceContainer" – reinstall may be needed
+    - "7z extraction failed" – verify 7z.exe is in PATH
+    - "Version metadata missing" – retry installation
+
+### MariaDB plugin fails to install
+
+**Symptoms:** `Install-MariaDB` fails with "property 'Version' cannot be found" or extraction errors.
+
+**Causes:**
+
+- Version metadata incomplete during plugin configuration phase
+- 7z.exe not available for archive extraction
+- Network issues preventing version lookup
+
+**Solutions:**
+
+1. Ensure 7z.exe is in PATH:
+
+    ```powershell
+    where.exe 7z
+    # If missing, install 7-Zip or add to PATH manually
+    ```
+
+1. Clear plugin cache and retry:
+
+    ```powershell
+    Remove-Item -Path "D:\PSmm.Plugins" -Recurse -Force -ErrorAction SilentlyContinue
+    # Re-run PSmediaManager to reinstall plugins
+    ./Start-PSmediaManager.ps1
+    ```
+
+1. Check network access to MariaDB download server:
+
+    ```powershell
+    Test-NetConnection -ComputerName downloads.mariadb.org -Port 443
+    ```
 
 ### digiKam integration fails
 
