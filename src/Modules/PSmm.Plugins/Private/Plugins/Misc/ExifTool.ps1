@@ -11,8 +11,20 @@ function Get-CurrentVersion-ExifTool {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $FileSystem
+        $ServiceContainer
     )
+
+    # Resolve FileSystem from ServiceContainer if available
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+        }
+    }
+
     if ($FileSystem) {
         $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
     }
@@ -32,8 +44,11 @@ function Get-CurrentVersion-ExifTool {
 
 function Get-LatestUrlFromUrl-ExifTool {
     param(
-        [hashtable]$Plugin
+        [hashtable]$Plugin,
+        [hashtable]$Paths,
+        $ServiceContainer
     )
+    $null = $Paths, $ServiceContainer
     $LatestVersion = Invoke-RestMethod -Uri $Plugin.Config.VersionUrl
     $LatestVersion = '{0:N2}' -f $latestVersion
     $LatestVersion = $LatestVersion -replace ',', '.'
@@ -49,9 +64,22 @@ function Invoke-Installer-ExifTool {
     param (
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        [string]$InstallerPath
+        [string]$InstallerPath,
+        [Parameter(Mandatory)]
+        $ServiceContainer
     )
+
     try {
+        # Resolve FileSystem from ServiceContainer if available
+        if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+            try {
+                $null = $ServiceContainer.Resolve('FileSystem')
+            }
+            catch {
+                Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+            }
+        }
+
         $ExtractPath = $Paths.Root
         Expand-Archive -Path $InstallerPath -DestinationPath $ExtractPath -Force
 

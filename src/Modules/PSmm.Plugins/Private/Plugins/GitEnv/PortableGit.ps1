@@ -10,9 +10,20 @@ Set-StrictMode -Version Latest
 function Get-CurrentVersion-PortableGit {
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths,
-        $FileSystem
+        [hashtable]$Paths
     )
+
+    # Resolve FileSystem from ServiceContainer if available
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+        }
+    }
+
     if ($FileSystem) {
         $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
     }
@@ -42,14 +53,23 @@ function Invoke-Installer-PortableGit {
         [string]$InstallerPath,
 
         [Parameter(Mandatory)]
-        $Process,
-
-        [Parameter(Mandatory)]
-        $FileSystem
+        $ServiceContainer
     )
+
+    # Resolve Process and FileSystem from ServiceContainer if available
+    $Process = $null
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $Process = $ServiceContainer.Resolve('Process')
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve services from ServiceContainer: $_"
+        }
+    }
+
     try {
-        # Mark injected but unused parameter as intentionally unused for static analysis
-        $null = $FileSystem
         $ExtractPath = Join-Path -Path $Paths.Root -ChildPath (Split-Path $InstallerPath -LeafBase).Substring(0, (Split-Path $InstallerPath -LeafBase).Length - 3)
         $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
         Start-Process -FilePath $sevenZipCmd -ArgumentList "x `"$InstallerPath`" -o`"$ExtractPath`"" -Wait

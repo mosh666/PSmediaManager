@@ -10,9 +10,20 @@ Set-StrictMode -Version Latest
 function Get-CurrentVersion-Git-LFS {
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths,
-        $FileSystem
+        [hashtable]$Paths
     )
+
+    # Resolve FileSystem from ServiceContainer if available
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+        }
+    }
+
     if ($FileSystem) {
         $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
     }

@@ -11,8 +11,20 @@ function Get-CurrentVersion-ImageMagick {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $FileSystem
+        $ServiceContainer
     )
+
+    # Resolve FileSystem from ServiceContainer if available
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+        }
+    }
+
     if ($FileSystem) {
         $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
     }
@@ -31,8 +43,11 @@ function Get-CurrentVersion-ImageMagick {
 
 function Get-LatestUrlFromUrl-ImageMagick {
     param(
-        [hashtable]$Plugin
+        [hashtable]$Plugin,
+        [hashtable]$Paths,
+        $ServiceContainer
     )
+    $null = $Paths, $ServiceContainer
 
     try {
         $Response = Invoke-WebRequest -Uri $Plugin.Config.VersionUrl -TimeoutSec 10

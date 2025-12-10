@@ -11,8 +11,20 @@ function Get-CurrentVersion-MKVToolNix {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $FileSystem
+        $ServiceContainer
     )
+
+    # Resolve FileSystem from ServiceContainer if available
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+        }
+    }
+
     if ($FileSystem) {
         $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
     }
@@ -32,8 +44,11 @@ function Get-CurrentVersion-MKVToolNix {
 
 function Get-LatestUrlFromUrl-MKVToolNix {
     param(
-        [hashtable]$Plugin
+        [hashtable]$Plugin,
+        [hashtable]$Paths,
+        $ServiceContainer
     )
+    $null = $Paths, $ServiceContainer
     $Response = Invoke-WebRequest -Uri $Plugin.Config.VersionUrl
     # Get the latest version
     if ($Response.Links) {
@@ -63,9 +78,22 @@ function Invoke-Installer-MKVToolNix {
         [hashtable]$Plugin,
         [hashtable]$Paths,
         [string]$InstallerPath,
-        $Process,
-        $FileSystem
+        $ServiceContainer
     )
+
+    # Resolve Process and FileSystem from ServiceContainer if available
+    $Process = $null
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $Process = $ServiceContainer.Resolve('Process')
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve services from ServiceContainer: $_"
+        }
+    }
+
     try {
         $ExtractPath = $Paths.Root
 

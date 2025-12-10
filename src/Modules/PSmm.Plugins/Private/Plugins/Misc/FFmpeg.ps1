@@ -11,8 +11,20 @@ function Get-CurrentVersion-ffmpeg {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $FileSystem
+        $ServiceContainer
     )
+
+    # Resolve FileSystem from ServiceContainer if available
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+        }
+    }
+
     if ($FileSystem) {
         $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
     }
@@ -32,8 +44,20 @@ function Get-LatestUrlFromUrl-ffmpeg {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $FileSystem
+        $ServiceContainer
     )
+
+    # Resolve FileSystem from ServiceContainer if available
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+        }
+    }
+
     Invoke-RestMethod -Uri $Plugin.Config.VersionUrl -OutFile $Paths._Temp
 
     if ($FileSystem) {
@@ -57,9 +81,20 @@ function Get-Installer-ffmpeg {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $Http,
-        $FileSystem
+        $ServiceContainer
     )
+
+    # Resolve FileSystem from ServiceContainer if available
+    $FileSystem = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+        }
+        catch {
+            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
+        }
+    }
+
     $pattern = "$($Plugin.Config.Name)*.7z"
     if ($FileSystem) {
         $filesToRemove = @($FileSystem.GetChildItem($Paths._Downloads, $pattern, 'File'))
