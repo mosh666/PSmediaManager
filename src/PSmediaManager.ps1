@@ -136,13 +136,15 @@ catch {
 
 try {
     Write-Verbose "Instantiating early services for module loading..."
-    $script:Services = @{
-        FileSystem   = [FileSystemService]::new()
-        Environment  = [EnvironmentService]::new()
-        PathProvider = [PathProvider]::new()
-        Process      = [ProcessService]::new()
-    }
-    Write-Verbose "Early services instantiated"
+    $script:ServiceContainer = [ServiceContainer]::new()
+
+    # Register early services required for module loading
+    $script:ServiceContainer.RegisterSingleton('FileSystem', [FileSystemService]::new())
+    $script:ServiceContainer.RegisterSingleton('Environment', [EnvironmentService]::new())
+    $script:ServiceContainer.RegisterSingleton('PathProvider', [PathProvider]::new())
+    $script:ServiceContainer.RegisterSingleton('Process', [ProcessService]::new())
+
+    Write-Verbose "Early services registered in ServiceContainer"
 }
 catch {
     Write-Error "Failed to instantiate early services: $_" -ErrorAction Stop
@@ -160,7 +162,7 @@ catch {
 #>
 try {
     # Calculate modules path using PathProvider
-    $modulesPath = $script:Services.PathProvider.CombinePath(@($script:ModuleRoot, 'Modules'))
+    $modulesPath = $script:ServiceContainer.Resolve('PathProvider').CombinePath(@($script:ModuleRoot, 'Modules'))
     Write-Verbose "Importing modules from: $modulesPath"
 
     # Define module load order (dependencies first)
@@ -174,10 +176,10 @@ try {
 
     $loadedModules = 0
     foreach ($moduleName in $moduleLoadOrder) {
-        $moduleFolder = $script:Services.PathProvider.CombinePath(@($modulesPath, $moduleName))
-        $manifestPath = $script:Services.PathProvider.CombinePath(@($moduleFolder, "$moduleName.psd1"))
+        $moduleFolder = $script:ServiceContainer.Resolve('PathProvider').CombinePath(@($modulesPath, $moduleName))
+        $manifestPath = $script:ServiceContainer.Resolve('PathProvider').CombinePath(@($moduleFolder, "$moduleName.psd1"))
 
-        if ($script:Services.FileSystem.TestPath($manifestPath)) {
+        if ($script:ServiceContainer.Resolve('FileSystem').TestPath($manifestPath)) {
             try {
                 Write-Verbose "Importing module: $moduleName"
                 # Import modules with global scope so class definitions are available to dependent code.
@@ -225,16 +227,16 @@ catch {
 #>
 try {
     Write-Verbose "Extending early services with remaining implementations..."
-    $script:Services.Http    = [HttpService]::new()
-    $script:Services.Crypto  = [CryptoService]::new()
-    $script:Services.Cim     = [CimService]::new()
-    $script:Services.Storage = [StorageService]::new()
-    $script:Services.Git     = [GitService]::new()
+    $script:ServiceContainer.RegisterSingleton('Http', [HttpService]::new())
+    $script:ServiceContainer.RegisterSingleton('Crypto', [CryptoService]::new())
+    $script:ServiceContainer.RegisterSingleton('Cim', [CimService]::new())
+    $script:ServiceContainer.RegisterSingleton('Storage', [StorageService]::new())
+    $script:ServiceContainer.RegisterSingleton('Git', [GitService]::new())
 
-    # Expose services globally so modules can access them without circular dependencies
-    $global:PSmmServices = $script:Services
+    # Expose ServiceContainer globally so modules can access services
+    $global:PSmmServiceContainer = $script:ServiceContainer
 
-    Write-Verbose "Full service layer available"
+    Write-Verbose "Full service layer available (ServiceContainer with $($script:ServiceContainer.Count()) services)"
 }
 catch {
     Write-Error "Failed to extend service layer: $_"
@@ -277,7 +279,12 @@ try {
     # Create builder with repository-aware paths
     $configBuilder = [AppConfigurationBuilder]::new($repositoryRoot).
     WithParameters($runtimeParams).
-    WithServices($script:Services.FileSystem, $script:Services.Environment, $script:Services.PathProvider, $script:Services.Process).
+    WithServices(
+        $script:ServiceContainer.Resolve('FileSystem'),
+        $script:ServiceContainer.Resolve('Environment'),
+        $script:ServiceContainer.Resolve('PathProvider'),
+        $script:ServiceContainer.Resolve('Process')
+    ).
     InitializeDirectories()
 
     Write-Verbose "Runtime configuration initialized successfully"
@@ -306,7 +313,9 @@ try {
     if ($repositoryRoot) {
         $launcherCmd = Get-Command -Name 'New-DriveRootLauncher' -ErrorAction SilentlyContinue
         if ($launcherCmd) {
-            New-DriveRootLauncher -RepositoryRoot $repositoryRoot -FileSystem $script:Services.FileSystem -PathProvider $script:Services.PathProvider
+            New-DriveRootLauncher -RepositoryRoot $repositoryRoot `
+                -FileSystem $script:ServiceContainer.Resolve('FileSystem') `
+                -PathProvider $script:ServiceContainer.Resolve('PathProvider')
         }
         else {
             $missingMsg = 'New-DriveRootLauncher is unavailable. Ensure the PSmm module exported the function (Import-Module src/Modules/PSmm/PSmm.psd1) before re-running.'
@@ -340,7 +349,7 @@ try {
     $pluginsPath = $tempConfig.GetConfigPath('Plugins')
 
     # Load configuration files using the builder (before Build() is called)
-    if ($script:Services.FileSystem.TestPath($defaultConfigPath)) {
+    if ($script:ServiceContainer.Resolve('FileSystem').TestPath($defaultConfigPath)) {
         $null = $configBuilder.LoadConfigurationFile($defaultConfigPath)
         Write-Verbose "Loaded configuration: $defaultConfigPath"
     }
@@ -348,7 +357,7 @@ try {
         Write-Warning "Default configuration file not found: $defaultConfigPath"
     }
 
-    if ($script:Services.FileSystem.TestPath($requirementsPath)) {
+    if ($script:ServiceContainer.Resolve('FileSystem').TestPath($requirementsPath)) {
         $null = $configBuilder.LoadRequirementsFile($requirementsPath)
         Write-Verbose "Loaded requirements: $requirementsPath"
     }
@@ -356,7 +365,7 @@ try {
         Write-Warning "Requirements file not found: $requirementsPath"
     }
 
-    if ($script:Services.FileSystem.TestPath($pluginsPath)) {
+    if ($script:ServiceContainer.Resolve('FileSystem').TestPath($pluginsPath)) {
         $null = $configBuilder.LoadPluginsFile($pluginsPath, 'Global')
         Write-Verbose "Loaded plugins manifest: $pluginsPath"
     }
@@ -369,9 +378,9 @@ try {
     # to provide a unified setup experience
     $driveRoot = [System.IO.Path]::GetPathRoot($script:ModuleRoot)
     if (-not [string]::IsNullOrWhiteSpace($driveRoot)) {
-        $storagePath = $script:Services.PathProvider.CombinePath(@($driveRoot, 'PSmm.Config', 'PSmm.Storage.psd1'))
+        $storagePath = $script:ServiceContainer.Resolve('PathProvider').CombinePath(@($driveRoot, 'PSmm.Config', 'PSmm.Storage.psd1'))
 
-        if ($script:Services.FileSystem.TestPath($storagePath)) {
+        if ($script:ServiceContainer.Resolve('FileSystem').TestPath($storagePath)) {
             $null = $configBuilder.LoadStorageFile($storagePath)
             Write-Verbose "Loaded on-drive storage configuration: $storagePath"
         }
@@ -391,7 +400,7 @@ try {
     # Phase 10: Validate configuration
     Write-Verbose "Validating configuration..."
     Write-Verbose "Creating ConfigValidator instance..."
-    $validator = [ConfigValidator]::new($script:Services.FileSystem)
+    $validator = [ConfigValidator]::new($script:ServiceContainer.Resolve('FileSystem'))
     Write-Verbose "ConfigValidator instance created successfully"
     Write-Verbose "AppConfig type: $($appConfig.GetType().FullName)"
     Write-Verbose "Calling ValidateConfiguration..."
@@ -460,13 +469,13 @@ try {
     # Git
     try {
         $repoRoot = Split-Path -Path $script:ModuleRoot -Parent
-        $gitReady = $script:Services.Git.IsRepository($repoRoot)
+        $gitReady = $script:ServiceContainer.Resolve('Git').IsRepository($repoRoot)
         if (-not $gitReady) {
             throw "Not a git repository: $repoRoot"
         }
 
-        $branch = $script:Services.Git.GetCurrentBranch($repoRoot)
-        $commit = $script:Services.Git.GetCommitHash($repoRoot)
+        $branch = $script:ServiceContainer.Resolve('Git').GetCurrentBranch($repoRoot)
+        $commit = $script:ServiceContainer.Resolve('Git').GetCommitHash($repoRoot)
         $serviceHealth.Add([pscustomobject]@{ Service = 'Git'; Status = 'OK'; Detail = "Branch=$($branch.Name); Commit=$($commit.Short)" })
         Write-ServiceHealthLog -Level 'NOTICE' -Message "Git ready ($($branch.Name) @ $($commit.Short))"
     }
@@ -510,7 +519,7 @@ try {
     # CIM
     try {
         $cimCmdPresent = Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue
-        $cimInstances = $script:Services.Cim.GetInstances('Win32_OperatingSystem', @{})
+        $cimInstances = $script:ServiceContainer.Resolve('Cim').GetInstances('Win32_OperatingSystem', @{})
         $cimCount = @($cimInstances).Count
         $cimDetail = if ($cimCmdPresent) { "Instances=$cimCount" } else { 'Get-CimInstance unavailable (returned empty set)' }
         $serviceHealth.Add([pscustomobject]@{ Service = 'Cim'; Status = 'OK'; Detail = $cimDetail })
@@ -564,7 +573,8 @@ try {
             Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=$cfgType, UI=$uiExists, Width=$uiWidth, FGColors=$ansiFgCount)" -ForegroundColor Cyan
         }
         catch { Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=UNKNOWN, error collecting UI details: $($_.Exception.Message))" -ForegroundColor Cyan }
-        Invoke-PSmmUI -Config $appConfig -Process $script:Services.Process -FileSystem $script:Services.FileSystem -PathProvider $script:Services.PathProvider
+        Invoke-PSmmUI -Config $appConfig `
+            -ServiceContainer $script:ServiceContainer
         Write-Verbose 'UI session completed'
     }
     #endregion User Interface Launch
@@ -605,7 +615,8 @@ finally {
         $runConfigPath = Join-Path -Path $appConfig.Paths.Log -ChildPath "$($appConfig.InternalName).Run.psd1"
         Write-Verbose "Saving configuration to: $runConfigPath"
         try {
-            Export-SafeConfiguration -Configuration $appConfig -Path $runConfigPath -FileSystem $script:Services.FileSystem -ErrorAction Stop
+            Export-SafeConfiguration -Configuration $appConfig -Path $runConfigPath `
+                -ServiceContainer $script:ServiceContainer -ErrorAction Stop
         }
         catch {
             Write-Warning "Failed to save configuration: $_"
@@ -617,7 +628,7 @@ finally {
                     Timestamp = (Get-Date).ToString('o')
                 }
                 $miniContent = "@{`n    App = @{ Name = '$($mini.App.Name)'; AppVersion = '$($mini.App.AppVersion)' }`n    Paths = @{ Root = '$($mini.Paths.Root)'; Log = '$($mini.Paths.Log)' }`n    Timestamp = '$($mini.Timestamp)'`n}"
-                $script:Services.FileSystem.SetContent($runConfigPath, $miniContent)
+                $script:ServiceContainer.Resolve('FileSystem').SetContent($runConfigPath, $miniContent)
                 Write-Warning "Fallback minimal configuration written to $runConfigPath"
             }
             catch {
@@ -658,7 +669,7 @@ finally {
     if (-not $Dev -and $appConfig.AddedPathEntries -and $appConfig.AddedPathEntries.Count -gt 0) {
         Write-Verbose "Cleaning up $($appConfig.AddedPathEntries.Count) PATH entries (non-Dev mode)"
         try {
-            $script:Services.Environment.RemovePathEntries($appConfig.AddedPathEntries, $false)
+            $script:ServiceContainer.Resolve('Environment').RemovePathEntries($appConfig.AddedPathEntries, $false)
             Write-Verbose "Removed PATH entries: $($appConfig.AddedPathEntries -join ', ')"
             Write-PSmmLog -Level NOTICE -Context 'PATH Cleanup' `
                 -Message "Removed $($appConfig.AddedPathEntries.Count) plugin PATH entries" -File

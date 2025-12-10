@@ -50,11 +50,21 @@ $ErrorActionPreference = 'Stop'
     Format      = $null
 }
 
-# Get module paths (service-aware - check variable existence first to avoid StrictMode errors)
-$servicesVar = Get-Variable -Name 'Services' -Scope Script -ErrorAction SilentlyContinue
-$hasServices = ($null -ne $servicesVar) -and ($null -ne $servicesVar.Value)
-$pathProvider = if ($hasServices -and $servicesVar.Value.PathProvider) { $servicesVar.Value.PathProvider } else { $null }
-$fileSystem   = if ($hasServices -and $servicesVar.Value.FileSystem) { $servicesVar.Value.FileSystem } else { $null }
+# Get module paths (service-aware - check ServiceContainer variable existence first to avoid StrictMode errors)
+$serviceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ErrorAction SilentlyContinue
+$hasServiceContainer = ($null -ne $serviceContainer) -and ($null -ne $serviceContainer.Value)
+$pathProvider = $null
+$fileSystem   = $null
+
+if ($hasServiceContainer) {
+    try {
+        $pathProvider = $serviceContainer.Value.Resolve('PathProvider')
+        $fileSystem   = $serviceContainer.Value.Resolve('FileSystem')
+    }
+    catch {
+        Write-Verbose "Failed to resolve services from ServiceContainer: $_"
+    }
+}
 
 if ($pathProvider) {
     $PublicPath  = $pathProvider.CombinePath(@($PSScriptRoot,'Public'))
