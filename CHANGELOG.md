@@ -21,8 +21,21 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.2.0] - 2025-12-10
+
+Major architectural refactoring introducing formal dependency injection with ServiceContainer.
+
+### Added
+
 - **Architecture**: Introduced formal `ServiceContainer` class for dependency injection with singleton lifetime management
 - **Architecture**: Added `RegisterSingleton()`, `Resolve()`, `Has()`, `GetServiceNames()`, `Count()`, and `Clear()` methods to ServiceContainer
+- **Interfaces**: Added formal interface definitions for `ServiceContainer` in `src/Modules/PSmm/Classes/Interfaces.ps1`
 
 ### Changed
 
@@ -33,6 +46,8 @@ See [docs/versioning.md](docs/versioning.md) for complete details.
 - **BREAKING CHANGE**: All plugin functions must now accept and use `ServiceContainer` for accessing services
 - **Architecture**: ServiceContainer exposes services via `$global:PSmmServiceContainer` instead of `$global:PSmmServices`
 - **Architecture**: Module loaders now use ServiceContainer for all file system operations
+- **Plugin System**: Updated all plugin installers for consistent formatting and ServiceContainer usage
+- **Testing**: Updated all tests to use ServiceContainer mocks instead of individual service parameters
 
 ### Migration Guide (v0.1.x → v0.2.0)
 
@@ -104,10 +119,16 @@ function Install-MyPlugin {
 - **Plugins - MariaDB**: Added fallback version detection to handle cases where version metadata is incomplete during installation
 - **Plugins - Confirm**: Fixed null reference error in `Confirm-Plugins` by resolving Environment, PathProvider, and FileSystem services from ServiceContainer before PATH registration
 - **Plugins - Confirm**: Added guard condition to prevent PATH registration when required services are unavailable to avoid crashing on cleanup
+- **Plugins - digiKam**: Improved installer robustness with better error handling
+- **Core**: Regenerated module manifests after plugin fixes
 
 ### Removed
 
 - **BREAKING CHANGE**: Removed `$global:PSmmServices` hashtable (replaced with ServiceContainer)
+
+### Migration Guide (v0.1.x → v0.2.0)
+
+See migration examples above for detailed guidance on updating code to use ServiceContainer pattern.
 
 ## [0.1.3] - 2025-12-09
 
@@ -500,13 +521,20 @@ These are small documentation/metadata updates; move to a versioned release entr
   - Impact: Fixes missing-symbol error and preserves final exit message output.
   - Files: `src/Modules/PSmm/PSmm.psm1`, `src/Modules/PSmm/PSmm.psd1`, `src/PSmediaManager.ps1`.
 
-### Security
+## [v0.2.0] - 2025-12-10
+### Features
+- Add new plugin support for MariaDB, FFmpeg, and ImageMagick
+- Improve logging and error handling in PSmm.Logging
+- Enhance UI responsiveness in PSmm.UI
 
-- Workflows: bumped `github/codeql-action/upload-sarif` to `v4` inside the Codacy security scan so SARIF uploads stay compatible with GitHub Advanced Security requirements.
+### Fixes
+- Fix plugin loading issues for PortableGit and Git-LFS
+- Resolve configuration export bugs
+- Address compatibility issues with Windows 11
 
-## [v1.0.0] - YYYY-MM-DD
-
-- Initial public scaffold and core modules.
+### Chore
+- Update dependencies and module versions
+- Refactor code for better maintainability
 
 ---
 

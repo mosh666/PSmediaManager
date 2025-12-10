@@ -1,6 +1,6 @@
 # PSmediaManager
 
-## Latest Changes - v0.2.0 (Unreleased)
+## Latest Release - v0.2.0 (2025-12-10)
 
 **BREAKING CHANGES:**
 - **Architecture**: Replaced `$global:PSmmServices` hashtable with formal `ServiceContainer` class for dependency injection
@@ -8,9 +8,14 @@
 - **Plugins**: Plugin functions must now accept and use `ServiceContainer` for service access
 - **Migration**: See [CHANGELOG.md](CHANGELOG.md) for detailed migration guide from v0.1.x to v0.2.0
 
+**New Features:**
+- **Architecture**: Formal `ServiceContainer` class with singleton lifetime management
+- **Interfaces**: Added comprehensive interface definitions for dependency injection
+
 **Bug Fixes:**
 - **Plugins**: Fixed MariaDB installer null reference errors by improving version metadata handling
 - **Plugins**: Fixed plugin confirmation PATH registration by properly resolving services from ServiceContainer
+- **Plugins**: Improved digiKam installer robustness
 
 ### Previous Release - v0.1.3
 
@@ -30,7 +35,7 @@ Portable, modular PowerShell-based media management application. PSmediaManager 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/mosh666/PSmediaManager)](https://github.com/mosh666/PSmediaManager/releases)
 
-> **Status**: Version v0.1.3 available. APIs and structure may evolve.
+> **Status**: Version v0.2.0 available. APIs and structure may evolve.
 >
 > **Versioning**: All modules derive their version dynamically from Git tags using GitVersion. See [docs/versioning.md](docs/versioning.md) for details.
 
