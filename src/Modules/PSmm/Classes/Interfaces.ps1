@@ -256,3 +256,93 @@ class IStorageService {
 }
 
 #endregion System Service Interfaces
+
+#region Dependency Injection Container
+
+<#
+.SYNOPSIS
+    Dependency Injection container for managing service lifecycle and dependencies.
+
+.DESCRIPTION
+    Provides centralized service registration and resolution with singleton lifetime management.
+    Replaces the previous hashtable-based approach ($global:PSmmServices) with a formal
+    container that enforces consistent service lifecycle patterns.
+
+.NOTES
+    All services are registered as singletons to ensure consistent state across the application.
+    Breaking Change (v0.2.0): Replaced $global:PSmmServices hashtable with ServiceContainer.
+#>
+class ServiceContainer {
+    hidden [hashtable]$_services = @{}
+    hidden [hashtable]$_singletons = @{}
+
+    <#
+    .SYNOPSIS
+        Registers a service with the container as a singleton.
+    #>
+    [void] RegisterSingleton([string]$name, [object]$instance) {
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            throw [ArgumentException]::new("Service name cannot be null or empty")
+        }
+        if ($null -eq $instance) {
+            throw [ArgumentException]::new("Service instance cannot be null")
+        }
+
+        $this._singletons[$name] = $instance
+        Write-Verbose "[ServiceContainer] Registered singleton: $name"
+    }
+
+    <#
+    .SYNOPSIS
+        Resolves a service by name from the container.
+    #>
+    [object] Resolve([string]$name) {
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            throw [ArgumentException]::new("Service name cannot be null or empty")
+        }
+
+        if ($this._singletons.ContainsKey($name)) {
+            return $this._singletons[$name]
+        }
+
+        throw [InvalidOperationException]::new("Service '$name' is not registered in the container")
+    }
+
+    <#
+    .SYNOPSIS
+        Checks if a service is registered in the container.
+    #>
+    [bool] Has([string]$name) {
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            return $false
+        }
+        return $this._singletons.ContainsKey($name)
+    }
+
+    <#
+    .SYNOPSIS
+        Gets all registered service names.
+    #>
+    [string[]] GetServiceNames() {
+        return @($this._singletons.Keys)
+    }
+
+    <#
+    .SYNOPSIS
+        Gets the count of registered services.
+    #>
+    [int] Count() {
+        return $this._singletons.Count
+    }
+
+    <#
+    .SYNOPSIS
+        Clears all registered services (use with caution).
+    #>
+    [void] Clear() {
+        $this._singletons.Clear()
+        Write-Verbose "[ServiceContainer] Cleared all services"
+    }
+}
+
+#endregion Dependency Injection Container
