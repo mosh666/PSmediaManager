@@ -597,22 +597,7 @@ function Confirm-Plugins {
         $Config,
 
         [Parameter(Mandatory)]
-        $Http,
-
-        [Parameter(Mandatory)]
-        $Crypto,
-
-        [Parameter(Mandatory)]
-        $FileSystem,
-
-        [Parameter(Mandatory)]
-        $Environment,
-
-        [Parameter(Mandatory)]
-        $PathProvider,
-
-        [Parameter(Mandatory)]
-        $Process
+        $ServiceContainer
     )
 
     $resolvedPlugins = Resolve-PluginsConfig -Config $Config
@@ -641,6 +626,16 @@ function Confirm-Plugins {
                 GitHub = @{}
             }
         }
+    }
+
+    # Resolve services needed across confirmation flow
+    $FileSystem = $null
+    $Environment = $null
+    $PathProvider = $null
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try { $FileSystem = $ServiceContainer.Resolve('FileSystem') } catch { Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_" }
+        try { $Environment = $ServiceContainer.Resolve('Environment') } catch { Write-Verbose "Failed to resolve Environment from ServiceContainer: $_" }
+        try { $PathProvider = $ServiceContainer.Resolve('PathProvider') } catch { Write-Verbose "Failed to resolve PathProvider from ServiceContainer: $_" }
     }
 
     try {
@@ -698,12 +693,14 @@ function Confirm-Plugins {
                 }
 
                 Invoke-PluginConfirmation -Config $Config -Plugin $plugin -Paths $paths -Run $Run -ScopeName $scopeName -UpdateMode $updateMode `
-                    -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
+                    -ServiceContainer $ServiceContainer
             }
         }
 
         # Register plugin executables to PATH (opt-in via RegisterToPath metadata)
-        Register-PluginsToPATH -Config $Config -Environment $Environment -PathProvider $PathProvider -FileSystem $FileSystem
+        if ($Environment -and $PathProvider -and $FileSystem) {
+            Register-PluginsToPATH -Config $Config -Environment $Environment -PathProvider $PathProvider -FileSystem $FileSystem
+        }
 
         # Cleanup temporary files
         #$tempPath = Join-Path -Path $paths._Temp -ChildPath '*'
@@ -788,26 +785,25 @@ function Invoke-PluginConfirmation {
         [bool]$UpdateMode,
 
         [Parameter(Mandatory)]
-        $Http,
-
-        [Parameter(Mandatory)]
-        $Crypto,
-
-        [Parameter(Mandatory)]
-        $FileSystem,
-
-        [Parameter(Mandatory)]
-        $Environment,
-
-        [Parameter(Mandatory)]
-        $PathProvider,
-
-        [Parameter(Mandatory)]
-        $Process
+        $ServiceContainer
     )
 
     if (-not ($Config | Get-Member -Name 'Paths' -ErrorAction SilentlyContinue)) {
         throw [ValidationException]::new("Invoke-PluginConfirmation requires a configuration object exposing Paths; received incompatible type", "Config")
+    }
+
+    # Resolve services from ServiceContainer
+    $FileSystem = $null
+    $Process = $null
+
+    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        try {
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
+            $Process = $ServiceContainer.Resolve('Process')
+        }
+        catch {
+            Write-Verbose "Failed to resolve services from ServiceContainer: $_"
+        }
     }
 
     $pluginName = $Plugin.Config.Name
@@ -831,8 +827,7 @@ function Invoke-PluginConfirmation {
     if ([string]::IsNullOrEmpty($state.CurrentVersion)) {
         Write-PSmmLog -Level WARNING -Context "Check $pluginName" `
             -Message "$pluginName is not installed" -Console -File
-        Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto `
-            -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
+        Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -ServiceContainer $ServiceContainer
     }
     else {
         Write-PSmmLog -Level SUCCESS -Context "Check $pluginName" `
@@ -1004,25 +999,32 @@ function Get-LatestDownloadUrl {
         [SecureString]$Token,
 
         [Parameter(Mandatory)]
-        $Http,
-
-        [Parameter(Mandatory)]
-        $Crypto,
-
-        [Parameter(Mandatory)]
-        $FileSystem,
-
-        [Parameter(Mandatory)]
-        $Environment,
-
-        [Parameter(Mandatory)]
-        $PathProvider,
-
-        [Parameter(Mandatory)]
-        $Process
+        $ServiceContainer
     )
 
     try {
+        # Resolve services from ServiceContainer
+        $Http = $null
+        $Crypto = $null
+        $FileSystem = $null
+        $Environment = $null
+        $PathProvider = $null
+        $Process = $null
+
+        if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+            try {
+                $Http = $ServiceContainer.Resolve('Http')
+                $Crypto = $ServiceContainer.Resolve('Crypto')
+                $FileSystem = $ServiceContainer.Resolve('FileSystem')
+                $Environment = $ServiceContainer.Resolve('Environment')
+                $PathProvider = $ServiceContainer.Resolve('PathProvider')
+                $Process = $ServiceContainer.Resolve('Process')
+            }
+            catch {
+                Write-Verbose "Failed to resolve services from ServiceContainer: $_"
+            }
+        }
+
         $pluginName = $Plugin.Config.Name
         $source = $Plugin.Config.Source
 
@@ -1050,7 +1052,7 @@ function Get-LatestDownloadUrl {
 
                 if (Test-PluginFunction -Name $urlFunctionName) {
                     Write-PSmmLog -Level INFO -Context "Check $pluginName" -Message "Using custom URL function: $urlFunctionName" -Console -File
-                    $url = & $urlFunctionName -Plugin $Plugin -Paths $Paths -FileSystem $FileSystem
+                    $url = & $urlFunctionName -Plugin $Plugin -Paths $Paths -ServiceContainer $ServiceContainer
                 }
                 else {
                     Write-Warning "No custom URL function found: $urlFunctionName"
@@ -1335,27 +1337,33 @@ function Install-Plugin {
         $Config,
 
         [Parameter(Mandatory)]
-        $Http,
-
-        [Parameter(Mandatory)]
-        $Crypto,
-
-        [Parameter(Mandatory)]
-        $FileSystem,
-
-        [Parameter(Mandatory)]
-        $Environment,
-
-        [Parameter(Mandatory)]
-        $PathProvider,
-
-        [Parameter(Mandatory)]
-        $Process
+        $ServiceContainer
     )
 
     try {
         $pluginName = $Plugin.Config.Name
         Write-Verbose "Starting installation process for: $pluginName"
+
+        # Resolve services from ServiceContainer
+        $Http = $null
+        $FileSystem = $null
+        $Environment = $null
+        $PathProvider = $null
+        $Process = $null
+
+        if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+            try {
+                $Http = $ServiceContainer.Resolve('Http')
+                $null = $ServiceContainer.Resolve('Crypto')
+                $FileSystem = $ServiceContainer.Resolve('FileSystem')
+                $Environment = $ServiceContainer.Resolve('Environment')
+                $PathProvider = $ServiceContainer.Resolve('PathProvider')
+                $Process = $ServiceContainer.Resolve('Process')
+            }
+            catch {
+                Write-Verbose "Failed to resolve services from ServiceContainer: $_"
+            }
+        }
 
         # Prefer an already-secure token if available; otherwise build SecureString safely
         $token = $null
@@ -1379,8 +1387,7 @@ function Install-Plugin {
         }
 
         # Get latest download URL
-        $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto `
-            -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
+        $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -ServiceContainer $ServiceContainer
 
         if (-not $url) {
             Write-Warning "Could not determine download URL for: $pluginName"
@@ -1392,7 +1399,7 @@ function Install-Plugin {
 
         if (Test-PluginFunction -Name $installerFunctionName) {
             Write-Verbose "Using custom installer download function: $installerFunctionName"
-            $installerPath = & $installerFunctionName -Url $url -Plugin $Plugin -Paths $Paths -Http $Http -FileSystem $FileSystem
+            $installerPath = & $installerFunctionName -Url $url -Plugin $Plugin -Paths $Paths -ServiceContainer $ServiceContainer
         }
         else {
             $installerPath = Get-Installer -Url $url -Plugin $Plugin -Paths $Paths -Http $Http -FileSystem $FileSystem
@@ -1408,7 +1415,7 @@ function Install-Plugin {
 
         if (Test-PluginFunction -Name $installFunctionName) {
             Write-Verbose "Using custom installation function: $installFunctionName"
-            & $installFunctionName -Plugin $Plugin -Paths $Paths -InstallerPath $installerPath -Process $Process -FileSystem $FileSystem
+            & $installFunctionName -Plugin $Plugin -Paths $Paths -InstallerPath $installerPath -ServiceContainer $ServiceContainer
         }
         else {
             Invoke-Installer -Plugin $Plugin -Paths $Paths -InstallerPath $installerPath -Process $Process -FileSystem $FileSystem
