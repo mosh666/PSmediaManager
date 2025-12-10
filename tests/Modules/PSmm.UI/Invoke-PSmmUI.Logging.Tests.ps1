@@ -53,15 +53,24 @@ Describe 'Invoke-PSmmUI logging' {
         $script:mockProcess = [PSCustomObject]@{ PSTypeName = 'ProcessService' }
         $script:mockFS = [PSCustomObject]@{ PSTypeName = 'FileSystemService' }
         $script:mockPath = [PSCustomObject]@{ PSTypeName = 'PathProvider' }
+
+        # Create a mock ServiceContainer
+        $script:mockServiceContainer = [pscustomobject]@{} | Add-Member -MemberType ScriptMethod -Name Resolve -Value {
+            param([string]$ServiceName)
+            if ($ServiceName -eq 'Process') { return $script:mockProcess }
+            if ($ServiceName -eq 'FileSystem') { return $script:mockFS }
+            if ($ServiceName -eq 'PathProvider') { return $script:mockPath }
+            return $null
+        } -PassThru
     }
 
     It 'records a warning when storage validation fails' {
-        { Invoke-PSmmUI -Config $script:config -Process $script:mockProcess -FileSystem $script:mockFS -PathProvider $script:mockPath } | Should -Not -Throw
+        { Invoke-PSmmUI -Config $script:config -ServiceContainer $script:mockServiceContainer } | Should -Not -Throw
         $script:recorder.'Assert-Warning'('Storage validation encountered issues')
     }
 
     It 'records the UI startup notice' {
-        { Invoke-PSmmUI -Config $script:config -Process $script:mockProcess -FileSystem $script:mockFS -PathProvider $script:mockPath } | Should -Not -Throw
+        { Invoke-PSmmUI -Config $script:config -ServiceContainer $script:mockServiceContainer } | Should -Not -Throw
         $script:recorder.'Assert-LogLevel'('NOTICE', 'UI interactive session starting')
     }
 }

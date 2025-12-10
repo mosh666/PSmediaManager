@@ -169,7 +169,14 @@ Describe 'Get-PSmmProjects' {
             }
         )
 
-        $result = Get-PSmmProjects -Config $config -FileSystem $fs -Force
+        $serviceContainer = [pscustomobject]@{
+        } | Add-Member -MemberType ScriptMethod -Name Resolve -Value {
+            param([string]$ServiceName)
+            if ($ServiceName -eq 'FileSystem') { return $fs }
+            return $null
+        } -PassThru
+
+        $result = Get-PSmmProjects -Config $config -ServiceContainer $serviceContainer -Force
 
         $result.Master.ContainsKey('Master-X') | Should -BeTrue
         $result.Master['Master-X'].Count | Should -Be 1
@@ -221,7 +228,13 @@ Describe 'Get-PSmmProjects' {
             DriveLetter = 'Z:\'
         })
 
-        $result = Get-PSmmProjects -Config $config -FileSystem $fs -Force
+        $serviceContainer = [pscustomobject]@{} | Add-Member -MemberType ScriptMethod -Name Resolve -Value {
+            param([string]$ServiceName)
+            if ($ServiceName -eq 'FileSystem') { return $fs }
+            return $null
+        } -PassThru
+
+        $result = Get-PSmmProjects -Config $config -ServiceContainer $serviceContainer -Force
 
         $result.Master.ContainsKey('Master-Y') | Should -BeTrue
         $result.Master['Master-Y'].Count | Should -Be 1
@@ -296,7 +309,13 @@ Describe 'Get-PSmmProjects' {
             @{ Projects = $Projects; ProjectDirs = $ProjectDirs }
         }
 
-        $result = Get-PSmmProjects -Config $config -FileSystem $fs
+        $serviceContainer = [pscustomobject]@{} | Add-Member -MemberType ScriptMethod -Name Resolve -Value {
+            param([string]$ServiceName)
+            if ($ServiceName -eq 'FileSystem') { return $fs }
+            return $null
+        } -PassThru
+
+        $result = Get-PSmmProjects -Config $config -ServiceContainer $serviceContainer
 
         Assert-MockCalled -CommandName Get-ProjectsFromDrive -ModuleName 'PSmm.Projects' -Times 0
         $result.Master['Master-X'].Count | Should -Be 1
@@ -337,7 +356,13 @@ Describe 'Get-PSmmProjects' {
         }
         Mock -CommandName Write-PSmmLog -ModuleName 'PSmm.Projects' -MockWith { param($Level,$Message,$Context) }
 
-        $result = Get-PSmmProjects -Config $config -FileSystem $fs
+        $serviceContainer = [pscustomobject]@{} | Add-Member -MemberType ScriptMethod -Name Resolve -Value {
+            param([string]$ServiceName)
+            if ($ServiceName -eq 'FileSystem') { return $fs }
+            return $null
+        } -PassThru
+
+        $result = Get-PSmmProjects -Config $config -ServiceContainer $serviceContainer
 
         Assert-MockCalled -CommandName Get-ProjectsFromDrive -ModuleName 'PSmm.Projects' -Times 2
         Assert-MockCalled -CommandName Write-PSmmLog -ModuleName 'PSmm.Projects' -Times 1 -ParameterFilter {
@@ -363,7 +388,13 @@ Describe 'Get-PSmmProjects' {
 
         Mock -CommandName Write-PSmmLog -ModuleName 'PSmm.Projects' -MockWith { param($Level,$Message,$Context) }
 
-        $result = Get-PSmmProjects -Config $config -FileSystem $fs -Force
+        $serviceContainer = [pscustomobject]@{} | Add-Member -MemberType ScriptMethod -Name Resolve -Value {
+            param([string]$ServiceName)
+            if ($ServiceName -eq 'FileSystem') { return $fs }
+            return $null
+        } -PassThru
+
+        $result = Get-PSmmProjects -Config $config -ServiceContainer $serviceContainer -Force
 
         # Verify Projects folder created on backup via FileSystem state and success log
         $fs.TestPath('Y:\Projects') | Should -BeTrue
@@ -404,7 +435,13 @@ Describe 'Get-PSmmProjects' {
         try {
             $env:MEDIA_MANAGER_TEST_MODE = '0'
 
-            $result = Get-PSmmProjects -Config $config -FileSystem $fs -Force
+            $serviceContainer = [pscustomobject]@{} | Add-Member -MemberType ScriptMethod -Name Resolve -Value {
+                param([string]$ServiceName)
+                if ($ServiceName -eq 'FileSystem') { return $fs }
+                return $null
+            } -PassThru
+
+            $result = Get-PSmmProjects -Config $config -ServiceContainer $serviceContainer -Force
 
             ($result.Master.Keys).Count | Should -Be 0
             Assert-MockCalled -CommandName Write-PSmmLog -ModuleName 'PSmm.Projects' -Times 1 -ParameterFilter { $Level -eq 'WARNING' -and $Context -eq 'Get-ProjectsFromDrive' }
@@ -447,7 +484,13 @@ Describe 'Get-PSmmProjects' {
             DriveLetter = 'X:\'
         })
 
-        $result = Get-PSmmProjects -Config $config -FileSystem $fs -Force
+        $serviceContainer = [pscustomobject]@{} | Add-Member -MemberType ScriptMethod -Name Resolve -Value {
+            param([string]$ServiceName)
+            if ($ServiceName -eq 'FileSystem') { return $fs }
+            return $null
+        } -PassThru
+
+        $result = Get-PSmmProjects -Config $config -ServiceContainer $serviceContainer -Force
 
         $result.Master.ContainsKey('Master-X') | Should -BeTrue
         $result.Master['Master-X'].Count | Should -Be 1

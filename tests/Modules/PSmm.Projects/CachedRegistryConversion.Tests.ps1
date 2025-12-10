@@ -103,7 +103,13 @@ Describe 'Cached registry conversion' {
 
         $null = Mock -CommandName Get-ProjectsFromDrive -ModuleName 'PSmm.Projects' -MockWith { @{ Projects = $Projects; ProjectDirs = $ProjectDirs } }
 
-        $result = Get-PSmmProjects -Config $config -FileSystem $fs
+        $serviceContainer = [pscustomobject]@{} | Add-Member -MemberType ScriptMethod -Name Resolve -Value {
+            param([string]$ServiceName)
+            if ($ServiceName -eq 'FileSystem') { return $fs }
+            return $null
+        } -PassThru
+
+        $result = Get-PSmmProjects -Config $config -ServiceContainer $serviceContainer
 
         # Ensure Get-ProjectsFromDrive was not called (cache used)
         $null = Assert-MockCalled -CommandName Get-ProjectsFromDrive -ModuleName 'PSmm.Projects' -Times 0
