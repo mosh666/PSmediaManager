@@ -43,15 +43,166 @@ function New-PSmmProject {
         $PathProvider
     )
 
-    # Validate Config is AppConfiguration type
-    if ($Config.GetType().Name -ne 'AppConfiguration') {
-        throw [ArgumentException]::new("Config parameter must be of type [AppConfiguration]", 'Config')
+    # Prefer a strongly-typed config when the class is available, but keep legacy/fallback behavior
+    # to avoid breaking callers when PSmm classes aren't loaded yet.
+    $appConfigType = 'AppConfiguration' -as [type]
+    if ($null -ne $appConfigType -and -not ($Config -is $appConfigType)) {
+        try {
+            $Config = $appConfigType::FromObject($Config)
+        }
+        catch {
+            Write-Verbose "[New-PSmmProject] AppConfiguration::FromObject() failed; falling back to legacy config handling: $($_.Exception.Message)"
+        }
+    }
+
+    # Support legacy dictionary-shaped configs by using a PSCustomObject view for property access.
+    # NOTE: This function mutates the referenced objects (e.g., Projects registry) but does not rely
+    # on reassigning the root Config instance.
+    if ($Config -is [System.Collections.IDictionary]) {
+        $hasStorage = $false
+        try { $hasStorage = $Config.ContainsKey('Storage') } catch { $hasStorage = $false }
+        if (-not $hasStorage) {
+            try { $hasStorage = $Config.Contains('Storage') } catch { $hasStorage = $false }
+        }
+        if (-not $hasStorage) {
+            try {
+                foreach ($k in $Config.Keys) {
+                    if ($k -eq 'Storage') { $hasStorage = $true; break }
+                }
+            }
+            catch { $hasStorage = $false }
+        }
+
+        if (-not $hasStorage -or $null -eq $Config['Storage']) {
+            $Config['Storage'] = @{}
+        }
+        $Config = [pscustomobject]$Config
     }
 
     try {
         Clear-Host
         Show-Header -Config $Config
         Format-Text -Text1 'Create a new project' -Width '80' -Alignment 'c' -ForegroundColor 'DarkGreen' -Border 'Box'
+
+        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+            if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
+                return $null
+            }
+
+            if ($Object -is [System.Collections.IDictionary]) {
+                try {
+                    if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+                }
+                catch {
+                    # fall through
+                }
+
+                try {
+                    if ($Object.Contains($Name)) { return $Object[$Name] }
+                }
+                catch {
+                    # fall through
+                }
+
+                try {
+                    foreach ($k in $Object.Keys) {
+                        if ($k -eq $Name) { return $Object[$k] }
+                    }
+                }
+                catch {
+                    # fall through
+                }
+                return $null
+            }
+
+            $p = $Object.PSObject.Properties[$Name]
+            if ($null -ne $p) {
+                return $p.Value
+            }
+
+            return $null
+        }
+
+        function Get-MapValue([object]$Map, [string]$Key) {
+            if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Key)) {
+                return $null
+            }
+
+            if ($Map -is [System.Collections.IDictionary]) {
+                try {
+                    if ($Map.ContainsKey($Key)) { return $Map[$Key] }
+                }
+                catch {
+                    # fall through
+                }
+
+                try {
+                    if ($Map.Contains($Key)) { return $Map[$Key] }
+                }
+                catch {
+                    # fall through
+                }
+
+                try {
+                    foreach ($k in $Map.Keys) {
+                        if ($k -eq $Key) { return $Map[$k] }
+                    }
+                }
+                catch {
+                    # fall through
+                }
+                return $null
+            }
+
+            try {
+                return $Map[$Key]
+            }
+            catch {
+            }
+
+            $p = $Map.PSObject.Properties[$Key]
+            if ($null -ne $p) {
+                return $p.Value
+            }
+
+            return $null
+        }
+
+        function Get-NestedValue([object]$Root, [string[]]$PathParts) {
+            $cur = $Root
+            foreach ($part in $PathParts) {
+                if ($null -eq $cur) {
+                    return $null
+                }
+                $cur = Get-ConfigMemberValue -Object $cur -Name $part
+            }
+            return $cur
+        }
+
+        # Normalize Storage Group 1 to avoid StrictMode failures on legacy hashtables.
+        $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+        $group1Raw = Get-MapValue -Map $storageMap -Key '1'
+
+        $sgType = 'StorageGroupConfig' -as [type]
+        $group1 = $null
+        if ($null -ne $sgType) {
+            try {
+                $group1 = $sgType::FromObject('1', $group1Raw)
+            }
+            catch {
+                $group1 = $null
+            }
+        }
+        if ($null -eq $group1) {
+            $group1 = if ($group1Raw -is [System.Collections.IDictionary]) { [pscustomobject]$group1Raw } else { $group1Raw }
+        }
+
+        $masterLabel = $null
+        try { $masterLabel = $group1.Master.Label } catch { $masterLabel = $null }
+        if ($null -eq $masterLabel) {
+            $masterLabel = Get-NestedValue -Root $group1 -PathParts @('Master', 'Label')
+        }
+        $masterLabel = if ($null -eq $masterLabel) { '' } else { [string]$masterLabel }
 
         # Get project name from user
         $pName = Read-Host "`nPlease enter a project name"
@@ -64,9 +215,9 @@ function New-PSmmProject {
         Write-Verbose "Creating new project: $pName"
 
         # Get storage drive for projects
-        $storageDrive = Get-StorageDrive | Where-Object { $_.Label -eq $Config.Storage['1'].Master.Label }
+        $storageDrive = Get-StorageDrive | Where-Object { $_.Label -eq $masterLabel }
         if (-not $storageDrive) {
-            throw [StorageException]::new("Master storage drive not found. Cannot create project.", $Config.Storage['1'].Master.Label)
+            throw [StorageException]::new("Master storage drive not found. Cannot create project.", $masterLabel)
         }
 
         $projectsBasePath = $PathProvider.CombinePath("$($storageDrive.DriveLetter)\", 'Projects')
@@ -121,7 +272,8 @@ function New-PSmmProject {
         # Copy digiKam configuration
         Write-Verbose "Copying digiKam configuration..."
         try {
-            $digiKamConfigSource = $Config.Paths.App.ConfigDigiKam
+            $digiKamConfigSource = $null
+            $digiKamConfigSource = Get-NestedValue -Root $Config -PathParts @('Paths', 'App', 'ConfigDigiKam')
 
             if ($FileSystem.TestPath($digiKamConfigSource)) {
                 $FileSystem.CopyItem($digiKamConfigSource, $projectConfigPath, $true)

@@ -35,20 +35,111 @@ function Confirm-Storage {
     #>
     [CmdletBinding()]
     param(
-        # Modern strongly-typed configuration object
+        # Accept both strongly-typed AppConfiguration and legacy IDictionary configs
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config
+        [object]$Config
     )
 
     try {
         Write-Verbose 'Validating storage configuration...'
 
+        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+            if ($null -eq $Object) {
+                return $null
+            }
+
+            if ($Object -is [System.Collections.IDictionary]) {
+                try {
+                    if ($Object.Contains($Name)) {
+                        return $Object[$Name]
+                    }
+                } catch {
+                    # fall through
+                }
+
+                try {
+                    if ($Object.ContainsKey($Name)) {
+                        return $Object[$Name]
+                    }
+                } catch {
+                    # fall through
+                }
+
+                try {
+                    foreach ($k in $Object.Keys) {
+                        if ($k -eq $Name) {
+                            return $Object[$k]
+                        }
+                    }
+                } catch {
+                    # fall through
+                }
+
+                return $null
+            }
+
+            $p = $Object.PSObject.Properties[$Name]
+            if ($null -ne $p) {
+                return $p.Value
+            }
+
+            return $null
+        }
+
+        function Get-MapValue([object]$Map, [string]$Key) {
+            if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Key)) {
+                return $null
+            }
+
+            if ($Map -is [System.Collections.IDictionary]) {
+                try {
+                    if ($Map.Contains($Key)) {
+                        return $Map[$Key]
+                    }
+                } catch {
+                    # fall through
+                }
+
+                try {
+                    if ($Map.ContainsKey($Key)) {
+                        return $Map[$Key]
+                    }
+                } catch {
+                    # fall through
+                }
+
+                try {
+                    foreach ($k in $Map.Keys) {
+                        if ($k -eq $Key) {
+                            return $Map[$k]
+                        }
+                    }
+                } catch {
+                    # fall through
+                }
+
+                return $null
+            }
+
+            $p = $Map.PSObject.Properties[$Key]
+            if ($null -ne $p) {
+                return $p.Value
+            }
+
+            try {
+                return $Map[$Key]
+            }
+            catch {
+                return $null
+            }
+        }
+
         # Initialize error tracking
         $errorTracker = @{}
 
-        # Determine storage root from AppConfiguration
-        $storageRoot = $Config.Storage
+        # Determine storage root from config
+        $storageRoot = Get-ConfigMemberValue -Object $Config -Name 'Storage'
         $availableDrives = Get-StorageDrive
         if ($null -eq $availableDrives) {
             $availableDrives = @()
@@ -62,10 +153,16 @@ function Confirm-Storage {
         foreach ($storageGroup in $storageRoot.Keys | Sort-Object) {
             Write-Verbose "Processing Storage Group: $storageGroup"
 
+            $group = Get-MapValue -Map $storageRoot -Key ([string]$storageGroup)
+            if ($null -eq $group) {
+                continue
+            }
+
             # Validate Master storage
-            if ($storageRoot[$storageGroup].Master) {
+            $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master'
+            if ($null -ne $masterCfg) {
                 $testParams = @{
-                    StorageConfig = $storageRoot[$storageGroup].Master
+                    StorageConfig = $masterCfg
                     AvailableDrives = $availableDrives
                     StorageType = 'Master'
                     StorageGroup = $storageGroup
@@ -78,8 +175,12 @@ function Confirm-Storage {
             }
 
             # Validate Backup storage(s)
-            if ($storageRoot[$storageGroup].Backups) {
-                $backupStorage = $storageRoot[$storageGroup].Backups
+            $backupStorage = Get-ConfigMemberValue -Object $group -Name 'Backups'
+            if ($null -eq $backupStorage) {
+                $backupStorage = Get-ConfigMemberValue -Object $group -Name 'Backup'
+            }
+
+            if ($null -ne $backupStorage) {
 
                 # Check if Backup is empty (like Storage.2.Backup)
                 if ($backupStorage.Count -eq 0) {
@@ -90,8 +191,13 @@ function Confirm-Storage {
                     foreach ($backupId in $backupStorage.Keys | Sort-Object) {
                         Write-Verbose "Processing Backup $backupId for Storage Group $storageGroup"
 
+                        $backupCfg = Get-MapValue -Map $backupStorage -Key ([string]$backupId)
+                        if ($null -eq $backupCfg) {
+                            continue
+                        }
+
                         $testParams = @{
-                            StorageConfig = $backupStorage.$backupId
+                            StorageConfig = $backupCfg
                             AvailableDrives = $availableDrives
                             StorageType = 'Backup'
                             StorageGroup = $storageGroup
@@ -162,8 +268,105 @@ function Test-StorageDevice {
         [hashtable]$ErrorTracker,
 
         [Parameter()]
-        [AppConfiguration]$Config = $null
+        [object]$Config = $null
     )
+
+    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+        if ($null -eq $Object) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) {
+                        return $Object[$k]
+                    }
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
+    function Get-MapValue([object]$Map, [string]$Key) {
+        if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Key)) {
+            return $null
+        }
+
+        if ($Map -is [System.Collections.IDictionary]) {
+            try {
+                if ($Map.ContainsKey($Key)) {
+                    return $Map[$Key]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Map.Contains($Key)) {
+                    return $Map[$Key]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Map.Keys) {
+                    if ($k -eq $Key) {
+                        return $Map[$k]
+                    }
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            return $null
+        }
+
+        $p = $Map.PSObject.Properties[$Key]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        try {
+            return $Map[$Key]
+        }
+        catch {
+            return $null
+        }
+    }
 
     # Extract storage configuration values
     $serialNumber = $null
@@ -206,28 +409,67 @@ function Test-StorageDevice {
 
     if ($drive) {
         # Update drive letter
-        try { $StorageConfig.DriveLetter = $drive.DriveLetter }
-        catch {
-            Write-Verbose "Unable to assign DriveLetter on storage config: $_"
+        if ($StorageConfig -is [System.Collections.IDictionary]) {
+            try { $StorageConfig['DriveLetter'] = $drive.DriveLetter } catch { Write-Verbose "Unable to assign DriveLetter on storage config dictionary: $_" }
+            try { $StorageConfig['IsAvailable'] = $true } catch { Write-Verbose "Unable to mark storage config dictionary as available: $_" }
         }
-        try { $StorageConfig.IsAvailable = $true }
-        catch {
-            Write-Verbose "Unable to mark storage config as available: $_"
+        else {
+            try { $StorageConfig.DriveLetter = $drive.DriveLetter }
+            catch {
+                Write-Verbose "Unable to assign DriveLetter on storage config: $_"
+            }
+            try { $StorageConfig.IsAvailable = $true }
+            catch {
+                Write-Verbose "Unable to mark storage config as available: $_"
+            }
         }
 
         # Also update the original Config object if provided
-        if ($null -ne $Config -and $Config.Storage.ContainsKey($StorageGroup)) {
-            $configGroup = $Config.Storage[$StorageGroup]
+        if ($null -ne $Config) {
+            $configStorage = Get-ConfigMemberValue -Object $Config -Name 'Storage'
 
-            if ($StorageType -eq 'Master' -and $null -ne $configGroup.Master) {
-                Write-Verbose "Updating Master DriveLetter in Config object: $($drive.DriveLetter)"
-                $configGroup.Master.DriveLetter = $drive.DriveLetter
-                $configGroup.Master.UpdateStatus()
-            }
-            elseif ($StorageType -eq 'Backup' -and $BackupId -and $null -ne $configGroup.Backups -and $configGroup.Backups.ContainsKey($BackupId)) {
-                Write-Verbose "Updating Backup.$BackupId DriveLetter in Config object: $($drive.DriveLetter)"
-                $configGroup.Backups[$BackupId].DriveLetter = $drive.DriveLetter
-                $configGroup.Backups[$BackupId].UpdateStatus()
+            if ($null -ne $configStorage) {
+                $configGroup = $null
+                try { $configGroup = $configStorage[[string]$StorageGroup] } catch { $configGroup = $null }
+
+                if ($null -ne $configGroup) {
+                    if ($StorageType -eq 'Master') {
+                        $master = $null
+                        try { $master = if ($configGroup -is [System.Collections.IDictionary]) { $configGroup['Master'] } else { $configGroup.Master } } catch { $master = $null }
+                        if ($null -ne $master) {
+                            Write-Verbose "Updating Master DriveLetter in Config object: $($drive.DriveLetter)"
+                            try { $master.DriveLetter = $drive.DriveLetter } catch { }
+                            try { $master.UpdateStatus() } catch { }
+                        }
+                    }
+                    elseif ($StorageType -eq 'Backup' -and $BackupId) {
+                        $backups = $null
+                        try {
+                            if ($configGroup -is [System.Collections.IDictionary]) {
+                                $backups = Get-ConfigMemberValue -Object $configGroup -Name 'Backups'
+                                if ($null -eq $backups) {
+                                    $backups = Get-ConfigMemberValue -Object $configGroup -Name 'Backup'
+                                }
+                            }
+                            else {
+                                $backups = if ($null -ne $configGroup.Backups) { $configGroup.Backups } elseif ($null -ne $configGroup.Backup) { $configGroup.Backup } else { $null }
+                            }
+                        }
+                        catch {
+                            $backups = $null
+                        }
+
+                        if ($null -ne $backups) {
+                            $backupTarget = $null
+                            try { $backupTarget = $backups[[string]$BackupId] } catch { $backupTarget = $null }
+                            if ($null -ne $backupTarget) {
+                                Write-Verbose "Updating Backup.$BackupId DriveLetter in Config object: $($drive.DriveLetter)"
+                                try { $backupTarget.DriveLetter = $drive.DriveLetter } catch { }
+                                try { $backupTarget.UpdateStatus() } catch { }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -261,26 +503,49 @@ function Test-StorageDevice {
         }
 
         # Clear drive letter and mark as unavailable
-        try { $StorageConfig.DriveLetter = '' }
-        catch {
-            Write-Verbose "Unable to clear DriveLetter on storage config: $_"
+        if ($StorageConfig -is [System.Collections.IDictionary]) {
+            try { $StorageConfig['DriveLetter'] = '' } catch { Write-Verbose "Unable to clear DriveLetter on storage config dictionary: $_" }
+            try { $StorageConfig['IsAvailable'] = $false } catch { Write-Verbose "Unable to clear availability flag on storage config dictionary: $_" }
         }
-        try { $StorageConfig.IsAvailable = $false }
-        catch {
-            Write-Verbose "Unable to clear availability flag on storage config: $_"
+        else {
+            try { $StorageConfig.DriveLetter = '' }
+            catch {
+                Write-Verbose "Unable to clear DriveLetter on storage config: $_"
+            }
+            try { $StorageConfig.IsAvailable = $false }
+            catch {
+                Write-Verbose "Unable to clear availability flag on storage config: $_"
+            }
         }
 
         # Also update Config object if provided
-        if ($null -ne $Config -and $Config.Storage.ContainsKey($StorageGroup)) {
-            $configGroup = $Config.Storage[$StorageGroup]
-
-            if ($StorageType -eq 'Master' -and $null -ne $configGroup.Master) {
-                $configGroup.Master.DriveLetter = ''
-                $configGroup.Master.IsAvailable = $false
+        if ($null -ne $Config) {
+            $storageRoot = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+            if ($null -eq $storageRoot) {
+                return
             }
-            elseif ($StorageType -eq 'Backup' -and $BackupId -and $null -ne $configGroup.Backups -and $configGroup.Backups.ContainsKey($BackupId)) {
-                $configGroup.Backups[$BackupId].DriveLetter = ''
-                $configGroup.Backups[$BackupId].IsAvailable = $false
+
+            $configGroup = Get-MapValue -Map $storageRoot -Key ([string]$StorageGroup)
+            if ($null -eq $configGroup) {
+                return
+            }
+
+            if ($StorageType -eq 'Master') {
+                $masterCfg = Get-ConfigMemberValue -Object $configGroup -Name 'Master'
+                if ($null -ne $masterCfg) {
+                    try { $masterCfg.DriveLetter = '' } catch { try { if ($masterCfg -is [System.Collections.IDictionary]) { $masterCfg['DriveLetter'] = '' } } catch { } }
+                    try { $masterCfg.IsAvailable = $false } catch { try { if ($masterCfg -is [System.Collections.IDictionary]) { $masterCfg['IsAvailable'] = $false } } catch { } }
+                }
+            }
+            elseif ($StorageType -eq 'Backup' -and $BackupId) {
+                $backupsCfg = Get-ConfigMemberValue -Object $configGroup -Name 'Backups'
+                if ($null -eq $backupsCfg) { $backupsCfg = Get-ConfigMemberValue -Object $configGroup -Name 'Backup' }
+
+                $backupCfg = if ($null -ne $backupsCfg) { Get-MapValue -Map $backupsCfg -Key ([string]$BackupId) } else { $null }
+                if ($null -ne $backupCfg) {
+                    try { $backupCfg.DriveLetter = '' } catch { try { if ($backupCfg -is [System.Collections.IDictionary]) { $backupCfg['DriveLetter'] = '' } } catch { } }
+                    try { $backupCfg.IsAvailable = $false } catch { try { if ($backupCfg -is [System.Collections.IDictionary]) { $backupCfg['IsAvailable'] = $false } } catch { } }
+                }
             }
         }
     }

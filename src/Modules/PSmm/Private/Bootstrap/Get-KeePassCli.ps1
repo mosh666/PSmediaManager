@@ -4,7 +4,7 @@ Set-StrictMode -Version Latest
 function Get-KeePassCli {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][AppConfiguration]$Config,
+        [Parameter(Mandatory)][object]$Config,
         [Parameter(Mandatory)]$Http,
         [Parameter(Mandatory)]$Crypto,
         [Parameter(Mandatory)]$FileSystem,
@@ -13,24 +13,62 @@ function Get-KeePassCli {
         [Parameter(Mandatory)]$Process
     )
 
+    function Get-ConfigMemberValue {
+        [CmdletBinding()]
+        param(
+            [Parameter()][AllowNull()][object]$Object,
+            [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name
+        )
+
+        if ($null -eq $Object) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
+            try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) { return $Object[$k] }
+                }
+            }
+            catch { }
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
+    function Get-ConfigNestedValue {
+        [CmdletBinding()]
+        param(
+            [Parameter()][AllowNull()][object]$Object,
+            [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Path
+        )
+
+        $current = $Object
+        foreach ($segment in $Path) {
+            $current = Get-ConfigMemberValue -Object $current -Name $segment
+            if ($null -eq $current) {
+                return $null
+            }
+        }
+
+        return $current
+    }
+
     # Resolve vault path using standard resolution order: Config > Environment > Error
     $vaultPath = $null
 
     # 1. Try to get from configuration (Config.Paths.App.Vault)
-    try {
-        if ($Config -and ($Config.PSObject.Properties.Name -contains 'Paths')) {
-            $paths = $Config.Paths
-            if ($paths -and ($paths.PSObject.Properties.Name -contains 'App')) {
-                $appPaths = $paths.App
-                if ($appPaths -and ($appPaths.PSObject.Properties.Name -contains 'Vault')) {
-                    $vaultPath = $appPaths.Vault
-                    Write-Verbose "[Get-KeePassCli] Resolved VaultPath from Config.Paths.App.Vault: $vaultPath"
-                }
-            }
-        }
-    }
-    catch {
-        Write-Verbose "[Get-KeePassCli] Failed to resolve vault path from config: $($_.Exception.Message)"
+    $vaultPath = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Vault')
+    if (-not [string]::IsNullOrWhiteSpace($vaultPath)) {
+        Write-Verbose "[Get-KeePassCli] Resolved VaultPath from Config.Paths.App.Vault: $vaultPath"
     }
 
     # 2. Try environment variable if not found in config

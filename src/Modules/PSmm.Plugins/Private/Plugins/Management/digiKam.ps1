@@ -7,6 +7,94 @@ Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
 
+function Get-ConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        try {
+            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            if ($Object.Contains($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            foreach ($k in $Object.Keys) {
+                if ($k -eq $Name) { return $Object[$k] }
+            }
+        }
+        catch { }
+
+        return $null
+    }
+
+    try {
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) { return $p.Value }
+    }
+    catch { }
+
+    return $null
+}
+
+function Set-ConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
+
+        [Parameter()]
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Object) {
+        return
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        $Object[$Name] = $Value
+        return
+    }
+
+    try {
+        $Object.$Name = $Value
+        return
+    }
+    catch { }
+
+    try {
+        if ($null -eq $Object.PSObject.Properties[$Name]) {
+            $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+        }
+        else {
+            $Object.PSObject.Properties[$Name].Value = $Value
+        }
+    }
+    catch { }
+}
+
 function Get-CurrentVersion-digiKam {
     param(
         [hashtable]$Plugin,
@@ -25,11 +113,15 @@ function Get-CurrentVersion-digiKam {
         }
     }
 
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'digiKam' }
+
     if ($FileSystem) {
-        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
+        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
     }
     else {
-        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
+        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
     }
 
     if ($CurrentVersion) {
@@ -47,18 +139,30 @@ function Get-LatestUrlFromUrl-digiKam {
         $ServiceContainer
     )
     $null = $Paths, $ServiceContainer
-    $Response = Invoke-WebRequest -Uri $Plugin.Config.VersionUrl
+
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $versionUrl = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
+    if ([string]::IsNullOrWhiteSpace($versionUrl)) {
+        throw [System.InvalidOperationException]::new('Plugin config is missing VersionUrl')
+    }
+
+    $Response = Invoke-WebRequest -Uri $versionUrl
     $VersionPattern = '(\d+\.\d+\.\d+)/'
     $Match = [regex]::Matches($Response.Content, $VersionPattern)
     $LatestVersion = ($Match | ForEach-Object { $_.Groups[1].Value }) | Sort-Object -Descending | Select-Object -First 1
 
-    $DownloadPageUrl = "$($Plugin.Config.VersionUrl)$($LatestVersion)/"
+    $DownloadPageUrl = "$versionUrl$LatestVersion/"
     $Response = Invoke-WebRequest -Uri "$($DownloadPageUrl)"
     $LatestInstaller = [regex]::Match($Response.Content, '(digiKam-\d+\.\d+\.\d+-Qt6-Win64.exe)').Groups[1].Value
 
+    $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+    if ($null -eq $state) {
+        $state = @{}
+        Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
+    }
 
-    $Plugin.Config.State.LatestVersion = $LatestVersion
-    $Plugin.Config.State.LatestInstaller = $LatestInstaller
+    Set-ConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestVersion
+    Set-ConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $LatestInstaller
     $Url = $DownloadPageUrl + $LatestInstaller
     return $Url
 }
@@ -96,6 +200,10 @@ function Invoke-Installer-digiKam {
             Write-Verbose "Failed to resolve Process from ServiceContainer: $_"
         }
     }
+
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'digiKam' }
 
     try {
         $extractPath = Join-Path -Path $Paths.Root -ChildPath (Split-Path $InstallerPath -LeafBase)
@@ -142,10 +250,10 @@ function Invoke-Installer-digiKam {
             }
         }
 
-        Write-PSmmLog -Level SUCCESS -Context "Install $($Plugin.Config.Name)" -Message "Installation completed for $InstallerPath" -Console -File
+        Write-PSmmLog -Level SUCCESS -Context "Install $pluginName" -Message "Installation completed for $InstallerPath" -Console -File
     }
     catch {
-        Write-PSmmLog -Level ERROR -Context "Install $($Plugin.Config.Name)" -Message "Installation failed for $InstallerPath" -ErrorRecord $_ -Console -File
+        Write-PSmmLog -Level ERROR -Context "Install $pluginName" -Message "Installation failed for $InstallerPath" -ErrorRecord $_ -Console -File
         throw
     }
 }

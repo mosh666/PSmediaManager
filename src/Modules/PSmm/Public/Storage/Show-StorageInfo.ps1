@@ -25,6 +25,37 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+function Get-ConfigValue {
+    param(
+        [Parameter(Mandatory)]
+        [object]$InputObject,
+
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+
+    if ($null -eq $InputObject) {
+        return $null
+    }
+
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        try { if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] } } catch { }
+        try { if ($InputObject.Contains($Name)) { return $InputObject[$Name] } } catch { }
+        try {
+            foreach ($k in $InputObject.Keys) {
+                if ($k -eq $Name) { return $InputObject[$k] }
+            }
+        }
+        catch { }
+        return $null
+    }
+
+    $p = $InputObject.PSObject.Properties[$Name]
+    if ($null -ne $p) { return $p.Value }
+
+    return $null
+}
+
 #region ########## PUBLIC ##########
 
 function Show-StorageInfo {
@@ -44,21 +75,38 @@ function Show-StorageInfo {
         # Get available drives if showing details
         $availableDrives = if ($ShowDetails) { Get-StorageDrive } else { $null }
 
+        $storageRoot = Get-ConfigValue -InputObject $Config -Name 'Storage'
+        if ($null -eq $storageRoot -or -not ($storageRoot -is [System.Collections.IDictionary]) -or $storageRoot.Count -eq 0) {
+            Write-PSmmHost "`n(No storage groups configured)" -ForegroundColor Yellow
+            Write-PSmmHost "`n===============================================================`n" -ForegroundColor Cyan
+            return
+        }
+
         # Process each storage group
-        foreach ($storageGroup in $Config.Storage.Keys | Sort-Object) {
+        foreach ($storageGroup in $storageRoot.Keys | Sort-Object) {
             Write-PSmmHost "`n--- Storage Group $storageGroup ---" -ForegroundColor Yellow
 
+            $group = $storageRoot[$storageGroup]
+
             # Display Master storage
-            if ($Config.Storage.$storageGroup.ContainsKey('Master')) {
+            $master = $null
+            try { $master = $group.Master } catch { $master = (Get-ConfigValue -InputObject $group -Name 'Master') }
+            if ($null -ne $master) {
                 Write-PSmmHost '  Master:' -ForegroundColor Green
-                Show-StorageDevice -Config $Config.Storage.$storageGroup.Master `
+                Show-StorageDevice -Config $master `
                     -AvailableDrives $availableDrives `
                     -ShowDetails:$ShowDetails
             }
 
             # Display Backup storage(s)
-            if ($Config.Storage.$storageGroup.ContainsKey('Backup')) {
-                $backupStorage = $Config.Storage.$storageGroup.Backup
+            $backupStorage = $null
+            try { $backupStorage = $group.Backups } catch { $backupStorage = $null }
+            if ($null -eq $backupStorage) {
+                # Legacy compatibility (old schema used 'Backup')
+                $backupStorage = (Get-ConfigValue -InputObject $group -Name 'Backup')
+            }
+
+            if ($null -ne $backupStorage) {
 
                 if ($backupStorage.Count -eq 0) {
                     Write-PSmmHost '  Backup: (none configured)' -ForegroundColor DarkGray
@@ -67,7 +115,14 @@ function Show-StorageInfo {
                     Write-PSmmHost '  Backup:' -ForegroundColor Green
                     foreach ($backupId in $backupStorage.Keys | Sort-Object) {
                         Write-PSmmHost "    Backup $backupId" -ForegroundColor Magenta
-                        Show-StorageDevice -Config $backupStorage.$backupId `
+                        $backupCfg = $null
+                        try { $backupCfg = $backupStorage[$backupId] } catch {
+                            try { $backupCfg = $backupStorage.$backupId } catch { $backupCfg = $null }
+                        }
+                        if ($null -eq $backupCfg) {
+                            continue
+                        }
+                        Show-StorageDevice -Config $backupCfg `
                             -AvailableDrives $availableDrives `
                             -ShowDetails:$ShowDetails `
                             -Indent 6
@@ -92,7 +147,7 @@ function Show-StorageDevice {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [hashtable]$Config,
+        [object]$Config,
 
         [Parameter()]
         [array]$AvailableDrives,
@@ -106,15 +161,29 @@ function Show-StorageDevice {
 
     $prefix = ' ' * $Indent
 
+    $driveLetter = $null
+    $serialNumber = $null
+    $label = $null
+    $availableFlag = $null
+
+    $driveLetter = Get-ConfigValue -InputObject $Config -Name 'DriveLetter'
+    $serialNumber = Get-ConfigValue -InputObject $Config -Name 'SerialNumber'
+    $label = Get-ConfigValue -InputObject $Config -Name 'Label'
+    $availableFlag = Get-ConfigValue -InputObject $Config -Name 'IsAvailable'
+
+    $driveLetter = if ($null -eq $driveLetter) { '' } else { [string]$driveLetter }
+    $serialNumber = if ($null -eq $serialNumber) { '' } else { [string]$serialNumber }
+    $label = if ($null -eq $label) { '' } else { [string]$label }
+
     # Check if drive is available
-    $isAvailable = -not [string]::IsNullOrEmpty($Config.DriveLetter)
+    $isAvailable = if ($null -ne $availableFlag) { [bool]$availableFlag } else { -not [string]::IsNullOrEmpty($driveLetter) }
     $statusColor = if ($isAvailable) { 'Green' } else { 'Red' }
 
     # Get drive details if available
     $drive = $null
     if ($ShowDetails -and $AvailableDrives -and $isAvailable) {
         $drive = $AvailableDrives | Where-Object {
-            $_.SerialNumber.Trim() -eq $Config.SerialNumber.Trim()
+            $_.SerialNumber.Trim() -eq $serialNumber.Trim()
         } | Select-Object -First 1
     }
 
@@ -147,8 +216,8 @@ function Show-StorageDevice {
     }
 
     # Display basic information in sorted order with two-column layout
-    Format-TwoColumn -Key1 'Drive Letter' -Value1 $Config.DriveLetter -Color1 $statusColor -Key2 'Serial Number' -Value2 $Config.SerialNumber -Color2 'White'
-    Format-TwoColumn -Key1 'Label' -Value1 $Config.Label -Color1 'Yellow' -Key2 'Manufacturer' -Value2 $(if ($drive) { $drive.Manufacturer } else { 'N/A' }) -Color2 'White'
+    Format-TwoColumn -Key1 'Drive Letter' -Value1 $driveLetter -Color1 $statusColor -Key2 'Serial Number' -Value2 $serialNumber -Color2 'White'
+    Format-TwoColumn -Key1 'Label' -Value1 $label -Color1 'Yellow' -Key2 'Manufacturer' -Value2 $(if ($drive) { $drive.Manufacturer } else { 'N/A' }) -Color2 'White'
     Format-TwoColumn -Key1 'Model' -Value1 $(if ($drive) { $drive.Model } else { 'N/A' }) -Color1 'White' -Key2 'File System' -Value2 $(if ($drive) { $drive.FileSystem } else { 'N/A' }) -Color2 'White'
     Format-TwoColumn -Key1 'Partition Kind' -Value1 $(if ($drive) { $drive.PartitionKind } else { 'N/A' }) -Color1 'White' -Key2 'Total Space' -Value2 $(if ($drive) { "$($drive.TotalSpace) GB" } else { 'N/A' }) -Color2 'White'
     Format-TwoColumn -Key1 'Used Space' -Value1 $(if ($drive) { "$($drive.UsedSpace) GB ($('{0:P2}' -f ($drive.UsedSpace / $drive.TotalSpace)))" } else { 'N/A' }) -Color1 'Magenta' -Key2 'Free Space' -Value2 $(if ($drive) { "$($drive.FreeSpace) GB ($('{0:P2}' -f ($drive.FreeSpace / $drive.TotalSpace)))" } else { 'N/A' }) -Color2 'Green'

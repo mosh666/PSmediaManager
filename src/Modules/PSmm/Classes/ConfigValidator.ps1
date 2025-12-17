@@ -202,11 +202,28 @@ class ConfigValidator {
                 break
             }
 
-            if ($current -is [hashtable]) {
-                if (-not $current.ContainsKey($part)) {
+            if ($current -is [System.Collections.IDictionary]) {
+                $hasKey = $false
+                try { $hasKey = [bool]$current.ContainsKey($part) } catch { $hasKey = $false }
+                if (-not $hasKey) {
+                    try { $hasKey = [bool]$current.Contains($part) } catch { $hasKey = $false }
+                }
+                if (-not $hasKey) {
+                    try {
+                        foreach ($k in $current.Keys) {
+                            if ($k -eq $part) { $hasKey = $true; break }
+                        }
+                    }
+                    catch {
+                        $hasKey = $false
+                    }
+                }
+
+                if (-not $hasKey) {
                     $found = $false
                     break
                 }
+
                 $current = $current[$part]
             }
             else {
@@ -309,7 +326,7 @@ class ConfigValidator {
             'Int' { $value -is [int] -or $value -is [long] }
             'Boolean' { $value -is [bool] }
             'Hashtable' { $value -is [hashtable] }
-            'Dictionary' { $value.GetType().Name -match 'Dictionary`2' }
+            'Dictionary' { ($value -is [System.Collections.IDictionary]) -and ($value -isnot [hashtable]) }
             'Array' { $value -is [array] }
             'Double' { $value -is [double] -or $value -is [decimal] }
             default { $true }
@@ -330,11 +347,42 @@ class ConfigValidator {
 
         $paths = $pathsProperty.Value
 
-        # Helper to safely get value from hashtable or PSObject
-        # Implemented inline to avoid scoping issues with script blocks in class methods
-        $rootValue = if ($paths -is [hashtable]) { $paths['Root'] } else { $paths.Root }
-        $repoValue = if ($paths -is [hashtable]) { $paths['RepositoryRoot'] } else { $paths.RepositoryRoot }
-        $logValue = if ($paths -is [hashtable]) { $paths['Log'] } else { $paths.Log }
+        $rootValue = $null
+        $repoValue = $null
+        $logValue = $null
+
+        if ($paths -is [System.Collections.IDictionary]) {
+            foreach ($name in @('Root', 'RepositoryRoot', 'Log')) {
+                $hasKey = $false
+                try { $hasKey = [bool]$paths.ContainsKey($name) } catch { $hasKey = $false }
+                if (-not $hasKey) { try { $hasKey = [bool]$paths.Contains($name) } catch { $hasKey = $false } }
+                if (-not $hasKey) {
+                    try {
+                        foreach ($k in $paths.Keys) {
+                            if ($k -eq $name) { $hasKey = $true; break }
+                        }
+                    }
+                    catch { $hasKey = $false }
+                }
+                if ($hasKey) {
+                    switch ($name) {
+                        'Root' { $rootValue = $paths[$name] }
+                        'RepositoryRoot' { $repoValue = $paths[$name] }
+                        'Log' { $logValue = $paths[$name] }
+                    }
+                }
+            }
+        }
+        else {
+            $rootProp = $paths.PSObject.Properties['Root']
+            if ($null -ne $rootProp) { $rootValue = $rootProp.Value }
+
+            $repoProp = $paths.PSObject.Properties['RepositoryRoot']
+            if ($null -ne $repoProp) { $repoValue = $repoProp.Value }
+
+            $logProp = $paths.PSObject.Properties['Log']
+            if ($null -ne $logProp) { $logValue = $logProp.Value }
+        }
 
         $pathsToCheck = @(
             @{ Name = 'Root'; Value = $rootValue; MustExist = $false },
@@ -390,7 +438,7 @@ class ConfigValidator {
         # Check for sensitive data exposure - safely access Secrets property
         $secretsProperty = $config.PSObject.Properties['Secrets']
         if ($null -ne $secretsProperty -and $null -ne $secretsProperty.Value) {
-            if ($secretsProperty.Value -is [hashtable]) {
+            if ($secretsProperty.Value -is [System.Collections.IDictionary]) {
                 foreach ($key in $secretsProperty.Value.Keys) {
                     $value = $secretsProperty.Value[$key]
                     if ($value -is [string] -and $value.Length -gt 0 -and $value -notmatch '^\*+$') {
@@ -408,8 +456,19 @@ class ConfigValidator {
 
             # Get Database value from hashtable or PSObject
             $vaultPath = $null
-            if ($vault -is [hashtable]) {
-                $vaultPath = $vault['Database']
+            if ($vault -is [System.Collections.IDictionary]) {
+                $hasDb = $false
+                try { $hasDb = [bool]$vault.ContainsKey('Database') } catch { $hasDb = $false }
+                if (-not $hasDb) { try { $hasDb = [bool]$vault.Contains('Database') } catch { $hasDb = $false } }
+                if (-not $hasDb) {
+                    try {
+                        foreach ($k in $vault.Keys) {
+                            if ($k -eq 'Database') { $hasDb = $true; break }
+                        }
+                    }
+                    catch { $hasDb = $false }
+                }
+                if ($hasDb) { $vaultPath = $vault['Database'] }
             }
             else {
                 $vaultDbProperty = $vault.PSObject.Properties['Database']
@@ -446,20 +505,96 @@ class ConfigValidator {
             }
 
             # Validate Master configuration
-            $masterProperty = $group.PSObject.Properties['Master']
-            if ($null -ne $masterProperty -and $null -ne $masterProperty.Value) {
-                $serialProperty = $masterProperty.Value.PSObject.Properties['Serial']
-                if ($null -ne $serialProperty -and [string]::IsNullOrWhiteSpace($serialProperty.Value)) {
+            $master = $null
+            if ($group -is [System.Collections.IDictionary]) {
+                $hasMaster = $false
+                try { $hasMaster = [bool]$group.ContainsKey('Master') } catch { $hasMaster = $false }
+                if (-not $hasMaster) { try { $hasMaster = [bool]$group.Contains('Master') } catch { $hasMaster = $false } }
+                if (-not $hasMaster) {
+                    try {
+                        foreach ($k in $group.Keys) {
+                            if ($k -eq 'Master') { $hasMaster = $true; break }
+                        }
+                    }
+                    catch { $hasMaster = $false }
+                }
+                if ($hasMaster) { $master = $group['Master'] }
+            }
+            else {
+                $masterProperty = $group.PSObject.Properties['Master']
+                if ($null -ne $masterProperty) { $master = $masterProperty.Value }
+            }
+
+            if ($null -ne $master) {
+                $serialValue = $null
+                if ($master -is [System.Collections.IDictionary]) {
+                    $hasSerial = $false
+                    try { $hasSerial = [bool]$master.ContainsKey('Serial') } catch { $hasSerial = $false }
+                    if (-not $hasSerial) { try { $hasSerial = [bool]$master.Contains('Serial') } catch { $hasSerial = $false } }
+                    if (-not $hasSerial) {
+                        try {
+                            foreach ($k in $master.Keys) {
+                                if ($k -eq 'Serial') { $hasSerial = $true; break }
+                            }
+                        }
+                        catch { $hasSerial = $false }
+                    }
+                    if ($hasSerial) { $serialValue = $master['Serial'] }
+                }
+                else {
+                    $serialProperty = $master.PSObject.Properties['Serial']
+                    if ($null -ne $serialProperty) { $serialValue = $serialProperty.Value }
+                }
+
+                if ([string]::IsNullOrWhiteSpace([string]$serialValue)) {
                     $issue = [ValidationIssue]::new('Warning', 'Storage', "Storage.$groupKey.Master.Serial", "Master drive serial is empty")
                     $this._issues.Add($issue)
                 }
             }
 
             # Validate Backup configuration
-            $backupProperty = $group.PSObject.Properties['Backup']
-            if ($null -ne $backupProperty -and $null -ne $backupProperty.Value) {
-                $serialProperty = $backupProperty.Value.PSObject.Properties['Serial']
-                if ($null -ne $serialProperty -and [string]::IsNullOrWhiteSpace($serialProperty.Value)) {
+            $backup = $null
+            if ($group -is [System.Collections.IDictionary]) {
+                $hasBackup = $false
+                try { $hasBackup = [bool]$group.ContainsKey('Backup') } catch { $hasBackup = $false }
+                if (-not $hasBackup) { try { $hasBackup = [bool]$group.Contains('Backup') } catch { $hasBackup = $false } }
+                if (-not $hasBackup) {
+                    try {
+                        foreach ($k in $group.Keys) {
+                            if ($k -eq 'Backup') { $hasBackup = $true; break }
+                        }
+                    }
+                    catch { $hasBackup = $false }
+                }
+                if ($hasBackup) { $backup = $group['Backup'] }
+            }
+            else {
+                $backupProperty = $group.PSObject.Properties['Backup']
+                if ($null -ne $backupProperty) { $backup = $backupProperty.Value }
+            }
+
+            if ($null -ne $backup) {
+                $serialValue = $null
+                if ($backup -is [System.Collections.IDictionary]) {
+                    $hasSerial = $false
+                    try { $hasSerial = [bool]$backup.ContainsKey('Serial') } catch { $hasSerial = $false }
+                    if (-not $hasSerial) { try { $hasSerial = [bool]$backup.Contains('Serial') } catch { $hasSerial = $false } }
+                    if (-not $hasSerial) {
+                        try {
+                            foreach ($k in $backup.Keys) {
+                                if ($k -eq 'Serial') { $hasSerial = $true; break }
+                            }
+                        }
+                        catch { $hasSerial = $false }
+                    }
+                    if ($hasSerial) { $serialValue = $backup['Serial'] }
+                }
+                else {
+                    $serialProperty = $backup.PSObject.Properties['Serial']
+                    if ($null -ne $serialProperty) { $serialValue = $serialProperty.Value }
+                }
+
+                if ([string]::IsNullOrWhiteSpace([string]$serialValue)) {
                     $issue = [ValidationIssue]::new('Warning', 'Storage', "Storage.$groupKey.Backup.Serial", "Backup drive serial is empty")
                     $this._issues.Add($issue)
                 }
@@ -538,7 +673,7 @@ class ConfigValidator {
                 $this.CompareObjects($runtimeValue, $diskValue, $newPath, $drifts)
             }
         }
-        elseif ($runtime.GetType().Name -match '^App' -and $disk -is [hashtable]) {
+        elseif ($runtime -is [AppConfiguration] -and $disk -is [hashtable]) {
             # Compare AppConfiguration properties with hashtable
             foreach ($prop in $runtime.PSObject.Properties) {
                 $key = $prop.Name

@@ -45,7 +45,21 @@ function Get-OrInitializeToolCommandCache {
     )
 
     $commands = $null
-    if ($Paths.Contains('Commands')) {
+    $hasCommands = $false
+    try { $hasCommands = $Paths.ContainsKey('Commands') } catch { $hasCommands = $false }
+    if (-not $hasCommands) {
+        try { $hasCommands = $Paths.Contains('Commands') } catch { $hasCommands = $false }
+    }
+    if (-not $hasCommands) {
+        try {
+            foreach ($k in $Paths.Keys) {
+                if ($k -eq 'Commands') { $hasCommands = $true; break }
+            }
+        }
+        catch { }
+    }
+
+    if ($hasCommands) {
         $commands = $Paths['Commands']
     }
 
@@ -121,7 +135,21 @@ function Find-ToolCommandInRoot {
         [Parameter(Mandatory)][string]$CommandName
     )
 
-    if (-not ($Paths.Contains('Root') -and -not [string]::IsNullOrWhiteSpace($Paths['Root']))) {
+    $hasRoot = $false
+    try { $hasRoot = $Paths.ContainsKey('Root') } catch { $hasRoot = $false }
+    if (-not $hasRoot) {
+        try { $hasRoot = $Paths.Contains('Root') } catch { $hasRoot = $false }
+    }
+    if (-not $hasRoot) {
+        try {
+            foreach ($k in $Paths.Keys) {
+                if ($k -eq 'Root') { $hasRoot = $true; break }
+            }
+        }
+        catch { }
+    }
+
+    if (-not ($hasRoot -and -not [string]::IsNullOrWhiteSpace([string]$Paths['Root']))) {
         return $null
     }
 

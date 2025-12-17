@@ -78,6 +78,65 @@ function Invoke-PSmmUI {
         }
     }
 
+    # Normalize config shape early so downstream UI functions can rely on AppConfiguration
+    try {
+        $Config = [AppConfiguration]::FromObject($Config)
+    }
+    catch {
+        throw [System.InvalidOperationException]::new("Invoke-PSmmUI requires a valid AppConfiguration-compatible object. Failed to normalize Config: $($_.Exception.Message)")
+    }
+
+    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+        if ($null -eq $Object) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) {
+                        return $Object[$k]
+                    }
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
+    function Test-UiDebugOrDev([object]$UiConfig) {
+        $parametersSource = Get-ConfigMemberValue -Object $UiConfig -Name 'Parameters'
+        return ([bool](Get-ConfigMemberValue -Object $parametersSource -Name 'Debug')) -or ([bool](Get-ConfigMemberValue -Object $parametersSource -Name 'Dev'))
+    }
+
     try {
         Write-Verbose 'Starting PSmediaManager UI...'
         # Ensure at least one visible line even if formatting fails
@@ -107,7 +166,7 @@ function Invoke-PSmmUI {
             catch {
                 Write-Verbose 'Clear-Host not supported by current host; continuing without clearing screen.'
             }
-            if ($Config.Parameters.Debug -or $Config.Parameters.Dev) { '1234567890' * 8 } # Visual separator for debugging
+            if (Test-UiDebugOrDev -UiConfig $Config) { '1234567890' * 8 } # Visual separator for debugging
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message 'Rendering header' -File
             }
@@ -127,15 +186,18 @@ function Invoke-PSmmUI {
             # Retrieve projects once per loop iteration (centralized) and pass downstream
             $loopProjects = $null
             try {
-                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $($Config.Storage.Keys.Count)" -File
-                $loopProjects = Get-PSmmProjects -Config $Config -ServiceContainer $ServiceContainer
-                $masterCount = if ($loopProjects.Master) { $loopProjects.Master.Keys.Count } else { 0 }
-                $backupCount = if ($loopProjects.Backup) { $loopProjects.Backup.Keys.Count } else { 0 }
+                $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                $storageGroupCount = 0
+                try { $storageGroupCount = @($storageSource.Keys).Count } catch { $storageGroupCount = 0 }
+                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $storageGroupCount" -File
+                $loopProjects = [UiProjectsIndex]::FromObject((Get-PSmmProjects -Config $Config -ServiceContainer $ServiceContainer))
+                $masterCount = if ($null -ne $loopProjects.Master) { $loopProjects.Master.Count } else { 0 }
+                $backupCount = if ($null -ne $loopProjects.Backup) { $loopProjects.Backup.Count } else { 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Projects loaded. Master drives: $masterCount, Backup drives: $backupCount" -File
             }
             catch {
                 Write-PSmmLog -Level ERROR -Context 'Invoke-PSmmUI' -Message "Project retrieval failed: $_" -ErrorRecord $_ -File
-                $loopProjects = @{ Master = @{}; Backup = @{} }
+                $loopProjects = [UiProjectsIndex]::new()
             }
 
             try {
@@ -162,7 +224,7 @@ function Invoke-PSmmUI {
                 }
                 throw
             }
-            if ($Config.Parameters.Debug -or $Config.Parameters.Dev) { '1234567890' * 10 } # Visual separator for debugging
+            if (Test-UiDebugOrDev -UiConfig $Config) { '1234567890' * 10 } # Visual separator for debugging
 
             Write-PSmmHost ''
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
@@ -193,9 +255,15 @@ function Invoke-PSmmUI {
                     Write-PSmmHost ''
                     Write-PSmmHost 'Available Storage Groups:' -ForegroundColor Cyan
 
+                    $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                    $storageKeys = @()
+                    try { $storageKeys = @($storageSource.Keys) } catch { $storageKeys = @() }
+
                     # Display each storage group with Master drive info
-                    foreach ($groupKey in ($Config.Storage.Keys | Sort-Object)) {
-                        $masterDrive = $Config.Storage.$groupKey.Master
+                    foreach ($groupKey in ($storageKeys | Sort-Object)) {
+                        $group = $null
+                        try { $group = $storageSource[$groupKey] } catch { $group = $null }
+                        $masterDrive = Get-ConfigMemberValue -Object $group -Name 'Master'
                         if ($masterDrive) {
                             $driveInfo = "$($masterDrive.Label)"
                             if (-not [string]::IsNullOrWhiteSpace($masterDrive.DriveLetter)) {
@@ -218,14 +286,14 @@ function Invoke-PSmmUI {
                     }
                     else {
                         # Find matching storage group key (handles string vs int comparison)
-                        $MatchingKey = $Config.Storage.Keys | Where-Object { $_.ToString() -eq $GroupSelection.ToString() } | Select-Object -First 1
+                        $MatchingKey = $storageKeys | Where-Object { $_.ToString() -eq $GroupSelection.ToString() } | Select-Object -First 1
 
                         if ($MatchingKey) {
                             $SelectedStorageGroup = $MatchingKey
                             Write-PSmmHost "Filtering to Storage Group $MatchingKey" -ForegroundColor Green
                         }
                         else {
-                            Write-PSmmLog -Level WARNING -Message "Invalid storage group '$GroupSelection'. Available: $($Config.Storage.Keys -join ', ')" -Console
+                            Write-PSmmLog -Level WARNING -Message "Invalid storage group '$GroupSelection'. Available: $($storageKeys -join ', ')" -Console
                         }
                     }
                     Start-Sleep -Seconds 1
@@ -255,12 +323,20 @@ function Invoke-PSmmUI {
                 'R' {
                     # Manage Storage (Edit/Add/Remove)
                     try {
-                        $driveRoot = [System.IO.Path]::GetPathRoot($Config.Paths.Root)
+                        $pathsSource = Get-ConfigMemberValue -Object $Config -Name 'Paths'
+                        $rootPath = [string](Get-ConfigMemberValue -Object $pathsSource -Name 'Root')
+                        $driveRoot = if ([string]::IsNullOrWhiteSpace($rootPath)) { $null } else { [System.IO.Path]::GetPathRoot($rootPath) }
                         if (-not [string]::IsNullOrWhiteSpace($driveRoot)) {
                             if (Get-Command Invoke-ManageStorage -ErrorAction SilentlyContinue) {
-                                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Storage groups before management: $($Config.Storage.Keys.Count)" -File
+                                $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                                $preCount = 0
+                                try { $preCount = @($storageSource.Keys).Count } catch { $preCount = 0 }
+                                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Storage groups before management: $preCount" -File
                                 $null = Invoke-ManageStorage -Config $Config -DriveRoot $driveRoot
-                                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Storage groups after management: $($Config.Storage.Keys.Count)" -File
+                                $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                                $postCount = 0
+                                try { $postCount = @($storageSource.Keys).Count } catch { $postCount = 0 }
+                                Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Storage groups after management: $postCount" -File
                                 # After storage changes, ensure storage status is refreshed
                                 if (Get-Command Confirm-Storage -ErrorAction SilentlyContinue) {
                                     Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Refreshing storage status" -File
@@ -297,18 +373,21 @@ function Invoke-PSmmUI {
                             $SelectedProject = $null
 
                             # Determine which storage groups to include based on filter
+                            $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                            $storageKeys = @()
+                            try { $storageKeys = @($storageSource.Keys) } catch { $storageKeys = @() }
                             $StorageGroupsToFilter = if ([string]::IsNullOrWhiteSpace($SelectedStorageGroup)) {
                                 # Show all storage groups
-                                $Config.Storage.Keys | Sort-Object
+                                $storageKeys | Sort-Object
                             }
                             else {
                                 # Show only the specified storage group
-                                $MatchingKey = $Config.Storage.Keys | Where-Object { $_.ToString() -eq $SelectedStorageGroup.ToString() } | Select-Object -First 1
+                                $MatchingKey = $storageKeys | Where-Object { $_.ToString() -eq $SelectedStorageGroup.ToString() } | Select-Object -First 1
                                 if ($MatchingKey) {
                                     @($MatchingKey)
                                 }
                                 else {
-                                    $Config.Storage.Keys | Sort-Object
+                                    $storageKeys | Sort-Object
                                 }
                             }
 
@@ -334,7 +413,7 @@ function Invoke-PSmmUI {
                                 $TargetDriveLabel = $null
 
                                 # Check if Backup projects exist before accessing
-                                if ($Projects.ContainsKey('Backup') -and $null -ne $Projects.Backup -and $Projects.Backup.Count -gt 0) {
+                                if ($null -ne $Projects.Backup -and $Projects.Backup.Count -gt 0) {
                                     foreach ($storageGroupKey in $StorageGroupsToFilter) {
                                         foreach ($driveLabel in ($Projects.Backup.Keys | Sort-Object)) {
                                             $driveProjectArray = $Projects.Backup[$driveLabel]
@@ -368,7 +447,7 @@ function Invoke-PSmmUI {
                                 $MasterProjects = @()
 
                                 # Check if Master projects exist before accessing
-                                if ($Projects.ContainsKey('Master') -and $null -ne $Projects.Master -and $Projects.Master.Count -gt 0) {
+                                if ($null -ne $Projects.Master -and $Projects.Master.Count -gt 0) {
                                     foreach ($storageGroupKey in $StorageGroupsToFilter) {
                                         foreach ($driveLabel in ($Projects.Master.Keys | Sort-Object)) {
                                             $driveProjectArray = $Projects.Master[$driveLabel]
@@ -521,6 +600,52 @@ function Invoke-ProjectMenu {
         [object]$Config
     )
 
+    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+        if ($null -eq $Object) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) {
+                        return $Object[$k]
+                    }
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
     do {
         Clear-Host
         try {
@@ -547,21 +672,27 @@ function Invoke-ProjectMenu {
         $ProcMariaDB = $null
         $ProcDigiKam = $null
 
-        if ($null -ne $Config.Projects -and $Config.Projects.ContainsKey('Current')) {
-            if ($Config.Projects.Current.ContainsKey('Databases')) {
+        $currentProject = $null
+        $projectsSource = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+        $currentSource = Get-ConfigMemberValue -Object $projectsSource -Name 'Current'
+        if ($null -ne $currentSource) {
+            $currentProject = [ProjectCurrentConfig]::FromObject($currentSource)
+        }
+
+        if ($null -ne $currentProject -and -not [string]::IsNullOrWhiteSpace($currentProject.Databases)) {
                 $allMariaDB = $Process.GetProcess('mariadbd')
                 if ($null -ne $allMariaDB) {
-                    $ProcMariaDB = $allMariaDB | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+                    $ProcMariaDB = $allMariaDB | Where-Object { $_.CommandLine -like "*$($currentProject.Databases)*" }
                 }
             }
 
-            if ($Config.Projects.Current.ContainsKey('Config')) {
+            if ($null -ne $currentProject -and -not [string]::IsNullOrWhiteSpace($currentProject.Config)) {
                 $allDigiKam = $Process.GetProcess('digikam')
                 if ($null -ne $allDigiKam) {
-                    $ProcDigiKam = $allDigiKam | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+                    $ProcDigiKam = $allDigiKam | Where-Object { $_.CommandLine -like "*$($currentProject.Config)*" }
                 }
             }
-        }
+
 
         $ProcessesRunning = ($null -ne $ProcMariaDB) -or ($null -ne $ProcDigiKam)
 

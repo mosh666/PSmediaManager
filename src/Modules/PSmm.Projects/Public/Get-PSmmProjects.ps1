@@ -59,6 +59,270 @@ function Get-PSmmProjects {
         $ServiceContainer = $null
     )
 
+    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+        if ($null -eq $Object) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) {
+                        return $Object[$k]
+                    }
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
+    function Set-ConfigMemberValue([object]$Object, [string]$Name, [object]$Value) {
+        if ($null -eq $Object) {
+            return
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            $Object[$Name] = $Value
+            return
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            $Object.$Name = $Value
+            return
+        }
+
+        $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+    }
+
+    function ConvertTo-PSmmLegacyView([object]$value) {
+        if ($null -eq $value) {
+            return $null
+        }
+
+        if ($value -is [System.Collections.IDictionary]) {
+            return [pscustomobject]$value
+        }
+
+        return $value
+    }
+
+    function Get-PSmmMapValue([object]$map, [string]$key) {
+        if ($null -eq $map -or [string]::IsNullOrWhiteSpace($key)) {
+            return $null
+        }
+
+        if ($map -is [System.Collections.IDictionary]) {
+            try {
+                if ($map.ContainsKey($key)) { return $map[$key] }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($map.Contains($key)) { return $map[$key] }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $map.Keys) {
+                    if ($k -eq $key) {
+                        return $map[$k]
+                    }
+                }
+            }
+            catch {
+                # fall through
+            }
+            return $null
+        }
+
+        try {
+            return $map[$key]
+        }
+        catch {
+        }
+
+        $p = $map.PSObject.Properties[$key]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
+    function ConvertTo-HashtableShallow([object]$value) {
+        if ($null -eq $value) {
+            return @{}
+        }
+
+        if ($value -is [hashtable]) {
+            return $value
+        }
+
+        if ($value -is [System.Collections.IDictionary]) {
+            $ht = @{}
+            foreach ($k in $value.Keys) {
+                $ht[[string]$k] = $value[$k]
+            }
+            return $ht
+        }
+
+        $ht2 = @{}
+        foreach ($p in $value.PSObject.Properties) {
+            $ht2[[string]$p.Name] = $p.Value
+        }
+        return $ht2
+    }
+
+    function Normalize-StorageMap([object]$storage) {
+        $out = @{}
+        if ($null -eq $storage) {
+            return $out
+        }
+
+        $keys = @()
+        try {
+            $keys = @($storage.Keys)
+        }
+        catch {
+            if ($storage -isnot [System.Collections.IDictionary]) {
+                $keys = @($storage.PSObject.Properties | ForEach-Object { $_.Name })
+            }
+        }
+
+        $sgType = 'StorageGroupConfig' -as [type]
+
+        foreach ($k in $keys) {
+            $key = [string]$k
+            if ([string]::IsNullOrWhiteSpace($key)) { continue }
+
+            $raw = Get-PSmmMapValue -map $storage -key $key
+
+            if ($null -ne $sgType) {
+                try {
+                    $out[$key] = $sgType::FromObject($key, $raw)
+                    continue
+                }
+                catch {
+                    # fall back to legacy view
+                }
+            }
+
+            $sg = ConvertTo-PSmmLegacyView -value $raw
+            if ($null -eq $sg) { continue }
+
+            # Normalize Backup -> Backups for legacy shapes
+            if ($null -eq $sg.PSObject.Properties['Backups'] -and $null -ne $sg.PSObject.Properties['Backup']) {
+                $sg | Add-Member -NotePropertyName 'Backups' -NotePropertyValue $sg.Backup -Force
+            }
+
+            # Ensure Backups is a dictionary-like value and that child drive configs are PSCustomObject views
+            $bk = $null
+            try { $bk = $sg.Backups } catch { $bk = $null }
+            if ($null -ne $bk -and $bk -isnot [System.Collections.IDictionary]) {
+                $bk = ConvertTo-HashtableShallow -value $bk
+                $sg | Add-Member -NotePropertyName 'Backups' -NotePropertyValue $bk -Force
+            }
+
+            $master = $null
+            try { $master = $sg.Master } catch { $master = $null }
+            if ($master -is [System.Collections.IDictionary]) {
+                $sg | Add-Member -NotePropertyName 'Master' -NotePropertyValue ([pscustomobject]$master) -Force
+            }
+
+            if ($bk -is [System.Collections.IDictionary]) {
+                $fixed = @{}
+                foreach ($bkId in $bk.Keys) {
+                    $v = $bk[$bkId]
+                    $fixed[[string]$bkId] = if ($v -is [System.Collections.IDictionary]) { [pscustomobject]$v } else { $v }
+                }
+                $sg | Add-Member -NotePropertyName 'Backups' -NotePropertyValue $fixed -Force
+            }
+
+            $out[$key] = $sg
+        }
+
+        return $out
+    }
+
+    # Support legacy dictionary-shaped configs by normalizing Projects into the typed model
+    # and using a PSCustomObject view for property access under StrictMode.
+    if ($Config -is [System.Collections.IDictionary]) {
+        $hasProjects = $false
+        try { $hasProjects = $Config.ContainsKey('Projects') } catch { $hasProjects = $false }
+        if (-not $hasProjects) {
+            try { $hasProjects = $Config.Contains('Projects') } catch { $hasProjects = $false }
+        }
+        if (-not $hasProjects) {
+            try {
+                foreach ($k in $Config.Keys) {
+                    if ($k -eq 'Projects') { $hasProjects = $true; break }
+                }
+            }
+            catch { $hasProjects = $false }
+        }
+
+        if (-not $hasProjects -or $null -eq $Config['Projects']) {
+            $Config['Projects'] = [ProjectsConfig]::FromObject($null)
+        }
+        else {
+            $Config['Projects'] = [ProjectsConfig]::FromObject($Config['Projects'])
+        }
+
+        $hasStorage = $false
+        try { $hasStorage = $Config.ContainsKey('Storage') } catch { $hasStorage = $false }
+        if (-not $hasStorage) {
+            try { $hasStorage = $Config.Contains('Storage') } catch { $hasStorage = $false }
+        }
+        if (-not $hasStorage) {
+            try {
+                foreach ($k in $Config.Keys) {
+                    if ($k -eq 'Storage') { $hasStorage = $true; break }
+                }
+            }
+            catch { $hasStorage = $false }
+        }
+
+        if (-not $hasStorage -or $null -eq $Config['Storage']) {
+            $Config['Storage'] = @{}
+        }
+
+        $Config = [pscustomobject]$Config
+    }
+
     # Resolve FileSystem service from container or create fallback
     $FileSystem = $null
     if ($null -ne $ServiceContainer) {
@@ -84,20 +348,32 @@ function Get-PSmmProjects {
     }
 
     # Ensure Projects.Registry exists on Config
-    if (-not $Config.Projects.ContainsKey('Registry') -or $null -eq $Config.Projects.Registry) {
-        $Config.Projects.Registry = @{
-            Master = @{}
-            Backup = @{}
-            LastScanned = [datetime]::MinValue
-            ProjectDirs = @{}
-        }
+    $projectsConfig = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+    if ($null -eq $projectsConfig) {
+        $projectsConfig = [ProjectsConfig]::FromObject($null)
+        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+    }
+    elseif ($projectsConfig -isnot [ProjectsConfig]) {
+        $projectsConfig = [ProjectsConfig]::FromObject($projectsConfig)
+        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+    }
+
+    $registry = Get-ConfigMemberValue -Object $projectsConfig -Name 'Registry'
+    if ($null -eq $registry) {
+        $registry = [ProjectsRegistryCache]::new()
+        Set-ConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $registry
+    }
+    else {
+        # Normalize legacy hashtable/object shapes into the typed cache model
+        $registry = [ProjectsRegistryCache]::FromObject($registry)
+        Set-ConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $registry
     }
 
     try {
         $isTestMode = [string]::Equals($env:MEDIA_MANAGER_TEST_MODE, '1', [System.StringComparison]::OrdinalIgnoreCase)
 
         # Local reference to registry
-        $registry = $Config.Projects.Registry
+        $registry = Get-ConfigMemberValue -Object $projectsConfig -Name 'Registry'
 
         # Disk-based cache has been removed; rely on in-memory registry and full scan
 
@@ -116,7 +392,8 @@ function Get-PSmmProjects {
                     -Message 'FileSystem service not available, cannot validate cache' -File
                 Write-Verbose 'FileSystem service not available, bypassing cache validation'
             } else {
-                $Storage = $Config.Storage
+                $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                $Storage = Normalize-StorageMap -storage $storageSource
 
                 # Only validate cache against storage if storage is configured
                 if ($null -ne $Storage -and $Storage.Count -gt 0) {
@@ -201,46 +478,17 @@ function Get-PSmmProjects {
                 $cachedMaster = @{}
                 foreach ($label in ($registry.Master.Keys | Sort-Object)) {
                     $entry = $registry.Master[$label]
-
-                    # Prefer helper that handles both hashtable and object shapes
-                    if ($entry -is [hashtable] -and $entry.ContainsKey('Projects')) {
-                        $projectsArray = $entry['Projects']
-                    }
-                    elseif ($null -ne $entry -and $entry.PSObject.Properties.Match('Projects').Count -gt 0) {
-                        $projectsArray = $entry.Projects
-                    }
-                    else {
-                        # Fallback: if entry already is an array of projects, use it
-                        $projectsArray = $entry
-                    }
-
-                    # Ensure $projectsArray is an array
+                    $projectsArray = if ($null -ne $entry -and $entry -is [ProjectsDriveRegistryEntry]) { $entry.Projects } else { @() }
                     if ($null -eq $projectsArray) { $projectsArray = @() }
-                    elseif (-not ($projectsArray -is [System.Collections.IEnumerable]) -or ($projectsArray -is [string])) { $projectsArray = @($projectsArray) }
-
                     $cachedMaster[$label] = $projectsArray
-
                 }
 
                 $cachedBackup = @{}
                 foreach ($label in ($registry.Backup.Keys | Sort-Object)) {
                     $entry = $registry.Backup[$label]
-
-                    if ($entry -is [hashtable] -and $entry.ContainsKey('Projects')) {
-                        $projectsArray = $entry['Projects']
-                    }
-                    elseif ($null -ne $entry -and $entry.PSObject.Properties.Match('Projects').Count -gt 0) {
-                        $projectsArray = $entry.Projects
-                    }
-                    else {
-                        $projectsArray = $entry
-                    }
-
+                    $projectsArray = if ($null -ne $entry -and $entry -is [ProjectsDriveRegistryEntry]) { $entry.Projects } else { @() }
                     if ($null -eq $projectsArray) { $projectsArray = @() }
-                    elseif (-not ($projectsArray -is [System.Collections.IEnumerable]) -or ($projectsArray -is [string])) { $projectsArray = @($projectsArray) }
-
                     $cachedBackup[$label] = $projectsArray
-
                 }
 
                 return @{
@@ -273,7 +521,8 @@ function Get-PSmmProjects {
         $ProjectDirs = @{}
 
         # Get all storage groups (1, 2, etc.)
-        $Storage = $Config.Storage
+        $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+        $Storage = Normalize-StorageMap -storage $storageSource
 
         # Process each storage group
         foreach ($storageGroup in $Storage.Keys | Sort-Object) {
@@ -340,26 +589,9 @@ function Get-PSmmProjects {
                 # Choose the first item as representative for drive-level metadata
                 $first = if ($items -is [System.Collections.IEnumerable] -and $items -isnot [string]) { $items | Select-Object -First 1 } else { $items }
                 if ($null -eq $first) { continue }
-                $out[$label] = @{
-                    BackupId = $(if ($first.PSObject.Properties.Match('BackupId').Count) { $first.BackupId } else { '' })
-                    Drive = $(if ($first.PSObject.Properties.Match('Drive').Count) { $first.Drive } else { '' })
-                    DriveType = $(if ($first.PSObject.Properties.Match('DriveType').Count) { $first.DriveType } else { '' })
-                    FileSystem = $(if ($first.PSObject.Properties.Match('FileSystem').Count) { $first.FileSystem } else { '' })
-                    FreeSpace = $(if ($first.PSObject.Properties.Match('FreeSpace').Count) { [double]$first.FreeSpace } else { 0 })
-                    HealthStatus = $(if ($first.PSObject.Properties.Match('HealthStatus').Count) { $first.HealthStatus } else { 'Unknown' })
-                    Label = $(if ($first.PSObject.Properties.Match('Label').Count) { $first.Label } else { $label })
-                    Manufacturer = $(if ($first.PSObject.Properties.Match('Manufacturer').Count) { $first.Manufacturer } else { '' })
-                    Model = $(if ($first.PSObject.Properties.Match('Model').Count) { $first.Model } else { '' })
-                    Name = $(if ($first.PSObject.Properties.Match('Name').Count) { $first.Name } else { '' })
-                    PartitionKind = $(if ($first.PSObject.Properties.Match('PartitionKind').Count) { $first.PartitionKind } else { '' })
-                    Path = $(if ($first.PSObject.Properties.Match('Path').Count) { $first.Path } else { '' })
-                    SerialNumber = $(if ($first.PSObject.Properties.Match('SerialNumber').Count) { $first.SerialNumber } else { '' })
-                    StorageGroup = $(if ($first.PSObject.Properties.Match('StorageGroup').Count) { $first.StorageGroup } else { '' })
-                    TotalSpace = $(if ($first.PSObject.Properties.Match('TotalSpace').Count) { [double]$first.TotalSpace } else { 0 })
-                    UsedSpace = $(if ($first.PSObject.Properties.Match('UsedSpace').Count) { [double]$first.UsedSpace } else { 0 })
-                    # Persist full project array for accurate UI rendering when using cached registry.
-                    Projects = $ProjectsByLabel[$label]
-                }
+                $entry = [ProjectsDriveRegistryEntry]::FromProjectSample($first, @($ProjectsByLabel[$label]))
+                if ([string]::IsNullOrWhiteSpace($entry.Label)) { $entry.Label = [string]$label }
+                $out[[string]$label] = $entry
             }
             return $out
         }
@@ -395,6 +627,10 @@ function Get-PSmmProjects {
                 $Default = $null
             )
 
+            if ($Object -is [ProjectsDriveRegistryEntry]) {
+                try { return $Object.$Name } catch { return $Default }
+            }
+
             if ($Object -is [hashtable] -and $Object.ContainsKey($Name)) {
                 return $Object[$Name]
             }
@@ -407,7 +643,7 @@ function Get-PSmmProjects {
         }
 
         function Get-FlattenedProjectsFromRegistrySide {
-            param([Parameter(Mandatory)][hashtable]$RegistrySide)
+            param([Parameter(Mandatory)][System.Collections.IDictionary]$RegistrySide)
             $result = @()
             foreach ($label in ($RegistrySide.Keys | Sort-Object)) {
                 $entry = $RegistrySide[$label]
@@ -444,7 +680,7 @@ function Get-PSmmProjects {
         }
 
         # Always refresh ProjectDirs and LastScanned to keep cache valid
-        $registry.ProjectDirs = $ProjectDirs
+        $registry.ProjectDirs = $registry.ConvertProjectDirs($ProjectDirs)
         $registry.LastScanned = Get-Date
 
         if ($registryChanged) {
@@ -453,7 +689,8 @@ function Get-PSmmProjects {
             $registry.Backup = Convert-ProjectsToDriveRegistry -ProjectsByLabel $BackupProjects
 
             # Sync registry back to Config
-            $Config.Projects.Registry = $registry
+            Set-ConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $registry
+            Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
 
             $masterCount = ($MasterProjects.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
             $backupCount = ($BackupProjects.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
@@ -531,17 +768,87 @@ function Get-ProjectsFromDrive {
         [Parameter(Mandatory)] $FileSystem
     )
 
+    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+        if ($null -eq $Object) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) {
+                        return $Object[$k]
+                    }
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
+    function Test-MapHasKey([object]$Map, [string]$Key) {
+        if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Key)) {
+            return $false
+        }
+
+        if ($Map -is [System.Collections.IDictionary]) {
+            $hasKey = $false
+            try { $hasKey = [bool]$Map.ContainsKey($Key) } catch { $hasKey = $false }
+            if (-not $hasKey) {
+                try { $hasKey = [bool]$Map.Contains($Key) } catch { $hasKey = $false }
+            }
+            if (-not $hasKey) {
+                try {
+                    foreach ($k in $Map.Keys) {
+                        if ($k -eq $Key) { $hasKey = $true; break }
+                    }
+                }
+                catch { $hasKey = $false }
+            }
+            return $hasKey
+        }
+
+        $p = $Map.PSObject.Properties[$Key]
+        return ($null -ne $p)
+    }
+
     # Derive an error key to optionally skip scanning if prior errors recorded
     $errorKey = if ($DriveType -eq 'Master') { "Master_${StorageGroup}" } else { "Backup_${StorageGroup}_${BackupId}" }
 
     # Safely honor internal storage error flags when present
-    $storageErrorMap = $null
-    if ($null -ne $Config.InternalErrorMessages -and `
-        $Config.InternalErrorMessages.ContainsKey('Storage')) {
-        $storageErrorMap = $Config.InternalErrorMessages['Storage']
-    }
+    $internalErrorMessages = Get-ConfigMemberValue -Object $Config -Name 'InternalErrorMessages'
+    $errorCatalog = [UiErrorCatalog]::FromObject($internalErrorMessages)
+    $storageErrorMap = $errorCatalog.Storage
 
-    if ($null -ne $storageErrorMap -and $storageErrorMap.ContainsKey($errorKey)) {
+    if ($null -ne $storageErrorMap -and (Test-MapHasKey -Map $storageErrorMap -Key $errorKey)) {
         Write-Verbose "Skipping $DriveType drive '$($Disk.Label)' - has error flag"
         return @{ Projects = $Projects; ProjectDirs = $ProjectDirs }
     }
@@ -841,6 +1148,52 @@ function Initialize-GlobalProject {
         $FileSystem
     )
 
+    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+        if ($null -eq $Object) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) {
+                        return $Object[$k]
+                    }
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
     try {
         # Define _GLOBAL_ project path
         $GlobalProjectPath = Join-Path -Path $ProjectsPath -ChildPath '_GLOBAL_'
@@ -853,9 +1206,18 @@ function Initialize-GlobalProject {
                 -Message "Created _GLOBAL_ project folder: $GlobalProjectPath" -File
         }
 
-        # Define Assets folder path using AppConfiguration
-        if ($Config.Projects.Paths -and $Config.Projects.Paths.Assets) {
-            $AssetsRelativePath = $Config.Projects.Paths.Assets
+        # Define Assets folder path using AppConfiguration (or legacy shapes)
+        $projectsConfig = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+        $pathsSource = if ($null -ne $projectsConfig) { Get-ConfigMemberValue -Object $projectsConfig -Name 'Paths' } else { $null }
+        $projectsPaths = if ($null -ne $pathsSource) {
+            [ProjectsPathsConfig]::FromObject($pathsSource)
+        }
+        else {
+            [ProjectsPathsConfig]::new()
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($projectsPaths.Assets)) {
+            $AssetsRelativePath = $projectsPaths.Assets
         }
         else {
             # Use default path if configuration not found

@@ -41,7 +41,8 @@ if (-not (Get-Variable -Name GitHubReleaseCache -Scope Script -ErrorAction Silen
     Cryptographic service (injectable for testing).
 
 .EXAMPLE
-    $token = Get-SecureSecret -Path (Join-Path -Path $Config.Paths.App.Vault -ChildPath 'GitHub-Token.txt')
+    $vaultPath = 'C:\Path\To\Vault'
+    $token = Get-SecureSecret -Path (Join-Path -Path $vaultPath -ChildPath 'GitHub-Token.txt')
     $release = Get-GitHubLatestRelease -Repo 'git-lfs/git-lfs' -Token $token
     Retrieves the latest Git LFS release information.
 
@@ -273,7 +274,7 @@ function Get-LatestUrlFromGitHub {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [hashtable]$Plugin,
+        [object]$Plugin,
 
         [Parameter()]
         [SecureString]$Token = $null,
@@ -300,20 +301,108 @@ function Get-LatestUrlFromGitHub {
     # Lazy instantiation to avoid parse-time type resolution
 
     try {
-        # Validate required plugin configuration
-        if (-not $Plugin.ContainsKey('Config')) {
-            throw [PluginRequirementException]::new("Plugin hashtable missing required 'Config' key", "Plugin")
-        }
-        if (-not $Plugin.Config.ContainsKey('Repo')) {
-            throw [PluginRequirementException]::new("Plugin.Config missing required 'Repo' key", $Plugin.Config.Name)
-        }
-        if (-not $Plugin.Config.ContainsKey('AssetPattern')) {
-            throw [PluginRequirementException]::new("Plugin.Config missing required 'AssetPattern' key", $Plugin.Config.Name)
+        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+            if ($null -eq $Object) {
+                return $null
+            }
+
+            if ($Object -is [System.Collections.IDictionary]) {
+                try {
+                    if ($Object.ContainsKey($Name)) {
+                        return $Object[$Name]
+                    }
+                }
+                catch {
+                    # fall through
+                }
+
+                try {
+                    if ($Object.Contains($Name)) {
+                        return $Object[$Name]
+                    }
+                }
+                catch {
+                    # fall through
+                }
+
+                try {
+                    foreach ($k in $Object.Keys) {
+                        if ($k -eq $Name) {
+                            return $Object[$k]
+                        }
+                    }
+                }
+                catch {
+                    # fall through
+                }
+
+                return $null
+            }
+
+            try {
+                $p = $Object.PSObject.Properties[$Name]
+                if ($null -ne $p) {
+                    return $p.Value
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            return $null
         }
 
-        $pluginName = $Plugin.Config.Name
-        $repo = $Plugin.Config.Repo
-        $assetPattern = $Plugin.Config.AssetPattern
+        function Set-ConfigMemberValue([object]$Object, [string]$Name, [object]$Value) {
+            if ($null -eq $Object) {
+                return $false
+            }
+
+            if ($Object -is [System.Collections.IDictionary]) {
+                try {
+                    $Object[$Name] = $Value
+                    return $true
+                }
+                catch {
+                    return $false
+                }
+            }
+
+            try {
+                $prop = $Object.PSObject.Properties[$Name]
+                if ($null -ne $prop) {
+                    $prop.Value = $Value
+                    return $true
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+                return $true
+            }
+            catch {
+                return $false
+            }
+        }
+
+        # Validate required plugin configuration
+        $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+        if ($null -eq $pluginConfig) {
+            throw [PluginRequirementException]::new("Plugin missing required 'Config' member", "Plugin")
+        }
+
+        $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+        $repo = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Repo')
+        $assetPattern = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'AssetPattern')
+
+        if ([string]::IsNullOrWhiteSpace($repo)) {
+            throw [PluginRequirementException]::new("Plugin.Config missing required 'Repo' member", $pluginName)
+        }
+        if ([string]::IsNullOrWhiteSpace($assetPattern)) {
+            throw [PluginRequirementException]::new("Plugin.Config missing required 'AssetPattern' member", $pluginName)
+        }
 
         Write-Verbose "Getting latest release URL for: $pluginName from $repo"
 
@@ -327,10 +416,12 @@ function Get-LatestUrlFromGitHub {
 
         # Store latest version
         $latestVersion = $release.tag_name
-        if (-not $Plugin.Config.ContainsKey('State')) {
-            $Plugin.Config.State = @{}
+        $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+        if ($null -eq $state) {
+            $null = Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value @{}
+            $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
         }
-        $Plugin.Config.State.LatestVersion = $latestVersion
+        $null = Set-ConfigMemberValue -Object $state -Name 'LatestVersion' -Value $latestVersion
         Write-Verbose "Latest version: $latestVersion"
 
         # Find matching asset
@@ -343,7 +434,7 @@ function Get-LatestUrlFromGitHub {
         }
 
         # Store installer information and return URL
-        $Plugin.Config.State.LatestInstaller = $matchingAsset.name
+        $null = Set-ConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $matchingAsset.name
         $downloadUrl = $matchingAsset.browser_download_url
 
         Write-Verbose "Found matching asset: $($matchingAsset.name)"
@@ -352,8 +443,24 @@ function Get-LatestUrlFromGitHub {
         return $downloadUrl
     }
     catch {
+        $safeName = $null
+        try {
+            if ($null -eq $safeName -or $safeName -eq '') {
+                if (Get-Variable -Name pluginName -Scope Local -ErrorAction SilentlyContinue) {
+                    $safeName = $pluginName
+                }
+            }
+        }
+        catch {
+            $safeName = $null
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$safeName)) {
+            $safeName = 'UNKNOWN'
+        }
+
         Write-PSmmLog -Level ERROR -Context 'Get Plugin URL' `
-            -Message "Failed to get latest URL for $($Plugin.Config.Name): $_" `
+            -Message "Failed to get latest URL for $safeName: $_" `
             -ErrorRecord $_ -Console -File
         return $null
     }

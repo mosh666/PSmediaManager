@@ -71,11 +71,26 @@ if ($hasServiceContainer) {
 # }
 
 # Get module paths
+$ClassesPath = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Classes')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Classes' }
 $PublicPath  = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Public')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Public' }
 $PrivatePath = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Private')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Private' }
 
 # Import all public and private functions
 try {
+    # Import class/type definitions first (so public functions can reference them)
+    if ((($fileSystem) -and $fileSystem.TestPath($ClassesPath)) -or (-not $fileSystem -and (Test-Path $ClassesPath))) {
+        $ClassFiles = @(Get-ChildItem -Path "$ClassesPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
+        foreach ($File in $ClassFiles) {
+            try {
+                Write-Verbose "Importing class file: $($File.Name)"
+                . $File.FullName
+            }
+            catch {
+                throw "Failed to import class file '$($File.Name)': $_"
+            }
+        }
+    }
+
     # Import public functions
     if ((($fileSystem) -and $fileSystem.TestPath($PublicPath)) -or (-not $fileSystem -and (Test-Path $PublicPath))) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)

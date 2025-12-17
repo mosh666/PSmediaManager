@@ -71,6 +71,8 @@ try {
             # Interfaces and DI Container (required before implementations)
             'Interfaces.ps1',              # Interface contracts and ServiceContainer (no dependencies)
             'Exceptions.ps1',              # Exception classes (no dependencies)
+            'UiModels.ps1',                # UI model classes (no dependencies)
+            'ProjectModels.ps1',           # Project model classes (no dependencies)
             # Service implementations (in dependency order)
             'Services\FileSystemService.ps1', # File system service (implements IFileSystemService)
             'Services\EnvironmentService.ps1', # Environment service (implements IEnvironmentService)

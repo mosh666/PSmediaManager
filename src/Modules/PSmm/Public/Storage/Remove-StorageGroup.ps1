@@ -32,7 +32,7 @@ function Remove-StorageGroup {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -42,6 +42,92 @@ function Remove-StorageGroup {
         [ValidateNotNullOrEmpty()]
         [string[]]$GroupIds
     )
+
+    function Get-ConfigMemberValue {
+        param(
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Object,
+
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$Name,
+
+            [Parameter()]
+            $Default = $null
+        )
+
+        if ($null -eq $Object) { return $Default }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) { return $Object[$Name] }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) { return $Object[$k] }
+                }
+            }
+            catch {
+                # fall through
+            }
+        }
+
+        $prop = $Object.PSObject.Properties[$Name]
+        if ($null -ne $prop) { return $prop.Value }
+
+        return $Default
+    }
+
+    function Set-ConfigMemberValue {
+        param(
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Object,
+
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$Name,
+
+            [Parameter()]
+            $Value
+        )
+
+        if ($null -eq $Object) { return }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            $Object[$Name] = $Value
+            return
+        }
+
+        if ($Object.PSObject.Properties[$Name]) {
+            $Object.$Name = $Value
+            return
+        }
+
+        $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+    }
+
+    $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage' -Default $null
+    if ($null -eq $storageMap -and $Config -is [System.Collections.IDictionary]) {
+        # Allow passing a Storage-map directly in legacy/test scenarios
+        $storageMap = $Config
+    }
+    if ($null -eq $storageMap) {
+        $storageMap = @{}
+        Set-ConfigMemberValue -Object $Config -Name 'Storage' -Value $storageMap
+    }
 
     $logAvail = Get-Command Write-PSmmLog -ErrorAction SilentlyContinue
     function Write-RemoveLog([string]$level, [string]$msg) {
@@ -62,7 +148,12 @@ function Remove-StorageGroup {
     # Remove specified groups
     $removedCount = 0
     foreach ($gid in $GroupIds) {
-        if ($storageHashtable.ContainsKey($gid)) {
+        $hasGroup = $false
+        if ($storageHashtable -is [System.Collections.IDictionary]) {
+            try { $hasGroup = $storageHashtable.Contains($gid) } catch { $hasGroup = $false }
+            if (-not $hasGroup) { try { $hasGroup = $storageHashtable.ContainsKey($gid) } catch { $hasGroup = $false } }
+        }
+        if ($hasGroup) {
             if ($PSCmdlet.ShouldProcess("Storage Group $gid", "Remove")) {
                 $storageHashtable.Remove($gid)
                 $removedCount++
@@ -92,7 +183,7 @@ function Remove-StorageGroup {
     }
 
     # Reload storage into Config (clear existing and reload from file)
-    $Config.Storage.Clear()
+    $storageMap.Clear()
 
     if ($storageHashtable.Count -gt 0) {
         # Re-read from file to get renumbered groups
@@ -102,28 +193,31 @@ function Remove-StorageGroup {
             foreach ($groupKey in $reloaded.Keys) {
                 $groupTable = $reloaded[$groupKey]
                 $group = [StorageGroupConfig]::new([string]$groupKey)
-                if ($groupTable.ContainsKey('DisplayName')) { $group.DisplayName = $groupTable.DisplayName }
+                $displayNameValue = Get-ConfigMemberValue -Object $groupTable -Name 'DisplayName' -Default $null
+                if (-not [string]::IsNullOrWhiteSpace([string]$displayNameValue)) { $group.DisplayName = [string]$displayNameValue }
 
-                if ($groupTable.ContainsKey('Master') -and $groupTable.Master) {
-                    $mLabel = if ($groupTable.Master.ContainsKey('Label')) { $groupTable.Master.Label } else { '' }
-                    $mSerial = if ($groupTable.Master.ContainsKey('SerialNumber')) { $groupTable.Master.SerialNumber } else { '' }
+                $mTable = Get-ConfigMemberValue -Object $groupTable -Name 'Master' -Default $null
+                if ($null -ne $mTable) {
+                    $mLabel = [string](Get-ConfigMemberValue -Object $mTable -Name 'Label' -Default '')
+                    $mSerial = [string](Get-ConfigMemberValue -Object $mTable -Name 'SerialNumber' -Default '')
                     $group.Master = [StorageDriveConfig]::new($mLabel, '')
                     $group.Master.SerialNumber = $mSerial
                 }
 
-                if ($groupTable.ContainsKey('Backup') -and $groupTable.Backup -is [hashtable]) {
-                    foreach ($bk in ($groupTable.Backup.Keys | Where-Object { $_ -match '^[0-9]+' } | Sort-Object {[int]$_})) {
-                        $b = $groupTable.Backup[$bk]
+                $bTable = Get-ConfigMemberValue -Object $groupTable -Name 'Backup' -Default $null
+                if ($bTable -is [System.Collections.IDictionary] -and $bTable.Count -gt 0) {
+                    foreach ($bk in ($bTable.Keys | Where-Object { $_ -match '^[0-9]+' } | Sort-Object { [int]$_ })) {
+                        $b = $bTable[$bk]
                         if ($null -eq $b) { continue }
-                        $bLabel = if ($b.ContainsKey('Label')) { $b.Label } else { '' }
-                        $bSerial = if ($b.ContainsKey('SerialNumber')) { $b.SerialNumber } else { '' }
+                        $bLabel = [string](Get-ConfigMemberValue -Object $b -Name 'Label' -Default '')
+                        $bSerial = [string](Get-ConfigMemberValue -Object $b -Name 'SerialNumber' -Default '')
                         $cfg = [StorageDriveConfig]::new($bLabel, '')
                         $cfg.SerialNumber = $bSerial
                         $group.Backups[[string]$bk] = $cfg
                     }
                 }
 
-                $Config.Storage[[string]$groupKey] = $group
+                $storageMap[[string]$groupKey] = $group
             }
         }
     }
@@ -139,8 +233,8 @@ function Remove-StorageGroup {
         Write-RemoveLog 'WARNING' "Failed to get storage drives: $_"
     }
 
-    foreach ($groupKey in $Config.Storage.Keys) {
-        $group = $Config.Storage[$groupKey]
+    foreach ($groupKey in $storageMap.Keys) {
+        $group = $storageMap[$groupKey]
 
         # Match Master drive
         if ($null -ne $group.Master -and -not [string]::IsNullOrWhiteSpace($group.Master.SerialNumber)) {

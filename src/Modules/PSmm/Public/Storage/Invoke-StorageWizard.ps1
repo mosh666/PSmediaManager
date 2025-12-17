@@ -27,7 +27,7 @@ function Invoke-StorageWizard {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -43,12 +43,142 @@ function Invoke-StorageWizard {
         [switch]$NonInteractive
     )
 
+    function Get-ConfigMemberValue {
+        param(
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Object,
+
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$Name,
+
+            [Parameter()]
+            $Default = $null
+        )
+
+        if ($null -eq $Object) { return $Default }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
+            try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) { return $Object[$k] }
+                }
+            }
+            catch { }
+        }
+
+        $prop = $Object.PSObject.Properties[$Name]
+        if ($null -ne $prop) { return $prop.Value }
+
+        return $Default
+    }
+
+    function Set-ConfigMemberValue {
+        param(
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Object,
+
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$Name,
+
+            [Parameter()]
+            $Value
+        )
+
+        if ($null -eq $Object) {
+            return
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            $Object[$Name] = $Value
+            return
+        }
+
+        $existing = $null
+        try { $existing = $Object.PSObject.Properties[$Name] } catch { $existing = $null }
+        if ($null -ne $existing) {
+            try { $Object.$Name = $Value } catch { }
+            return
+        }
+
+        try {
+            $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+        }
+        catch {
+            # Best-effort: some typed objects may not allow adding properties
+        }
+    }
+
+    function Test-MapContainsKey {
+        param(
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Map,
+
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Key
+        )
+
+        if ($null -eq $Map) { return $false }
+
+        if ($Map -is [System.Collections.IDictionary]) {
+            $containsKey = $Map.PSObject.Methods['ContainsKey']
+            if ($containsKey) {
+                try {
+                    if ($Map.ContainsKey($Key)) { return $true }
+                }
+                catch {
+                    # fall through
+                }
+            }
+
+            try {
+                if ([bool]$Map.Contains($Key)) { return $true }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Map.Keys) {
+                    if ($k -eq $Key) { return $true }
+                }
+            }
+            catch { return $false }
+
+            return $false
+        }
+
+        $containsKey = $Map.PSObject.Methods['ContainsKey']
+        if ($containsKey) {
+            try { return [bool]$Map.ContainsKey($Key) } catch { return $false }
+        }
+
+        return $false
+    }
+
+    $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage' -Default $null
+    if ($null -eq $storageMap -and $Config -is [System.Collections.IDictionary]) {
+        # Allow passing a Storage-map directly in legacy/test scenarios
+        $storageMap = $Config
+    }
+    if ($null -eq $storageMap) {
+        $storageMap = @{}
+        Set-ConfigMemberValue -Object $Config -Name 'Storage' -Value $storageMap
+    }
+
     # Validate parameters
     if ($Mode -eq 'Edit') {
         if ([string]::IsNullOrWhiteSpace($GroupId)) {
             throw [ValidationException]::new("GroupId is required when Mode is 'Edit'", "GroupId")
         }
-        if (-not $Config.Storage.ContainsKey($GroupId)) {
+        if (-not (Test-MapContainsKey -Map $storageMap -Key $GroupId)) {
             throw [StorageException]::new("Storage group '$GroupId' not found in configuration", $GroupId)
         }
     }
@@ -99,19 +229,28 @@ function Invoke-StorageWizard {
 
     # Filter out drives already assigned to other storage groups
     $usedSerials = @()
-    foreach ($gKey in $Config.Storage.Keys) {
+    foreach ($gKey in $storageMap.Keys) {
         # Skip the group being edited (if in Edit mode)
         if ($Mode -eq 'Edit' -and $gKey -eq $GroupId) { continue }
 
-        $group = $Config.Storage[$gKey]
-        if ($null -ne $group.Master -and -not [string]::IsNullOrWhiteSpace($group.Master.SerialNumber)) {
-            $usedSerials += $group.Master.SerialNumber.Trim()
+        $group = $storageMap[$gKey]
+
+        $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master' -Default $null
+        $masterSerial = Get-ConfigMemberValue -Object $masterCfg -Name 'SerialNumber' -Default ''
+        if (-not [string]::IsNullOrWhiteSpace($masterSerial)) {
+            $usedSerials += ([string]$masterSerial).Trim()
         }
-        if ($null -ne $group.Backups) {
-            foreach ($bKey in $group.Backups.Keys) {
-                $backup = $group.Backups[$bKey]
-                if (-not [string]::IsNullOrWhiteSpace($backup.SerialNumber)) {
-                    $usedSerials += $backup.SerialNumber.Trim()
+
+        $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backups' -Default $null
+        if ($null -eq $backupsCfg) {
+            $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backup' -Default $null
+        }
+        if ($backupsCfg -is [System.Collections.IDictionary] -and $backupsCfg.Count -gt 0) {
+            foreach ($bKey in $backupsCfg.Keys) {
+                $backup = $backupsCfg[$bKey]
+                $backupSerial = Get-ConfigMemberValue -Object $backup -Name 'SerialNumber' -Default ''
+                if (-not [string]::IsNullOrWhiteSpace($backupSerial)) {
+                    $usedSerials += ([string]$backupSerial).Trim()
                 }
             }
         }
@@ -155,21 +294,31 @@ function Invoke-StorageWizard {
     # Determine group ID and load existing values if editing
     if ($Mode -eq 'Edit') {
         $groupId = $GroupId
-        $existingGroup = $Config.Storage[$groupId]
-        $defaultDisplayName = $existingGroup.DisplayName
+        $existingGroup = $storageMap[$groupId]
+        $defaultDisplayNameValue = Get-ConfigMemberValue -Object $existingGroup -Name 'DisplayName' -Default ''
+        $defaultDisplayName = if (-not [string]::IsNullOrWhiteSpace([string]$defaultDisplayNameValue)) { [string]$defaultDisplayNameValue } else { "Storage Group $groupId" }
         # Try to match existing drives to current candidates
-        $existingMasterSerial = if ($existingGroup.Master) { $existingGroup.Master.SerialNumber } else { '' }
+        $existingMasterCfg = Get-ConfigMemberValue -Object $existingGroup -Name 'Master' -Default $null
+        $existingMasterSerial = [string](Get-ConfigMemberValue -Object $existingMasterCfg -Name 'SerialNumber' -Default '')
         $existingBackupSerials = @()
-        if ($existingGroup.Backups) {
-            foreach ($bk in $existingGroup.Backups.Keys) {
-                $existingBackupSerials += $existingGroup.Backups[$bk].SerialNumber
+        $existingBackupsCfg = Get-ConfigMemberValue -Object $existingGroup -Name 'Backups' -Default $null
+        if ($null -eq $existingBackupsCfg) {
+            $existingBackupsCfg = Get-ConfigMemberValue -Object $existingGroup -Name 'Backup' -Default $null
+        }
+        if ($existingBackupsCfg -is [System.Collections.IDictionary]) {
+            foreach ($bk in $existingBackupsCfg.Keys) {
+                $b = $existingBackupsCfg[$bk]
+                $bSerial = [string](Get-ConfigMemberValue -Object $b -Name 'SerialNumber' -Default '')
+                if (-not [string]::IsNullOrWhiteSpace($bSerial)) {
+                    $existingBackupSerials += $bSerial
+                }
             }
         }
     }
     else {
         # Add mode: compute next group id
         $existingNumericKeys = @()
-        foreach ($k in $Config.Storage.Keys) { if ($k -match '^[0-9]+$') { $existingNumericKeys += [int]$k } }
+        foreach ($k in $storageMap.Keys) { if ($k -match '^[0-9]+$') { $existingNumericKeys += [int]$k } }
         $nextId = if ($existingNumericKeys.Count -gt 0) { ([int]($existingNumericKeys | Measure-Object -Maximum).Maximum) + 1 } else { 1 }
         $groupId = [string]$nextId
         $defaultDisplayName = "Storage Group $groupId"
@@ -428,35 +577,38 @@ function Invoke-StorageWizard {
     }
 
     # Reload storage from file to get renumbered groups
-    $Config.Storage.Clear()
+    $storageMap.Clear()
     $reloaded = [AppConfigurationBuilder]::ReadStorageFile($storagePath)
 
     if ($null -ne $reloaded) {
         foreach ($gKey in $reloaded.Keys) {
             $gTable = $reloaded[$gKey]
             $group = [StorageGroupConfig]::new([string]$gKey)
-            if ($gTable.ContainsKey('DisplayName')) { $group.DisplayName = $gTable.DisplayName }
+            $displayNameValue = Get-ConfigMemberValue -Object $gTable -Name 'DisplayName' -Default $null
+            if (-not [string]::IsNullOrWhiteSpace([string]$displayNameValue)) { $group.DisplayName = [string]$displayNameValue }
 
-            if ($gTable.ContainsKey('Master') -and $gTable.Master) {
-                $mLabel = if ($gTable.Master.ContainsKey('Label')) { $gTable.Master.Label } else { '' }
-                $mSerial = if ($gTable.Master.ContainsKey('SerialNumber')) { $gTable.Master.SerialNumber } else { '' }
+            $mTable = Get-ConfigMemberValue -Object $gTable -Name 'Master' -Default $null
+            if ($null -ne $mTable) {
+                $mLabel = [string](Get-ConfigMemberValue -Object $mTable -Name 'Label' -Default '')
+                $mSerial = [string](Get-ConfigMemberValue -Object $mTable -Name 'SerialNumber' -Default '')
                 $group.Master = [StorageDriveConfig]::new($mLabel, '')
                 $group.Master.SerialNumber = $mSerial
             }
 
-            if ($gTable.ContainsKey('Backup') -and $gTable.Backup -is [hashtable]) {
-                foreach ($bk in ($gTable.Backup.Keys | Where-Object { $_ -match '^[0-9]+' } | Sort-Object {[int]$_})) {
-                    $b = $gTable.Backup[$bk]
+            $bTable = Get-ConfigMemberValue -Object $gTable -Name 'Backup' -Default $null
+            if ($bTable -is [System.Collections.IDictionary] -and $bTable.Count -gt 0) {
+                foreach ($bk in ($bTable.Keys | Where-Object { $_ -match '^[0-9]+' } | Sort-Object { [int]$_ })) {
+                    $b = $bTable[$bk]
                     if ($null -eq $b) { continue }
-                    $bLabel = if ($b.ContainsKey('Label')) { $b.Label } else { '' }
-                    $bSerial = if ($b.ContainsKey('SerialNumber')) { $b.SerialNumber } else { '' }
+                    $bLabel = [string](Get-ConfigMemberValue -Object $b -Name 'Label' -Default '')
+                    $bSerial = [string](Get-ConfigMemberValue -Object $b -Name 'SerialNumber' -Default '')
                     $cfg = [StorageDriveConfig]::new($bLabel, '')
                     $cfg.SerialNumber = $bSerial
                     $group.Backups[[string]$bk] = $cfg
                 }
             }
 
-            $Config.Storage[[string]$gKey] = $group
+            $storageMap[[string]$gKey] = $group
         }
     }
 
@@ -471,8 +623,8 @@ function Invoke-StorageWizard {
         Write-WizardLog -level 'WARNING' -id 'PSMM-STORAGE-DRIVE-REFRESH-FAILED' -msg "Failed to refresh storage drives: $_"
     }
 
-    foreach ($gKey in $Config.Storage.Keys) {
-        $group = $Config.Storage[$gKey]
+    foreach ($gKey in $storageMap.Keys) {
+        $group = $storageMap[$gKey]
 
         if ($null -ne $group.Master -and -not [string]::IsNullOrWhiteSpace($group.Master.SerialNumber)) {
             $matchedDrive = $availableDrives | Where-Object {

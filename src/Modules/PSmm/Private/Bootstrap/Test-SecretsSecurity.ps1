@@ -104,7 +104,7 @@ function Test-SecretsSecurity {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter()]
         [object]$FileSystem
@@ -113,7 +113,60 @@ function Test-SecretsSecurity {
     try {
         Write-Verbose 'Starting security validation for KeePassXC vault...'
 
-        $vaultPath = $Config.Paths.App.Vault
+        function Get-ConfigMemberValue {
+            [CmdletBinding()]
+            param(
+                [Parameter()][AllowNull()][object]$Object,
+                [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name
+            )
+
+            if ($null -eq $Object) {
+                return $null
+            }
+
+            if ($Object -is [System.Collections.IDictionary]) {
+                try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
+                try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+                try {
+                    foreach ($k in $Object.Keys) {
+                        if ($k -eq $Name) { return $Object[$k] }
+                    }
+                }
+                catch { }
+                return $null
+            }
+
+            $p = $Object.PSObject.Properties[$Name]
+            if ($null -ne $p) {
+                return $p.Value
+            }
+
+            return $null
+        }
+
+        function Get-ConfigNestedValue {
+            [CmdletBinding()]
+            param(
+                [Parameter()][AllowNull()][object]$Object,
+                [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Path
+            )
+
+            $current = $Object
+            foreach ($segment in $Path) {
+                $current = Get-ConfigMemberValue -Object $current -Name $segment
+                if ($null -eq $current) {
+                    return $null
+                }
+            }
+
+            return $current
+        }
+
+        $vaultPath = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Vault')
+        if ([string]::IsNullOrWhiteSpace($vaultPath)) {
+            Write-Warning 'Unable to resolve vault path (Config.Paths.App.Vault).'
+            return $false
+        }
 
         # Create service instance if not provided
         if ($null -eq $FileSystem) {
@@ -155,8 +208,16 @@ function Test-SecretsSecurity {
         Test-VaultPermissions -VaultPath $vaultPath -FileSystem $FileSystem
 
         # Test 4: Verify no secrets in configuration exports
-        $exportPath = Join-Path -Path $Config.Paths.Log -ChildPath "$( $Config.InternalName)Run.psd1"
-        Test-ConfigurationExports -ExportPath $exportPath -FileSystem $FileSystem
+        $logRoot = Get-ConfigNestedValue -Object $Config -Path @('Paths','Log')
+        $internalName = Get-ConfigMemberValue -Object $Config -Name 'InternalName'
+
+        if (-not [string]::IsNullOrWhiteSpace($logRoot) -and -not [string]::IsNullOrWhiteSpace($internalName)) {
+            $exportPath = Join-Path -Path $logRoot -ChildPath "$internalName`Run.psd1"
+            Test-ConfigurationExports -ExportPath $exportPath -FileSystem $FileSystem
+        }
+        else {
+            Write-Verbose 'Skipping configuration export check: missing Paths.Log or InternalName.'
+        }
 
         if ($allChecksPassed) {
             Write-Verbose '✓ All security checks passed'

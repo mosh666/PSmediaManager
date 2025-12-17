@@ -7,6 +7,94 @@ Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
 
+function Get-ConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        try {
+            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            if ($Object.Contains($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            foreach ($k in $Object.Keys) {
+                if ($k -eq $Name) { return $Object[$k] }
+            }
+        }
+        catch { }
+
+        return $null
+    }
+
+    try {
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) { return $p.Value }
+    }
+    catch { }
+
+    return $null
+}
+
+function Set-ConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
+
+        [Parameter()]
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Object) {
+        return
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        $Object[$Name] = $Value
+        return
+    }
+
+    try {
+        $Object.$Name = $Value
+        return
+    }
+    catch { }
+
+    try {
+        if ($null -eq $Object.PSObject.Properties[$Name]) {
+            $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+        }
+        else {
+            $Object.PSObject.Properties[$Name].Value = $Value
+        }
+    }
+    catch { }
+}
+
 function Get-CurrentVersion-MKVToolNix {
     param(
         [hashtable]$Plugin,
@@ -25,15 +113,21 @@ function Get-CurrentVersion-MKVToolNix {
         }
     }
 
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'MKVToolNix' }
+
     if ($FileSystem) {
-        $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
+        $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
     }
     else {
-        $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
+        $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
     }
 
     if ($InstallPath) {
-        $bin = Join-Path -Path $InstallPath -ChildPath $Plugin.Config.CommandPath -AdditionalChildPath $Plugin.Config.Command
+        $commandPath = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'CommandPath')
+        $command = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Command')
+        $bin = Join-Path -Path $InstallPath -ChildPath $commandPath -AdditionalChildPath $command
         $CurrentVersion = (& $bin --version)
         return $CurrentVersion.Split(' ')[1].Substring(1)
     }
@@ -49,7 +143,9 @@ function Get-LatestUrlFromUrl-MKVToolNix {
         $ServiceContainer
     )
     $null = $Paths, $ServiceContainer
-    $Response = Invoke-WebRequest -Uri $Plugin.Config.VersionUrl
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $versionUrl = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
+    $Response = Invoke-WebRequest -Uri $versionUrl
     # Get the latest version
     if ($Response.Links) {
         # Extract version numbers from the links
@@ -64,12 +160,19 @@ function Get-LatestUrlFromUrl-MKVToolNix {
         }
     }
     # Ensure State exists
-    if (-not $Plugin.Config.ContainsKey('State') -or $null -eq $Plugin.Config.State) { $Plugin.Config.State = @{} }
+    $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+    if ($null -eq $state) {
+        $state = @{}
+        Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
+    }
+
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'MKVToolNix' }
     # Use correctly-cased variable name
-    $LatestInstaller = "$(($Plugin.Config.Name))-64-bit-$LatestVersion.7z"
-    $Plugin.Config.State.LatestVersion = $LatestVersion
-    $Plugin.Config.State.LatestInstaller = $LatestInstaller
-    $Url = $Plugin.Config.VersionUrl + $LatestVersion + '/' + $LatestInstaller
+    $LatestInstaller = "$pluginName-64-bit-$LatestVersion.7z"
+    Set-ConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestVersion
+    Set-ConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $LatestInstaller
+    $Url = $versionUrl + $LatestVersion + '/' + $LatestInstaller
     return $Url
 }
 
@@ -95,6 +198,9 @@ function Invoke-Installer-MKVToolNix {
     }
 
     try {
+        $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+        $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+        if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'MKVToolNix' }
         $ExtractPath = $Paths.Root
 
         # Ensure extraction directory exists
@@ -126,10 +232,17 @@ function Invoke-Installer-MKVToolNix {
             throw $ex
         }
 
-        Write-PSmmLog -Level SUCCESS -Context "Install $($Plugin.Config.Name)" -Message "Installation completed for $($InstallerPath)" -Console -File
+        Write-PSmmLog -Level SUCCESS -Context "Install $pluginName" -Message "Installation completed for $($InstallerPath)" -Console -File
     }
     catch {
-        Write-PSmmLog -Level ERROR -Context "Install $($Plugin.Config.Name)" -Message "Installation failed for $($InstallerPath)" -ErrorRecord $_ -Console -File
+        $pn = 'MKVToolNix'
+        try {
+            $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+            $pnCandidate = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+            if (-not [string]::IsNullOrWhiteSpace($pnCandidate)) { $pn = $pnCandidate }
+        }
+        catch { }
+        Write-PSmmLog -Level ERROR -Context "Install $pn" -Message "Installation failed for $($InstallerPath)" -ErrorRecord $_ -Console -File
     }
 }
 

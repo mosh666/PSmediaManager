@@ -76,11 +76,61 @@ function Start-PSmmdigiKam {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
+        function Get-ConfigMemberValue {
+            param(
+                [Parameter(Mandatory = $true)]
+                [AllowNull()]
+                [object]$Object,
+
+                [Parameter(Mandatory = $true)]
+                [ValidateNotNullOrEmpty()]
+                [string]$Name
+            )
+
+            if ($null -eq $Object) { return $null }
+
+            try {
+                if ($Object -is [System.Collections.IDictionary]) {
+                    $hasKey = $false
+                    try { $hasKey = $Object.ContainsKey($Name) } catch { $hasKey = $false }
+                    if (-not $hasKey) { try { $hasKey = $Object.Contains($Name) } catch { $hasKey = $false } }
+
+                    if (-not $hasKey) {
+                        try {
+                            foreach ($k in $Object.Keys) {
+                                if ($k -eq $Name) { $hasKey = $true; break }
+                            }
+                        }
+                        catch { $hasKey = $false }
+                    }
+
+                    if ($hasKey) { return $Object[$Name] }
+                }
+            }
+            catch { }
+
+            try {
+                $prop = $Object.PSObject.Properties[$Name]
+                if ($null -ne $prop) { return $prop.Value }
+            }
+            catch { }
+
+            return $null
+        }
+
         # Get current project name from Config
-        $projectName = if ($null -ne $Config.Projects -and $Config.Projects.ContainsKey('Current') -and
-            $Config.Projects.Current.ContainsKey('Name')) {
-            $Config.Projects.Current.Name
-        } else {
+        $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+        $projectsCurrent = Get-ConfigMemberValue -Object $projects -Name 'Current'
+
+        if ($null -eq $projects -or $null -eq $projectsCurrent) {
+            throw [ConfigurationException]::new('No current project selected', 'ProjectName')
+        }
+
+        $currentProject = [ProjectCurrentConfig]::FromObject($projectsCurrent)
+        $projectName = if (-not [string]::IsNullOrWhiteSpace($currentProject.Name)) {
+            $currentProject.Name
+        }
+        else {
             throw [ConfigurationException]::new('No current project selected', 'ProjectName')
         }
 

@@ -7,7 +7,7 @@ function Install-KeePassXC {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -34,13 +34,83 @@ function Install-KeePassXC {
         $Process
     )
 
-    $paths = @{
-        Root = $Config.Paths.App.Plugins.Root
-        _Downloads = $Config.Paths.App.Plugins.Downloads
-        _Temp = $Config.Paths.App.Plugins.Temp
+    function Get-ConfigMemberValue {
+        [CmdletBinding()]
+        param(
+            [Parameter()][AllowNull()][object]$Object,
+            [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name
+        )
+
+        if ($null -eq $Object) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
+            try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) { return $Object[$k] }
+                }
+            }
+            catch { }
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
     }
 
-    $pluginsManifest = if ($Config.Plugins -and $Config.Plugins.Resolved) { $Config.Plugins.Resolved } else { Resolve-PluginsConfig -Config $Config }
+    function Get-ConfigNestedValue {
+        [CmdletBinding()]
+        param(
+            [Parameter()][AllowNull()][object]$Object,
+            [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Path
+        )
+
+        $current = $Object
+        foreach ($segment in $Path) {
+            $current = Get-ConfigMemberValue -Object $current -Name $segment
+            if ($null -eq $current) {
+                return $null
+            }
+        }
+
+        return $current
+    }
+
+    $pluginsRoot = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Root')
+    $pluginsDownloads = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Downloads')
+    $pluginsTemp = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Temp')
+    $vaultPath = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Vault')
+
+    if ([string]::IsNullOrWhiteSpace($pluginsRoot)) {
+        throw 'Unable to resolve plugin root path (Config.Paths.App.Plugins.Root).'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($pluginsDownloads)) {
+        throw 'Unable to resolve plugin downloads path (Config.Paths.App.Plugins.Downloads).'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($pluginsTemp)) {
+        throw 'Unable to resolve plugin temp path (Config.Paths.App.Plugins.Temp).'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($vaultPath)) {
+        throw 'Unable to resolve vault path (Config.Paths.App.Vault).'
+    }
+
+    $paths = @{
+        Root = $pluginsRoot
+        _Downloads = $pluginsDownloads
+        _Temp = $pluginsTemp
+    }
+
+    $pluginsManifest = Resolve-PluginsConfig -Config $Config
     $pluginConfig = $pluginsManifest.c_Misc.KeePassXC
     if (-not $pluginConfig) {
         throw 'KeePassXC plugin configuration is missing from plugin manifest.'
@@ -66,7 +136,7 @@ function Install-KeePassXC {
         throw 'KeePassXC installation did not produce a usable CLI.'
     }
 
-    $cliResolution = Resolve-KeePassCliCommand -VaultPath $Config.Paths.App.Vault -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
+    $cliResolution = Resolve-KeePassCliCommand -VaultPath $vaultPath -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
     if (-not $cliResolution.Command) {
         $checked = if ($cliResolution.CandidatePaths) { $cliResolution.CandidatePaths -join ', ' } else { 'No candidate locations were discovered' }
         Write-PSmmLog -Level ERROR -Context 'Install-KeePassXC' `

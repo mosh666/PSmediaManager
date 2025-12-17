@@ -40,7 +40,7 @@ function Invoke-FirstRunSetup {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter()]
         [switch]$NonInteractive,
@@ -59,8 +59,60 @@ function Invoke-FirstRunSetup {
     )
 
     try {
-                # Extract paths from config
-        $VaultPath = $Config.Paths.App.Vault
+        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+            if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
+                return $null
+            }
+
+            if ($Object -is [System.Collections.IDictionary]) {
+                try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
+                try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+                try {
+                    foreach ($k in $Object.Keys) {
+                        if ($k -eq $Name) { return $Object[$k] }
+                    }
+                }
+                catch { }
+                return $null
+            }
+
+            $p = $Object.PSObject.Properties[$Name]
+            if ($null -ne $p) {
+                return $p.Value
+            }
+
+            return $null
+        }
+
+        function Get-NestedValue([object]$Root, [string[]]$PathParts) {
+            $cur = $Root
+            foreach ($part in $PathParts) {
+                if ($null -eq $cur) {
+                    return $null
+                }
+                $cur = Get-ConfigMemberValue -Object $cur -Name $part
+            }
+            return $cur
+        }
+
+        # Normalize legacy config shapes to typed AppConfiguration when the class is available
+        $appConfigType = 'AppConfiguration' -as [type]
+        if ($null -ne $appConfigType -and -not ($Config -is $appConfigType)) {
+            $Config = $appConfigType::FromObject($Config)
+        }
+
+        $VaultPath = $null
+        if ($null -ne $appConfigType -and ($Config -is $appConfigType)) {
+            try { $VaultPath = [string]$Config.Paths.App.Vault } catch { $VaultPath = $null }
+        }
+        if ([string]::IsNullOrWhiteSpace($VaultPath)) {
+            $VaultPath = [string](Get-NestedValue -Root $Config -PathParts @('Paths', 'App', 'Vault'))
+        }
+        if ([string]::IsNullOrWhiteSpace($VaultPath)) {
+            throw 'Unable to resolve vault path from configuration (Config.Paths.App.Vault).'
+        }
+
+        # Extract paths from config
         $dbPath = $PathProvider.CombinePath(@($VaultPath,'PSmm_System.kdbx'))
         $tokenCachePath = $PathProvider.CombinePath(@($VaultPath,'.pending_setup.cache'))
 
@@ -234,7 +286,7 @@ function Invoke-FirstRunSetup {
             Write-PSmmHost "─────────────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
             Write-PSmmHost ""
 
-        $cliResolution = Resolve-KeePassCliCommand -VaultPath $Config.Paths.App.Vault -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
+        $cliResolution = Resolve-KeePassCliCommand -VaultPath $VaultPath -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
         $cliCheck = if ($cliResolution -and $cliResolution.Command) { $cliResolution.Command } else { $null }
         if (-not $cliCheck) {
             Write-PSmmHost "❌ KeePassXC not found!" -ForegroundColor Red
@@ -285,7 +337,7 @@ function Invoke-FirstRunSetup {
         Write-PSmmHost ""
 
         # Initialize the vault
-        $vaultCreated = Initialize-SystemVault -VaultPath $Config.Paths.App.Vault -FileSystem $FileSystem -ErrorAction Stop
+        $vaultCreated = Initialize-SystemVault -VaultPath $VaultPath -FileSystem $FileSystem -ErrorAction Stop
 
         if (-not $vaultCreated) {
             Write-PSmmHost "❌ Failed to create vault" -ForegroundColor Red
@@ -311,7 +363,7 @@ function Invoke-FirstRunSetup {
                 Scope = 'repo or public_repo'
             }
 
-            $saved = Save-SystemSecret -SecretType 'GitHub-Token' -SecretValue $token -Metadata $metadata -VaultPath $Config.Paths.App.Vault -ErrorAction Stop
+            $saved = Save-SystemSecret -SecretType 'GitHub-Token' -SecretValue $token -Metadata $metadata -VaultPath $VaultPath -ErrorAction Stop
 
             if ($saved) {
                 Write-PSmmHost "✓ Token saved successfully" -ForegroundColor Green
@@ -341,7 +393,7 @@ function Invoke-FirstRunSetup {
         Write-PSmmHost ""
 
         # Get drive root and check if storage config already exists
-        $driveRoot = [System.IO.Path]::GetPathRoot($Config.Paths.App.Vault)
+        $driveRoot = [System.IO.Path]::GetPathRoot($VaultPath)
         $storagePath = $PathProvider.CombinePath(@($driveRoot,'PSmm.Config','PSmm.Storage.psd1'))
 
         if (-not $FileSystem.TestPath($storagePath)) {

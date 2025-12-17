@@ -64,6 +64,88 @@ function Get-PSmmProjectPorts {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
+        function Get-ConfigMemberValue {
+            param(
+                [Parameter(Mandatory = $true)]
+                [AllowNull()]
+                [object]$Object,
+
+                [Parameter(Mandatory = $true)]
+                [ValidateNotNullOrEmpty()]
+                [string]$Name
+            )
+
+            if ($null -eq $Object) { return $null }
+
+            try {
+                if ($Object -is [System.Collections.IDictionary]) {
+                    $hasKey = $false
+                    try { $hasKey = $Object.ContainsKey($Name) } catch { $hasKey = $false }
+                    if (-not $hasKey) { try { $hasKey = $Object.Contains($Name) } catch { $hasKey = $false } }
+
+                    if (-not $hasKey) {
+                        try {
+                            foreach ($k in $Object.Keys) {
+                                if ($k -eq $Name) { $hasKey = $true; break }
+                            }
+                        }
+                        catch { $hasKey = $false }
+                    }
+
+                    if ($hasKey) { return $Object[$Name] }
+                }
+            }
+            catch { }
+
+            try {
+                $prop = $Object.PSObject.Properties[$Name]
+                if ($null -ne $prop) { return $prop.Value }
+            }
+            catch { }
+
+            return $null
+        }
+
+        function Set-ConfigMemberValue {
+            param(
+                [Parameter(Mandatory = $true)]
+                [AllowNull()]
+                [object]$Object,
+
+                [Parameter(Mandatory = $true)]
+                [ValidateNotNullOrEmpty()]
+                [string]$Name,
+
+                [Parameter(Mandatory = $false)]
+                [AllowNull()]
+                [object]$Value
+            )
+
+            if ($null -eq $Object) { return }
+
+            try {
+                if ($Object -is [System.Collections.IDictionary]) {
+                    $Object[$Name] = $Value
+                    return
+                }
+            }
+            catch { }
+
+            try {
+                $prop = $Object.PSObject.Properties[$Name]
+                if ($null -ne $prop) {
+                    $prop.Value = $Value
+                    return
+                }
+            }
+            catch { }
+
+            try {
+                $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+            }
+            catch { }
+        }
+
         Write-Verbose "Retrieving project port allocations"
     }
 
@@ -71,17 +153,29 @@ function Get-PSmmProjectPorts {
         try {
             $results = @()
 
+            $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+            $projectsPortRegistry = Get-ConfigMemberValue -Object $projects -Name 'PortRegistry'
+
+            $portRegistry = if ($null -ne $projects -and $null -ne $projectsPortRegistry) {
+                [ProjectsPortRegistry]::FromObject($projectsPortRegistry)
+            }
+            else {
+                [ProjectsPortRegistry]::new()
+            }
+
+            if ($null -ne $projects) {
+                Set-ConfigMemberValue -Object $projects -Name 'PortRegistry' -Value $portRegistry
+            }
+
             # Check if PortRegistry exists
-            if (-not $Config.Projects.ContainsKey('PortRegistry') -or
-                $null -eq $Config.Projects.PortRegistry -or
-                $Config.Projects.PortRegistry.Count -eq 0) {
+            if ($portRegistry.GetCount() -eq 0) {
                 Write-Warning 'No port allocations found. Projects may not have been initialized with digiKam yet.'
                 return $results
             }
 
             # Get all allocated ports
-            foreach ($projectName in $Config.Projects.PortRegistry.Keys | Sort-Object) {
-                $port = $Config.Projects.PortRegistry[$projectName]
+            foreach ($projectName in $portRegistry.GetKeys() | Sort-Object) {
+                $port = $portRegistry.GetPort($projectName)
 
                 $result = [PSCustomObject]@{
                     ProjectName = $projectName

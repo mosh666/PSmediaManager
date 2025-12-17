@@ -46,7 +46,7 @@ function Invoke-PSmm {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config
+        [object]$Config
     )
 
     begin {
@@ -56,9 +56,68 @@ function Invoke-PSmm {
 
     process {
         try {
+            # Normalize legacy config shapes to typed AppConfiguration before using typed members
+            if (-not ($Config -is [AppConfiguration])) {
+                $Config = [AppConfiguration]::FromObject($Config)
+            }
+
+            function Get-ConfigMemberValue([object]$Object, [string]$Name, $Default = $null) {
+                if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
+                    return $Default
+                }
+
+                if ($Object -is [System.Collections.IDictionary]) {
+                    try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
+                    try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+                    try {
+                        foreach ($k in $Object.Keys) {
+                            if ($k -eq $Name) { return $Object[$k] }
+                        }
+                    }
+                    catch { }
+                    return $Default
+                }
+
+                $p = $Object.PSObject.Properties[$Name]
+                if ($null -ne $p) {
+                    return $p.Value
+                }
+
+                return $Default
+            }
+
+            if ($null -eq $Config.Paths) {
+                throw 'Configuration is missing Paths; unable to bootstrap.'
+            }
+
+            $vaultPath = $null
+            try { $vaultPath = [string]$Config.Paths.App.Vault } catch { $vaultPath = $null }
+            if ([string]::IsNullOrWhiteSpace($vaultPath)) {
+                throw 'Configuration is missing Paths.App.Vault; unable to bootstrap.'
+            }
+
+            $repositoryRoot = $null
+            try { $repositoryRoot = [string]$Config.Paths.RepositoryRoot } catch { $repositoryRoot = $null }
+            if ([string]::IsNullOrWhiteSpace($repositoryRoot)) {
+                throw 'Configuration is missing Paths.RepositoryRoot; unable to bootstrap.'
+            }
+
             #region ----- Setup Folders
             Write-Verbose 'Creating directory structure...'
-            $Config.Paths.EnsureDirectoriesExist()
+            if ($null -eq $Config.Paths) {
+                throw 'Configuration is missing Paths; unable to bootstrap.'
+            }
+
+            try {
+                $ensureMethod = $Config.Paths.PSObject.Methods['EnsureDirectoriesExist']
+                if ($null -eq $ensureMethod) {
+                    throw 'Configuration Paths object does not implement EnsureDirectoriesExist().'
+                }
+                $Config.Paths.EnsureDirectoriesExist()
+            }
+            catch {
+                throw "Failed to ensure directories exist from Config.Paths: $_"
+            }
             #endregion ----- Setup Folders
 
             #region ----- Initialize Shared Services (Early)
@@ -106,14 +165,18 @@ function Invoke-PSmm {
 
             #region ----- First-Run Setup
             $setupPending = $false
-            $vaultPath = $Config.Paths.App.Vault
             $dbPath = $pathProviderService.CombinePath(@($vaultPath,'PSmm_System.kdbx'))
+
+            $nonInteractive = $false
+            if ($Config -and $Config.Parameters) {
+                try { $nonInteractive = [bool]$Config.Parameters.NonInteractive } catch { $nonInteractive = $false }
+            }
 
             if (-not ($fileSystemService.TestPath($dbPath))) {
                 Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' -Message 'KeePass vault not found - starting first-run setup' -Console -File
 
                 if (Get-Command Invoke-FirstRunSetup -ErrorAction SilentlyContinue) {
-                    $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$Config.Parameters.NonInteractive -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
+                    $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$nonInteractive -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
 
                     if ($setupSuccess -eq 'PendingKeePassXC') {
                         Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' `
@@ -157,7 +220,19 @@ function Invoke-PSmm {
 
                 Write-Verbose 'Loading secrets from KeePassXC vault...'
                 # Load secrets after logging is initialized so warnings can be properly logged
-                $Config.Secrets.LoadSecrets()
+                if ($null -eq $Config.Secrets) {
+                    throw 'Configuration is missing Secrets; unable to load secrets.'
+                }
+                try {
+                    $loadMethod = $Config.Secrets.PSObject.Methods['LoadSecrets']
+                    if ($null -eq $loadMethod) {
+                        throw 'Configuration Secrets object does not implement LoadSecrets().'
+                    }
+                    $Config.Secrets.LoadSecrets()
+                }
+                catch {
+                    throw "Failed to load secrets from Config.Secrets: $_"
+                }
             }
             else {
                 Write-Verbose 'Skipping secret loading - setup is pending KeePassXC installation'
@@ -191,13 +266,12 @@ function Invoke-PSmm {
             if ($setupPending) {
                 Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' -Message 'KeePassXC now available - completing vault setup' -Console -File
 
-                $vaultPath = $Config.Paths.App.Vault
                 $dbPath = $pathProviderService.CombinePath(@($vaultPath,'PSmm_System.kdbx'))
 
                 # Check if vault was created during plugin installation
                 if (-not ($fileSystemService.TestPath($dbPath))) {
                     if (Get-Command Invoke-FirstRunSetup -ErrorAction SilentlyContinue) {
-                        $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$Config.Parameters.NonInteractive -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
+                        $setupSuccess = Invoke-FirstRunSetup -Config $Config -NonInteractive:$nonInteractive -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
 
                         # Re-check DB existence in case function succeeded but returned non-boolean
                         $dbNowExists = $fileSystemService.TestPath($dbPath)
@@ -221,7 +295,19 @@ function Invoke-PSmm {
                 }
 
                 # Reload secrets now that vault is set up
-                $Config.Secrets.LoadSecrets()
+                if ($null -eq $Config.Secrets) {
+                    throw 'Configuration is missing Secrets; unable to reload secrets.'
+                }
+                try {
+                    $loadMethod = $Config.Secrets.PSObject.Methods['LoadSecrets']
+                    if ($null -eq $loadMethod) {
+                        throw 'Configuration Secrets object does not implement LoadSecrets().'
+                    }
+                    $Config.Secrets.LoadSecrets()
+                }
+                catch {
+                    throw "Failed to reload secrets from Config.Secrets: $_"
+                }
             }
             #endregion ----- Complete Pending Setup
 
@@ -236,21 +322,27 @@ function Invoke-PSmm {
 
             #region ----- Get Application Version
             Write-PSmmLog -Level NOTICE -Context 'Get-AppVersion' -Message 'Getting PSmediaManager version from Git' -Console -File
-            $GitPath = Join-Path -Path $Config.Paths.RepositoryRoot -ChildPath '.git'
+            $GitPath = Join-Path -Path $repositoryRoot -ChildPath '.git'
             $gitVersionExecutable = $null
-            if ($Config.Plugins -and $Config.Plugins.Resolved -and $Config.Plugins.Resolved.b_GitEnv -and $Config.Plugins.Resolved.b_GitEnv.GitVersion -and ($Config.Plugins.Resolved.b_GitEnv.GitVersion.Mandatory -or $Config.Plugins.Resolved.b_GitEnv.GitVersion.Enabled)) {
+
+            $pluginsConfig = Get-ConfigMemberValue -Object $Config -Name 'Plugins'
+            $resolvedPlugins = Get-ConfigMemberValue -Object $pluginsConfig -Name 'Resolved'
+            $gitEnvGroup = Get-ConfigMemberValue -Object $resolvedPlugins -Name 'b_GitEnv'
+            $gitVersionPlugin = Get-ConfigMemberValue -Object $gitEnvGroup -Name 'GitVersion'
+            $gitVersionMandatory = [bool](Get-ConfigMemberValue -Object $gitVersionPlugin -Name 'Mandatory' -Default $false)
+            $gitVersionEnabled = [bool](Get-ConfigMemberValue -Object $gitVersionPlugin -Name 'Enabled' -Default $false)
+
+            if ($null -ne $gitVersionPlugin -and ($gitVersionMandatory -or $gitVersionEnabled)) {
                 # Try to resolve plugins path for GitVersion lookup
                 $pluginsPath = $null
                 try {
-                    if ($Config.Paths -and $Config.Paths.App -and $Config.Paths.App.Plugins -and $Config.Paths.App.Plugins.Root) {
-                        $pluginsPath = $Config.Paths.App.Plugins.Root
-                    }
+                    $pluginsPath = [string]$Config.Paths.App.Plugins.Root
                 }
                 catch {
                     Write-Verbose "Could not resolve plugins path from Config.Paths: $_"
                 }
 
-                $gitVersionExecutable = Get-LocalPluginExecutablePath -PluginConfig $Config.Plugins.Resolved.b_GitEnv.GitVersion -PluginsRootPath $pluginsPath
+                $gitVersionExecutable = Get-LocalPluginExecutablePath -PluginConfig $gitVersionPlugin -PluginsRootPath $pluginsPath
             }
             $Config.AppVersion = Get-ApplicationVersion -GitPath $GitPath -GitVersionExecutablePath $gitVersionExecutable
             Write-PSmmLog -Level NOTICE -Context 'Get-AppVersion' -Message "Current PSmediaManager version: $($Config.AppVersion)" -Console -File
@@ -268,8 +360,22 @@ function Invoke-PSmm {
 
             # Pause if running in debug/verbose/dev/update mode for user review
             $shouldPause = $false
-            if ($Config.Parameters -and -not $Config.Parameters.NonInteractive) {
-                $shouldPause = $Config.Parameters.ShouldPause()
+            if ($Config.Parameters) {
+                $isNonInteractive = $false
+                try { $isNonInteractive = [bool]$Config.Parameters.NonInteractive } catch { $isNonInteractive = $false }
+
+                if (-not $isNonInteractive) {
+                    try {
+                        $pauseMethod = $Config.Parameters.PSObject.Methods['ShouldPause']
+                        if ($null -eq $pauseMethod) {
+                            throw 'Config.Parameters.ShouldPause() method not found.'
+                        }
+                        $shouldPause = [bool]$Config.Parameters.ShouldPause()
+                    }
+                    catch {
+                        throw "Failed to evaluate Config.Parameters.ShouldPause(): $($_.Exception.Message)"
+                    }
+                }
             }
 
             if ($shouldPause) {

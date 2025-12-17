@@ -65,6 +65,88 @@ function Get-PSmmAvailablePort {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
+        function Get-ConfigMemberValue {
+            param(
+                [Parameter(Mandatory = $true)]
+                [AllowNull()]
+                [object]$Object,
+
+                [Parameter(Mandatory = $true)]
+                [ValidateNotNullOrEmpty()]
+                [string]$Name
+            )
+
+            if ($null -eq $Object) { return $null }
+
+            try {
+                if ($Object -is [System.Collections.IDictionary]) {
+                    $hasKey = $false
+                    try { $hasKey = $Object.ContainsKey($Name) } catch { $hasKey = $false }
+                    if (-not $hasKey) { try { $hasKey = $Object.Contains($Name) } catch { $hasKey = $false } }
+
+                    if (-not $hasKey) {
+                        try {
+                            foreach ($k in $Object.Keys) {
+                                if ($k -eq $Name) { $hasKey = $true; break }
+                            }
+                        }
+                        catch { $hasKey = $false }
+                    }
+
+                    if ($hasKey) { return $Object[$Name] }
+                }
+            }
+            catch { }
+
+            try {
+                $prop = $Object.PSObject.Properties[$Name]
+                if ($null -ne $prop) { return $prop.Value }
+            }
+            catch { }
+
+            return $null
+        }
+
+        function Set-ConfigMemberValue {
+            param(
+                [Parameter(Mandatory = $true)]
+                [AllowNull()]
+                [object]$Object,
+
+                [Parameter(Mandatory = $true)]
+                [ValidateNotNullOrEmpty()]
+                [string]$Name,
+
+                [Parameter(Mandatory = $false)]
+                [AllowNull()]
+                [object]$Value
+            )
+
+            if ($null -eq $Object) { return }
+
+            try {
+                if ($Object -is [System.Collections.IDictionary]) {
+                    $Object[$Name] = $Value
+                    return
+                }
+            }
+            catch { }
+
+            try {
+                $prop = $Object.PSObject.Properties[$Name]
+                if ($null -ne $prop) {
+                    $prop.Value = $Value
+                    return
+                }
+            }
+            catch { }
+
+            try {
+                $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+            }
+            catch { }
+        }
+
         # Port allocation settings
         $BasePort = 3310
         $MaxPort = 3399
@@ -75,15 +157,23 @@ function Get-PSmmAvailablePort {
 
     process {
         try {
-            # Initialize PortRegistry in Config if not exists
-            if (-not $Config.Projects.ContainsKey('PortRegistry') -or $null -eq $Config.Projects.PortRegistry) {
-                $Config.Projects.PortRegistry = @{}
-                Write-Verbose 'Initialized Projects PortRegistry'
+            $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+            $projectsPortRegistry = Get-ConfigMemberValue -Object $projects -Name 'PortRegistry'
+
+            $portRegistry = if ($null -ne $projects -and $null -ne $projectsPortRegistry) {
+                [ProjectsPortRegistry]::FromObject($projectsPortRegistry)
+            }
+            else {
+                [ProjectsPortRegistry]::new()
+            }
+
+            if ($null -ne $projects) {
+                Set-ConfigMemberValue -Object $projects -Name 'PortRegistry' -Value $portRegistry
             }
 
             # Return existing port if available and not forced
-            if (-not $Force.IsPresent -and $Config.Projects.PortRegistry.ContainsKey($ProjectName)) {
-                $existingPort = $Config.Projects.PortRegistry[$ProjectName]
+            if (-not $Force.IsPresent -and $portRegistry.ContainsKey($ProjectName)) {
+                $existingPort = $portRegistry.GetPort($ProjectName)
                 Write-Verbose "Using existing port $existingPort for project $ProjectName"
                 Write-PSmmLog -Level DEBUG -Context 'Get-PSmmAvailablePort' `
                     -Message "Using existing port $existingPort for project $ProjectName" -File
@@ -91,7 +181,7 @@ function Get-PSmmAvailablePort {
             }
 
             # Get all currently allocated ports
-            $allocatedPorts = @($Config.Projects.PortRegistry.Values) + $ReservedPorts
+            $allocatedPorts = @($portRegistry.GetValues()) + $ReservedPorts
 
             # Find the next available port
             $availablePort = $BasePort
@@ -112,7 +202,7 @@ function Get-PSmmAvailablePort {
             }
 
             # Allocate the port to the project
-            $Config.Projects.PortRegistry[$ProjectName] = $availablePort
+            $portRegistry.SetPort($ProjectName, $availablePort)
 
             Write-Verbose "Allocated port $availablePort to project $ProjectName"
             Write-PSmmLog -Level INFO -Context 'Get-PSmmAvailablePort' `

@@ -24,7 +24,11 @@ Set-StrictMode -Version Latest
     ANSI color code for the border. Default is a gray color.
 
 .PARAMETER Columns
-    Array of column definitions. Each column should be a hashtable with properties:
+    Array of column definitions. Each column can be either:
+    - A legacy hashtable with the properties below, or
+    - A UiColumn instance (recommended) created via New-UiColumn.
+
+    Hashtable columns support the following properties:
     - Text: The content for this column
     - Width: Column width (can be absolute number, percentage like "25%", or "auto")
     - Alignment: 'l', 'c', 'r' (default: 'l')
@@ -49,34 +53,34 @@ Set-StrictMode -Version Latest
 
 .EXAMPLE
     $columns = @(
-        @{ Text = "Name"; Width = "25%"; Alignment = 'l'; TextColor = '[38;5;14m'; BackgroundColor = '[48;5;17m'; Bold = $true }
-        @{ Text = "Status"; Width = 15; Alignment = 'c'; TextColor = '[38;5;10m'; BackgroundColor = '[48;5;22m'; Italic = $true }
-        @{ Text = "Description"; Width = "auto"; Alignment = 'l'; TextColor = '[38;5;15m'; Underline = $true }
+        New-UiColumn -Text 'Name' -Width '25%' -Alignment 'l' -TextColor '[38;5;14m' -BackgroundColor '[48;5;17m' -Bold
+        New-UiColumn -Text 'Status' -Width 15 -Alignment 'c' -TextColor '[38;5;10m' -BackgroundColor '[48;5;22m' -Italic
+        New-UiColumn -Text 'Description' -Width 'auto' -Alignment 'l' -TextColor '[38;5;15m' -Underline
     )
     Format-UI -Columns $columns -Width 80 -Border '|'
     Creates a 3-column layout with dynamic widths, background colors, and basic ANSI formatting.
 
 .EXAMPLE
     $data = @(
-        @{ Text = "Item 1"; Width = 20 },
-        @{ Text = "Value A"; Width = 15; Alignment = 'r' },
-        @{ Text = "Long description text"; Width = "auto" }
+        New-UiColumn -Text 'Item 1' -Width 20
+        New-UiColumn -Text 'Value A' -Width 15 -Alignment 'r'
+        New-UiColumn -Text 'Long description text' -Width 'auto'
     )
     Format-UI -Columns $data -Width 80 -ColumnSeparator " | "
     Creates columns with custom separator.
 
 .EXAMPLE
     $columns = @(
-        @{ Text = "Name"; Width = 20; Alignment = 'l' }
-        @{ Text = "Value"; Width = 15; Alignment = 'r' }
+        New-UiColumn -Text 'Name' -Width 20 -Alignment 'l'
+        New-UiColumn -Text 'Value' -Width 15 -Alignment 'r'
     )
     Format-UI -Columns $columns -Width 50 -ColumnSeparator " | " -Border '=' -BorderColor '[38;5;196m'
     Column separators automatically inherit the red border color for consistent styling.
 
 .EXAMPLE
     $columns = @(
-        @{ Text = "Header"; Width = 20; Bold = $true; Underline = $true }
-        @{ Text = "Data"; Width = 20; Italic = $true }
+        New-UiColumn -Text 'Header' -Width 20 -Bold -Underline
+        New-UiColumn -Text 'Data' -Width 20 -Italic
     )
     Format-UI -Columns $columns -Width 50 -Config $Config
     Uses $Config.UI.ANSI.Basic formatting codes for bold, underline, and italic text.
@@ -85,6 +89,134 @@ Set-StrictMode -Version Latest
 Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
+
+function _TryGetConfigValue {
+    [CmdletBinding()]
+    param(
+        [Parameter()][AllowNull()]$Object,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
+        return $null
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
+        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+        try {
+            foreach ($k in $Object.Keys) {
+                if ($k -eq $Name) { return $Object[$k] }
+            }
+        }
+        catch { }
+        return $null
+    }
+
+    $p = $Object.PSObject.Properties[$Name]
+    if ($null -ne $p) { return $p.Value }
+    return $null
+}
+
+function _TryGetNestedValue {
+    [CmdletBinding()]
+    param(
+        [Parameter()][AllowNull()]$Root,
+        [Parameter(Mandatory)][string[]]$PathParts
+    )
+
+    $cur = $Root
+    foreach ($part in $PathParts) {
+        if ($null -eq $cur) { return $null }
+        $cur = _TryGetConfigValue -Object $cur -Name $part
+    }
+    return $cur
+}
+
+function New-UiColumn {
+    [CmdletBinding(PositionalBinding = $false)]
+    param(
+        [Parameter()]
+        [string]$Text = '',
+
+        [Parameter()]
+        [object]$Width = 'auto',
+
+        [Parameter()]
+        [ValidateSet('l', 'c', 'r')]
+        [string]$Alignment = 'l',
+
+        [Parameter()]
+        [ValidateRange(0, [int]::MaxValue)]
+        [int]$Padding = 1,
+
+        [Parameter()]
+        [string]$TextColor = $null,
+
+        [Parameter()]
+        [string]$BackgroundColor = $null,
+
+        [Parameter()]
+        [switch]$Bold,
+
+        [Parameter()]
+        [switch]$Italic,
+
+        [Parameter()]
+        [switch]$Underline,
+
+        [Parameter()]
+        [switch]$Dim,
+
+        [Parameter()]
+        [switch]$Blink,
+
+        [Parameter()]
+        [switch]$Strikethrough,
+
+        [Parameter()]
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$MinWidth = 10,
+
+        [Parameter()]
+        [ValidateRange(0, [int]::MaxValue)]
+        [int]$MaxWidth = 0
+    )
+
+    $col = [UiColumn]::new()
+    $col.Text = $Text
+    $col.Width = $Width
+    $col.Alignment = $Alignment
+    $col.Padding = $Padding
+    $col.TextColor = $TextColor
+    $col.BackgroundColor = $BackgroundColor
+    $col.Bold = $Bold.IsPresent
+    $col.Italic = $Italic.IsPresent
+    $col.Underline = $Underline.IsPresent
+    $col.Dim = $Dim.IsPresent
+    $col.Blink = $Blink.IsPresent
+    $col.Strikethrough = $Strikethrough.IsPresent
+    $col.MinWidth = $MinWidth
+    $col.MaxWidth = $MaxWidth
+    return $col
+}
+
+function New-UiKeyValueItem {
+    [CmdletBinding(PositionalBinding = $false)]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Key,
+
+        [Parameter()]
+        [object]$Value = $null,
+
+        [Parameter()]
+        [string]$Color = $null
+    )
+
+    return [UiKeyValueItem]::new($Key, $Value, $Color)
+}
 
 function Format-UI {
     [CmdletBinding()]
@@ -101,7 +233,7 @@ function Format-UI {
         [string]$BorderColor = '[38;5;75m',
 
         [Parameter(Mandatory)]
-        [hashtable[]]$Columns,
+        [object[]]$Columns,
 
         [Parameter()]
         [string]$ColumnSeparator = ' ',
@@ -116,7 +248,8 @@ function Format-UI {
     begin {
         # Safely derive column count; support single hashtable or null
         $colCount = if ($null -eq $Columns) { 0 } elseif ($Columns -is [array]) { $Columns.Count } else { 1 }
-        $configWidth = if ($Config -and $null -ne $Config.UI -and $null -ne $Config.UI.Width) { $Config.UI.Width } else { 'N/A' }
+        $uiWidth = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+        $configWidth = if ($null -ne $uiWidth) { $uiWidth } else { 'N/A' }
         Write-Verbose ("[Format-UI] BEGIN (WidthParam={0}, ConfigWidth={1}, Columns={2})" -f ($PSBoundParameters['Width']), $configWidth, $colCount)
         # Define constants
         $BORDER_WIDTH = 2  # Border adds 1 char on left + 1 on right
@@ -125,11 +258,16 @@ function Format-UI {
 
         # Set default width from $Config.UI.Width if not explicitly provided
         if ($PSBoundParameters.ContainsKey('Width') -eq $false) {
-            if ($Config -and $null -ne $Config.UI -and $null -ne $Config.UI.Width) {
-                $Width = $Config.UI.Width
+            $resolvedWidth = $null
+            if ($null -ne $uiWidth) {
+                try { $resolvedWidth = [int]$uiWidth } catch { $resolvedWidth = $null }
+            }
+
+            # Fallback to 80 if Config UI.Width is not available/valid
+            if ($null -ne $resolvedWidth -and $resolvedWidth -gt 0) {
+                $Width = $resolvedWidth
             }
             else {
-                # Fallback to 80 if $Config.UI.Width is not available
                 $Width = 80
             }
         }
@@ -137,6 +275,27 @@ function Format-UI {
 
     process {
         Write-Verbose "[Format-UI] Calculating layout..."
+
+        # Normalize columns: accept legacy hashtables and UiColumn objects.
+        $columnsForEngine = @()
+        foreach ($column in @($Columns)) {
+            if ($null -eq $column) {
+                continue
+            }
+
+            if ($column -is [hashtable]) {
+                $columnsForEngine += $column
+                continue
+            }
+
+            if ($column.PSObject.TypeNames -contains 'UiColumn') {
+                $columnsForEngine += $column.ToHashtable()
+                continue
+            }
+
+            $typeName = $column.GetType().FullName
+            throw "Unsupported column definition type: $typeName. Expected hashtable or UiColumn."
+        }
 
         # Calculate effective width based on border presence
         $hasBorder = -not [string]::IsNullOrEmpty($Border)
@@ -152,7 +311,7 @@ function Format-UI {
         Write-Verbose ("[Format-UI] Border={0} ContentWidth={1}" -f $hasBorder, $contentWidth)
 
         # Process multicolumn layout
-        $allFormattedLines = ConvertTo-MultiColumnLines -Columns $Columns -Width $contentWidth `
+        $allFormattedLines = ConvertTo-MultiColumnLines -Columns $columnsForEngine -Width $contentWidth `
             -ColumnSeparator $ColumnSeparator -ColumnSeparatorColor $effectiveColumnSeparatorColor `
             -EscapeChar $ESCAPE_CHAR -Config $Config
 
@@ -410,24 +569,32 @@ function Format-ColumnText {
     # Build ANSI color and formatting codes
     $ansiCodes = @()
 
+    $ansiBasic = if ($Config) { _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'Basic') } else { $null }
+
     # Add basic formatting codes
-    if ($Bold -and $Config -and $null -ne $Config.UI -and $null -ne $Config.UI.ANSI -and $null -ne $Config.UI.ANSI.Basic) {
-        $ansiCodes += $Config.UI.ANSI.Basic.Bold.TrimStart('[').TrimEnd('m')
+    if ($Bold -and $null -ne $ansiBasic) {
+        $boldCode = _TryGetConfigValue -Object $ansiBasic -Name 'Bold'
+        if (-not [string]::IsNullOrEmpty($boldCode)) { $ansiCodes += ([string]$boldCode).TrimStart('[').TrimEnd('m') }
     }
-    if ($Italic -and $Config -and $null -ne $Config.UI -and $null -ne $Config.UI.ANSI -and $null -ne $Config.UI.ANSI.Basic) {
-        $ansiCodes += $Config.UI.ANSI.Basic.Italic.TrimStart('[').TrimEnd('m')
+    if ($Italic -and $null -ne $ansiBasic) {
+        $italicCode = _TryGetConfigValue -Object $ansiBasic -Name 'Italic'
+        if (-not [string]::IsNullOrEmpty($italicCode)) { $ansiCodes += ([string]$italicCode).TrimStart('[').TrimEnd('m') }
     }
-    if ($Underline -and $Config -and $null -ne $Config.UI -and $null -ne $Config.UI.ANSI -and $null -ne $Config.UI.ANSI.Basic) {
-        $ansiCodes += $Config.UI.ANSI.Basic.Underline.TrimStart('[').TrimEnd('m')
+    if ($Underline -and $null -ne $ansiBasic) {
+        $underlineCode = _TryGetConfigValue -Object $ansiBasic -Name 'Underline'
+        if (-not [string]::IsNullOrEmpty($underlineCode)) { $ansiCodes += ([string]$underlineCode).TrimStart('[').TrimEnd('m') }
     }
-    if ($Dim -and $Config -and $null -ne $Config.UI -and $null -ne $Config.UI.ANSI -and $null -ne $Config.UI.ANSI.Basic) {
-        $ansiCodes += $Config.UI.ANSI.Basic.Dim.TrimStart('[').TrimEnd('m')
+    if ($Dim -and $null -ne $ansiBasic) {
+        $dimCode = _TryGetConfigValue -Object $ansiBasic -Name 'Dim'
+        if (-not [string]::IsNullOrEmpty($dimCode)) { $ansiCodes += ([string]$dimCode).TrimStart('[').TrimEnd('m') }
     }
-    if ($Blink -and $Config -and $null -ne $Config.UI -and $null -ne $Config.UI.ANSI -and $null -ne $Config.UI.ANSI.Basic) {
-        $ansiCodes += $Config.UI.ANSI.Basic.Blink.TrimStart('[').TrimEnd('m')
+    if ($Blink -and $null -ne $ansiBasic) {
+        $blinkCode = _TryGetConfigValue -Object $ansiBasic -Name 'Blink'
+        if (-not [string]::IsNullOrEmpty($blinkCode)) { $ansiCodes += ([string]$blinkCode).TrimStart('[').TrimEnd('m') }
     }
-    if ($Strikethrough -and $Config -and $null -ne $Config.UI -and $null -ne $Config.UI.ANSI -and $null -ne $Config.UI.ANSI.Basic) {
-        $ansiCodes += $Config.UI.ANSI.Basic.Strikethrough.TrimStart('[').TrimEnd('m')
+    if ($Strikethrough -and $null -ne $ansiBasic) {
+        $strikeCode = _TryGetConfigValue -Object $ansiBasic -Name 'Strikethrough'
+        if (-not [string]::IsNullOrEmpty($strikeCode)) { $ansiCodes += ([string]$strikeCode).TrimStart('[').TrimEnd('m') }
     }
 
     # Add color codes

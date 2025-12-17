@@ -412,6 +412,55 @@ class ValidationException : MediaManagerException {
     }
 }
 
+<#
+.SYNOPSIS
+    Exception thrown when configuration validation fails.
+
+.DESCRIPTION
+    Used for fail-fast configuration loading. Carries a multi-line summary
+    of all validation issues discovered during config build.
+#>
+class ConfigValidationException : MediaManagerException {
+    [object[]]$Issues
+
+    ConfigValidationException([string]$message) : base($message, 'Configuration') {
+        $this.RecoverySuggestion = 'Fix configuration issues and retry.'
+    }
+
+    ConfigValidationException([string]$message, [object[]]$issues) : base([ConfigValidationException]::FormatMessage($message, $issues), 'Configuration') {
+        $this.Issues = $issues
+        $this.RecoverySuggestion = 'Fix configuration issues and retry.'
+    }
+
+    static [string] FormatMessage([string]$message, [object[]]$issues) {
+        if ($null -eq $issues -or $issues.Count -eq 0) {
+            return $message
+        }
+
+        $lines = [System.Collections.Generic.List[string]]::new()
+        $lines.Add($message)
+        $lines.Add('')
+        $lines.Add("Validation issues ($($issues.Count)):")
+
+        foreach ($issue in $issues) {
+            if ($null -eq $issue) { continue }
+            $severity = $issue.PSObject.Properties['Severity']?.Value
+            $category = $issue.PSObject.Properties['Category']?.Value
+            $property = $issue.PSObject.Properties['Property']?.Value
+            $issueMessage = $issue.PSObject.Properties['Message']?.Value
+
+            if ([string]::IsNullOrWhiteSpace([string]$severity)) { $severity = 'Unknown' }
+            if ([string]::IsNullOrWhiteSpace([string]$category)) { $category = 'Unknown' }
+            if ([string]::IsNullOrWhiteSpace([string]$property)) { $property = '<unknown>' }
+            if ([string]::IsNullOrWhiteSpace([string]$issueMessage)) { $issueMessage = '<no message>' }
+
+            $lines.Add("- [$severity][$category] ${property}: $issueMessage")
+        }
+
+        return ($lines -join "`n")
+    }
+}
+
 #endregion Exception Classes
 
 #endregion Exception Classes

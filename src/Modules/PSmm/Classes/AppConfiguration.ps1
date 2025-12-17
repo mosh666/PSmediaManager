@@ -25,6 +25,33 @@ using namespace System.Collections.Generic
 using namespace System.ComponentModel
 using namespace System.Security
 
+function _PSmm_DictionaryHasKey {
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Dictionary,
+        [Parameter(Mandatory)][object]$Key
+    )
+
+    $hasKey = $false
+    try { $hasKey = $Dictionary.ContainsKey($Key) } catch { $hasKey = $false }
+    if (-not $hasKey) {
+        try { $hasKey = $Dictionary.Contains($Key) } catch { $hasKey = $false }
+    }
+
+    if (-not $hasKey) {
+        try {
+            foreach ($k in $Dictionary.Keys) {
+                if ($k -eq $Key) {
+                    return $true
+                }
+            }
+        }
+        catch {
+            # ignore
+        }
+    }
+    return $hasKey
+}
+
 #region Base Configuration Classes
 
 <#
@@ -440,6 +467,115 @@ class LoggingConfiguration {
         $this.Level = $level
         $this.DefaultLevel = $level
     }
+
+    static [LoggingConfiguration] FromObject([object]$obj) {
+        if ($null -eq $obj) {
+            return [LoggingConfiguration]::new()
+        }
+
+        if ($obj -is [LoggingConfiguration]) {
+            return $obj
+        }
+
+        $cfg = [LoggingConfiguration]::new()
+
+        $getValue = {
+            param(
+                [Parameter(Mandatory)]
+                [object]$source,
+                [Parameter(Mandatory)]
+                [string]$name
+            )
+
+            if ($null -eq $source) { return $null }
+
+            if ($source -is [System.Collections.IDictionary]) {
+                $hasKey = $false
+                try { $hasKey = $source.ContainsKey($name) } catch { $hasKey = $false }
+                if (-not $hasKey) { try { $hasKey = $source.Contains($name) } catch { $hasKey = $false } }
+                if (-not $hasKey) {
+                    try {
+                        foreach ($k in $source.Keys) {
+                            if ($k -eq $name) {
+                                return $source[$k]
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                if ($hasKey) { return $source[$name] }
+                return $null
+            }
+
+            $p = $source.PSObject.Properties[$name]
+            if ($null -ne $p) { return $p.Value }
+
+            return $null
+        }
+
+        $v = & $getValue $obj 'Path'
+        if ($null -ne $v) { $cfg.Path = [string]$v }
+
+        $v = & $getValue $obj 'Level'
+        if ($null -ne $v) { $cfg.Level = [string]$v }
+
+        $v = & $getValue $obj 'DefaultLevel'
+        if ($null -ne $v) { $cfg.DefaultLevel = [string]$v }
+
+        $v = & $getValue $obj 'Format'
+        if ($null -ne $v) { $cfg.Format = [string]$v }
+
+        $v = & $getValue $obj 'EnableConsole'
+        if ($null -ne $v) { $cfg.EnableConsole = [bool]$v }
+
+        $v = & $getValue $obj 'EnableFile'
+        if ($null -ne $v) { $cfg.EnableFile = [bool]$v }
+
+        $v = & $getValue $obj 'MaxFileSizeMB'
+        if ($null -ne $v) { $cfg.MaxFileSizeMB = [int]$v }
+
+        $v = & $getValue $obj 'MaxLogFiles'
+        if ($null -ne $v) { $cfg.MaxLogFiles = [int]$v }
+
+        $v = & $getValue $obj 'PrintBody'
+        if ($null -ne $v) { $cfg.PrintBody = [bool]$v }
+
+        $v = & $getValue $obj 'Append'
+        if ($null -ne $v) { $cfg.Append = [bool]$v }
+
+        $v = & $getValue $obj 'Encoding'
+        if ($null -ne $v) { $cfg.Encoding = [string]$v }
+
+        $v = & $getValue $obj 'PrintException'
+        if ($null -ne $v) { $cfg.PrintException = [bool]$v }
+
+        $v = & $getValue $obj 'ShortLevel'
+        if ($null -ne $v) { $cfg.ShortLevel = [bool]$v }
+
+        $v = & $getValue $obj 'OnlyColorizeLevel'
+        if ($null -ne $v) { $cfg.OnlyColorizeLevel = [bool]$v }
+
+        return $cfg
+    }
+
+    [hashtable] ToHashtable() {
+        return @{
+            Path = $this.Path
+            Level = $this.Level
+            DefaultLevel = $this.DefaultLevel
+            Format = $this.Format
+            EnableConsole = $this.EnableConsole
+            EnableFile = $this.EnableFile
+            MaxFileSizeMB = $this.MaxFileSizeMB
+            MaxLogFiles = $this.MaxLogFiles
+            PrintBody = $this.PrintBody
+            Append = $this.Append
+            Encoding = $this.Encoding
+            PrintException = $this.PrintException
+            ShortLevel = $this.ShortLevel
+            OnlyColorizeLevel = $this.OnlyColorizeLevel
+        }
+    }
 }
 
 <#
@@ -456,11 +592,84 @@ class RuntimeParameters {
     RuntimeParameters() {}
 
     RuntimeParameters([hashtable]$boundParameters) {
-        $this.Debug = $boundParameters.ContainsKey('Debug')
-        $this.Verbose = $boundParameters.ContainsKey('Verbose')
-        $this.Dev = $boundParameters.ContainsKey('Dev')
-        $this.Update = $boundParameters.ContainsKey('Update')
-        $this.NonInteractive = $boundParameters.ContainsKey('NonInteractive')
+        $this.Debug = ($boundParameters.ContainsKey('Debug') -and [bool]$boundParameters['Debug'])
+        $this.Verbose = ($boundParameters.ContainsKey('Verbose') -and [bool]$boundParameters['Verbose'])
+        $this.Dev = ($boundParameters.ContainsKey('Dev') -and [bool]$boundParameters['Dev'])
+        $this.Update = ($boundParameters.ContainsKey('Update') -and [bool]$boundParameters['Update'])
+        $this.NonInteractive = ($boundParameters.ContainsKey('NonInteractive') -and [bool]$boundParameters['NonInteractive'])
+    }
+
+    static [RuntimeParameters] FromObject([object]$obj) {
+        if ($null -eq $obj) {
+            return [RuntimeParameters]::new()
+        }
+
+        if ($obj -is [RuntimeParameters]) {
+            return $obj
+        }
+
+        $cfg = [RuntimeParameters]::new()
+
+        $getValue = {
+            param(
+                [Parameter(Mandatory)]
+                [object]$source,
+                [Parameter(Mandatory)]
+                [string]$name
+            )
+
+            if ($null -eq $source) { return $null }
+
+            if ($source -is [System.Collections.IDictionary]) {
+                $hasKey = $false
+                try { $hasKey = $source.ContainsKey($name) } catch { $hasKey = $false }
+                if (-not $hasKey) { try { $hasKey = $source.Contains($name) } catch { $hasKey = $false } }
+                if (-not $hasKey) {
+                    try {
+                        foreach ($k in $source.Keys) {
+                            if ($k -eq $name) {
+                                return $source[$k]
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                if ($hasKey) { return $source[$name] }
+                return $null
+            }
+
+            $p = $source.PSObject.Properties[$name]
+            if ($null -ne $p) { return $p.Value }
+
+            return $null
+        }
+
+        $v = & $getValue $obj 'Debug'
+        if ($null -ne $v) { $cfg.Debug = [bool]$v }
+
+        $v = & $getValue $obj 'Verbose'
+        if ($null -ne $v) { $cfg.Verbose = [bool]$v }
+
+        $v = & $getValue $obj 'Dev'
+        if ($null -ne $v) { $cfg.Dev = [bool]$v }
+
+        $v = & $getValue $obj 'Update'
+        if ($null -ne $v) { $cfg.Update = [bool]$v }
+
+        $v = & $getValue $obj 'NonInteractive'
+        if ($null -ne $v) { $cfg.NonInteractive = [bool]$v }
+
+        return $cfg
+    }
+
+    [hashtable] ToHashtable() {
+        return @{
+            Debug = $this.Debug
+            Verbose = $this.Verbose
+            Dev = $this.Dev
+            Update = $this.Update
+            NonInteractive = $this.NonInteractive
+        }
     }
 
     [bool] ShouldPause() {
@@ -491,6 +700,57 @@ class StorageDriveConfig {
         $this.Label = $label
         $this.DriveLetter = $driveLetter
         $this.UpdateStatus()
+    }
+
+    static [StorageDriveConfig] FromObject([object]$obj) {
+        if ($null -eq $obj) {
+            return [StorageDriveConfig]::new()
+        }
+
+        if ($obj -is [StorageDriveConfig]) {
+            return $obj
+        }
+
+        $cfg = [StorageDriveConfig]::new()
+
+        $labelObj = $null
+        $serialObj = $null
+        $driveLetterObj = $null
+        $pathObj = $null
+
+        if ($obj -is [System.Collections.IDictionary]) {
+            $labelObj = $obj['Label']
+            $serialObj = $obj['SerialNumber']
+            $driveLetterObj = $obj['DriveLetter']
+            $pathObj = $obj['Path']
+        }
+        else {
+            $p = $obj.PSObject.Properties['Label']
+            if ($null -ne $p) { $labelObj = $p.Value }
+
+            $p = $obj.PSObject.Properties['SerialNumber']
+            if ($null -ne $p) { $serialObj = $p.Value }
+
+            $p = $obj.PSObject.Properties['DriveLetter']
+            if ($null -ne $p) { $driveLetterObj = $p.Value }
+
+            $p = $obj.PSObject.Properties['Path']
+            if ($null -ne $p) { $pathObj = $p.Value }
+        }
+
+        if ($null -ne $labelObj) { $cfg.Label = [string]$labelObj }
+        if ($null -ne $serialObj) { $cfg.SerialNumber = [string]$serialObj }
+        if ($null -ne $driveLetterObj) { $cfg.DriveLetter = [string]$driveLetterObj }
+        if ($null -ne $pathObj) { $cfg.Path = [string]$pathObj }
+
+        return $cfg
+    }
+
+    [hashtable] ToHashtable() {
+        return @{
+            Label = $this.Label
+            SerialNumber = $this.SerialNumber
+        }
     }
 
     [void] UpdateStatus() {
@@ -550,6 +810,147 @@ class StorageGroupConfig {
         $this.Paths = [Dictionary[string, string]]::new()
     }
 
+    static [StorageGroupConfig] FromObject([string]$groupId, [object]$obj) {
+        $gid = if ([string]::IsNullOrWhiteSpace($groupId)) { '' } else { [string]$groupId }
+
+        if ($null -eq $obj) {
+            return [StorageGroupConfig]::new($gid)
+        }
+
+        if ($obj -is [StorageGroupConfig]) {
+            if ([string]::IsNullOrWhiteSpace($obj.GroupId) -and -not [string]::IsNullOrWhiteSpace($gid)) {
+                $obj.GroupId = $gid
+            }
+            if ($null -eq $obj.Backups) { $obj.Backups = [Dictionary[string, StorageDriveConfig]]::new() }
+            if ($null -eq $obj.Paths) { $obj.Paths = [Dictionary[string, string]]::new() }
+            return $obj
+        }
+
+        $cfg = [StorageGroupConfig]::new($gid)
+
+        $displayNameObj = $null
+        $masterObj = $null
+        $backupObj = $null
+        $backupsObj = $null
+        $pathsObj = $null
+
+        if ($obj -is [System.Collections.IDictionary]) {
+            $displayNameObj = $obj['DisplayName']
+            $masterObj = $obj['Master']
+            $backupObj = $obj['Backup']
+            $backupsObj = $obj['Backups']
+            $pathsObj = $obj['Paths']
+        }
+        else {
+            $p = $obj.PSObject.Properties['DisplayName']
+            if ($null -ne $p) { $displayNameObj = $p.Value }
+
+            $p = $obj.PSObject.Properties['Master']
+            if ($null -ne $p) { $masterObj = $p.Value }
+
+            $p = $obj.PSObject.Properties['Backup']
+            if ($null -ne $p) { $backupObj = $p.Value }
+
+            $p = $obj.PSObject.Properties['Backups']
+            if ($null -ne $p) { $backupsObj = $p.Value }
+
+            $p = $obj.PSObject.Properties['Paths']
+            if ($null -ne $p) { $pathsObj = $p.Value }
+        }
+
+        if ($null -ne $displayNameObj) {
+            $cfg.DisplayName = [string]$displayNameObj
+        }
+
+        # Support both legacy and safe-export shapes:
+        # - Master = @{ Label; SerialNumber }
+        # - Master = @{ Drive = @{ Label; SerialNumber }; Backups = @{...} }
+        if ($null -ne $masterObj) {
+            $masterDriveObj = $null
+            if ($masterObj -is [System.Collections.IDictionary] -and (_PSmm_DictionaryHasKey -Dictionary $masterObj -Key 'Drive')) {
+                $masterDriveObj = $masterObj['Drive']
+            }
+            elseif ($null -ne $masterObj.PSObject.Properties['Drive']) {
+                $masterDriveObj = $masterObj.Drive
+            }
+
+            $cfg.Master = if ($null -ne $masterDriveObj) {
+                [StorageDriveConfig]::FromObject($masterDriveObj)
+            }
+            else {
+                [StorageDriveConfig]::FromObject($masterObj)
+            }
+
+            # If backups were nested under Master.Backups, prefer them when Backup/Backups not provided
+            if (($null -eq $backupObj) -and ($null -eq $backupsObj)) {
+                if ($masterObj -is [System.Collections.IDictionary] -and (_PSmm_DictionaryHasKey -Dictionary $masterObj -Key 'Backups')) {
+                    $backupsObj = $masterObj['Backups']
+                }
+                elseif ($null -ne $masterObj.PSObject.Properties['Backups']) {
+                    $backupsObj = $masterObj.Backups
+                }
+            }
+        }
+
+        # Backups can be stored as Backup={ '1'={...} } or Backups={ '1'={...} }
+        $srcBackups = if ($null -ne $backupObj) { $backupObj } else { $backupsObj }
+        if ($null -ne $srcBackups) {
+            if ($srcBackups -is [System.Collections.IDictionary]) {
+                foreach ($bk in $srcBackups.Keys) {
+                    $key = [string]$bk
+                    $cfg.Backups[$key] = [StorageDriveConfig]::FromObject($srcBackups[$bk])
+                }
+            }
+            else {
+                foreach ($p in $srcBackups.PSObject.Properties) {
+                    $key = [string]$p.Name
+                    $cfg.Backups[$key] = [StorageDriveConfig]::FromObject($p.Value)
+                }
+            }
+        }
+
+        if ($null -ne $pathsObj) {
+            if ($pathsObj -is [System.Collections.IDictionary]) {
+                foreach ($pk in $pathsObj.Keys) {
+                    $cfg.Paths[[string]$pk] = [string]$pathsObj[$pk]
+                }
+            }
+            else {
+                foreach ($p in $pathsObj.PSObject.Properties) {
+                    $cfg.Paths[[string]$p.Name] = [string]$p.Value
+                }
+            }
+        }
+
+        if ($null -eq $cfg.Backups) { $cfg.Backups = [Dictionary[string, StorageDriveConfig]]::new() }
+        if ($null -eq $cfg.Paths) { $cfg.Paths = [Dictionary[string, string]]::new() }
+
+        return $cfg
+    }
+
+    [hashtable] ToHashtable() {
+        $backupTable = @{}
+        if ($null -ne $this.Backups) {
+            foreach ($bk in $this.Backups.Keys) {
+                $backupTable[[string]$bk] = if ($null -ne $this.Backups[$bk]) { $this.Backups[$bk].ToHashtable() } else { $null }
+            }
+        }
+
+        $pathsTable = @{}
+        if ($null -ne $this.Paths) {
+            foreach ($pk in $this.Paths.Keys) {
+                $pathsTable[[string]$pk] = $this.Paths[$pk]
+            }
+        }
+
+        return @{
+            DisplayName = $this.DisplayName
+            Master = if ($null -ne $this.Master) { $this.Master.ToHashtable() } else { $null }
+            Backup = $backupTable
+            Paths = $pathsTable
+        }
+    }
+
     [bool] IsValid() {
         return $null -ne $this.Master -and $this.Master.IsAvailable
     }
@@ -583,12 +984,12 @@ class AppConfiguration {
     [AppSecrets]$Secrets
     [LoggingConfiguration]$Logging
     [Dictionary[string, StorageGroupConfig]]$Storage
-    [hashtable]$Requirements
-    [hashtable]$Plugins
-    [hashtable]$UI
-    [hashtable]$Projects
+    [RequirementsConfig]$Requirements
+    [PluginsConfig]$Plugins
+    [UIConfig]$UI
+    [ProjectsConfig]$Projects
     # Internal, structured error tracking persisted with configuration
-    [hashtable]$InternalErrorMessages
+    [UiErrorCatalog]$InternalErrorMessages
     # Tracks PATH directories added during runtime for cleanup (unless -Dev mode)
     [string[]]$AddedPathEntries = @()
 
@@ -602,10 +1003,11 @@ class AppConfiguration {
         $this.Parameters = [RuntimeParameters]::new()
         $this.Logging = [LoggingConfiguration]::new()
         $this.Storage = [Dictionary[string, StorageGroupConfig]]::new()
-        $this.Plugins = @{ Global = $null; Project = $null; Resolved = $null; Paths = @{ Global = $null; Project = $null } }
-        $this.InternalErrorMessages = @{
-            Storage = @{}
-        }
+        $this.Requirements = [RequirementsConfig]::new()
+        $this.Plugins = [PluginsConfig]::new()
+        $this.UI = [UIConfig]::new()
+        $this.Projects = [ProjectsConfig]::new()
+        $this.InternalErrorMessages = [UiErrorCatalog]::new()
         $this.AddedPathEntries = @()
     }
 
@@ -627,10 +1029,11 @@ class AppConfiguration {
         $this.Logging = [LoggingConfiguration]::new($logPath)
 
         $this.Storage = [Dictionary[string, StorageGroupConfig]]::new()
-        $this.Plugins = @{ Global = $null; Project = $null; Resolved = $null; Paths = @{ Global = $null; Project = $null } }
-        $this.InternalErrorMessages = @{
-            Storage = @{}
-        }
+        $this.Requirements = [RequirementsConfig]::new()
+        $this.Plugins = [PluginsConfig]::new()
+        $this.UI = [UIConfig]::new()
+        $this.Projects = [ProjectsConfig]::new()
+        $this.InternalErrorMessages = [UiErrorCatalog]::new()
         $this.AddedPathEntries = @()
     }
 
@@ -652,6 +1055,169 @@ class AppConfiguration {
 
     [string] ToString() {
         return "$($this.DisplayName) v$($this.AppVersion)"
+    }
+
+    hidden static [object] _GetMemberValue([object]$obj, [string]$name) {
+        if ($null -eq $obj -or [string]::IsNullOrWhiteSpace($name)) {
+            return $null
+        }
+
+        if ($obj -is [System.Collections.IDictionary]) {
+            try { if ($obj.ContainsKey($name)) { return $obj[$name] } } catch { }
+            try { if ($obj.Contains($name)) { return $obj[$name] } } catch { }
+            try {
+                foreach ($k in $obj.Keys) {
+                    if ($k -eq $name) {
+                        return $obj[$k]
+                    }
+                }
+            }
+            catch { }
+            return $null
+        }
+
+        $p = $obj.PSObject.Properties[$name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
+    hidden static [void] _SetMemberValue([object]$obj, [string]$name, [object]$value) {
+        if ($null -eq $obj -or [string]::IsNullOrWhiteSpace($name)) {
+            return
+        }
+
+        if ($obj -is [System.Collections.IDictionary]) {
+            $obj[$name] = $value
+            return
+        }
+
+        try { $obj.$name = $value } catch { }
+    }
+
+    hidden static [string] _ToStringOrNull([object]$value) {
+        if ($null -eq $value) { return $null }
+        try {
+            $s = [string]$value
+            if ([string]::IsNullOrWhiteSpace($s)) { return $null }
+            return $s
+        }
+        catch {
+            return $null
+        }
+    }
+
+    static [AppConfiguration] FromObject([object]$obj) {
+        if ($null -eq $obj) {
+            throw [ArgumentNullException]::new('obj')
+        }
+
+        if ($obj -is [AppConfiguration]) {
+            return $obj
+        }
+
+        $cfg = [AppConfiguration]::new()
+
+        $internalNameValue = [AppConfiguration]::_ToStringOrNull([AppConfiguration]::_GetMemberValue($obj, 'InternalName'))
+        if (-not [string]::IsNullOrWhiteSpace($internalNameValue)) {
+            $cfg.InternalName = $internalNameValue
+        }
+
+        $displayNameValue = [AppConfiguration]::_ToStringOrNull([AppConfiguration]::_GetMemberValue($obj, 'DisplayName'))
+        if (-not [string]::IsNullOrWhiteSpace($displayNameValue)) {
+            $cfg.DisplayName = $displayNameValue
+        }
+
+        $cfg.AppVersion = [AppConfiguration]::_ToStringOrNull([AppConfiguration]::_GetMemberValue($obj, 'AppVersion'))
+
+        $parametersSource = [AppConfiguration]::_GetMemberValue($obj, 'Parameters')
+        $cfg.Parameters = [RuntimeParameters]::FromObject($parametersSource)
+
+        $pathsSource = [AppConfiguration]::_GetMemberValue($obj, 'Paths')
+        $runtimeRoot = [AppConfiguration]::_ToStringOrNull([AppConfiguration]::_GetMemberValue($pathsSource, 'Root'))
+        $repoRoot = [AppConfiguration]::_ToStringOrNull([AppConfiguration]::_GetMemberValue($pathsSource, 'RepositoryRoot'))
+        if ([string]::IsNullOrWhiteSpace($runtimeRoot)) {
+            $runtimeRoot = $repoRoot
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($runtimeRoot)) {
+            $cfg.Paths = if (-not [string]::IsNullOrWhiteSpace($repoRoot)) {
+                [AppPaths]::new($repoRoot, $runtimeRoot)
+            }
+            else {
+                [AppPaths]::new($runtimeRoot)
+            }
+
+            $cfg.Secrets = [AppSecrets]::new($cfg.Paths.App.Vault)
+        }
+
+        $loggingSource = [AppConfiguration]::_GetMemberValue($obj, 'Logging')
+        if ($null -ne $loggingSource) {
+            $cfg.Logging = [LoggingConfiguration]::FromObject($loggingSource)
+        }
+
+        $requirementsSource = [AppConfiguration]::_GetMemberValue($obj, 'Requirements')
+        if ($null -ne $requirementsSource) {
+            $cfg.Requirements = [RequirementsConfig]::FromObject($requirementsSource)
+        }
+
+        $pluginsSource = [AppConfiguration]::_GetMemberValue($obj, 'Plugins')
+        if ($null -ne $pluginsSource) {
+            $cfg.Plugins = [PluginsConfig]::FromObject($pluginsSource)
+        }
+
+        $uiSource = [AppConfiguration]::_GetMemberValue($obj, 'UI')
+        if ($null -ne $uiSource) {
+            $cfg.UI = [UIConfig]::FromObject($uiSource)
+        }
+
+        $projectsSource = [AppConfiguration]::_GetMemberValue($obj, 'Projects')
+        if ($null -ne $projectsSource) {
+            $cfg.Projects = [ProjectsConfig]::FromObject($projectsSource)
+        }
+
+        $errorsSource = [AppConfiguration]::_GetMemberValue($obj, 'InternalErrorMessages')
+        if ($null -ne $errorsSource) {
+            $cfg.InternalErrorMessages = [UiErrorCatalog]::FromObject($errorsSource)
+        }
+
+        $addedPathEntriesValue = [AppConfiguration]::_GetMemberValue($obj, 'AddedPathEntries')
+        if ($addedPathEntriesValue -is [string[]]) {
+            $cfg.AddedPathEntries = $addedPathEntriesValue
+        }
+        elseif ($addedPathEntriesValue -is [System.Collections.IEnumerable] -and -not ($addedPathEntriesValue -is [string])) {
+            try {
+                $cfg.AddedPathEntries = @($addedPathEntriesValue | ForEach-Object { [string]$_ })
+            }
+            catch {
+                # ignore
+            }
+        }
+
+        $storageSource = [AppConfiguration]::_GetMemberValue($obj, 'Storage')
+        if ($null -eq $storageSource) {
+            $cfg.Storage = [Dictionary[string, StorageGroupConfig]]::new()
+        }
+        else {
+            $normalizedStorage = [Dictionary[string, StorageGroupConfig]]::new()
+            if ($storageSource -is [System.Collections.IDictionary]) {
+                foreach ($k in $storageSource.Keys) {
+                    $key = [string]$k
+                    $normalizedStorage[$key] = [StorageGroupConfig]::FromObject($key, $storageSource[$k])
+                }
+            }
+            else {
+                foreach ($p in $storageSource.PSObject.Properties) {
+                    $key = [string]$p.Name
+                    $normalizedStorage[$key] = [StorageGroupConfig]::FromObject($key, $p.Value)
+                }
+            }
+            $cfg.Storage = $normalizedStorage
+        }
+
+        return $cfg
     }
 }
 

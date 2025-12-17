@@ -12,6 +12,80 @@ Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
 
+function _GetConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter()][AllowNull()][object]$Object,
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
+        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+        try {
+            foreach ($k in $Object.Keys) {
+                if ($k -eq $Name) { return $Object[$k] }
+            }
+        }
+        catch { }
+        return $null
+    }
+
+    $p = $Object.PSObject.Properties[$Name]
+    if ($null -ne $p) {
+        return $p.Value
+    }
+
+    return $null
+}
+
+function _SetConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter()][AllowNull()][object]$Object,
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name,
+        [Parameter()][AllowNull()]$Value
+    )
+
+    if ($null -eq $Object) {
+        return
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        $Object[$Name] = $Value
+        return
+    }
+
+    try {
+        $Object.$Name = $Value
+    }
+    catch {
+        # ignore
+    }
+}
+
+function _GetConfigNestedValue {
+    [CmdletBinding()]
+    param(
+        [Parameter()][AllowNull()][object]$Object,
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Path
+    )
+
+    $current = $Object
+    foreach ($segment in $Path) {
+        $current = _GetConfigMemberValue -Object $current -Name $segment
+        if ($null -eq $current) {
+            return $null
+        }
+    }
+
+    return $current
+}
+
 <#
 .SYNOPSIS
     Confirms PowerShell environment meets application requirements.
@@ -46,7 +120,7 @@ function Confirm-PowerShell {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter(Mandatory)]
         [ValidateSet('PSVersion', 'PSModules')]
@@ -84,18 +158,22 @@ function Confirm-PowerShellVersion {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config
+        [object]$Config
     )
 
     Write-PSmmLog -Level INFO -Context 'Confirm PS Version' `
         -Message 'Validating PowerShell version against minimum requirement' -Console -File
 
     try {
-        $minimumVersion = $Config.Requirements.PowerShell.VersionMinimum
+        $requirementsSource = _GetConfigMemberValue -Object $Config -Name 'Requirements'
+        $requirements = [RequirementsConfig]::FromObject($requirementsSource)
+        _SetConfigMemberValue -Object $Config -Name 'Requirements' -Value $requirements
+
+        $minimumVersion = $requirements.PowerShell.VersionMinimum
         $currentVersion = $PSVersionTable.PSVersion
 
         # Optionally record current version in configuration if supported
-        try { $Config.Requirements.PowerShell.VersionCurrent = $currentVersion } catch { Write-Verbose "Unable to record current PowerShell version in config: $_" }
+        try { $requirements.PowerShell.VersionCurrent = $currentVersion } catch { Write-Verbose "Unable to record current PowerShell version in config: $_" }
 
         if ($currentVersion -lt $minimumVersion) {
             $message = "PowerShell version too low. Required: >=$minimumVersion, Current: $currentVersion"
@@ -132,20 +210,28 @@ function Confirm-PowerShellModules {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config
+        [object]$Config
     )
 
     Write-PSmmLog -Level INFO -Context 'Confirm PS Modules' `
         -Message 'Checking for required PowerShell modules' -Console -File
 
+    $requirementsSource = _GetConfigMemberValue -Object $Config -Name 'Requirements'
+    $requirements = [RequirementsConfig]::FromObject($requirementsSource)
+    _SetConfigMemberValue -Object $Config -Name 'Requirements' -Value $requirements
+
+    $parametersSource = _GetConfigMemberValue -Object $Config -Name 'Parameters'
+    $parameters = [RuntimeParameters]::FromObject($parametersSource)
+    _SetConfigMemberValue -Object $Config -Name 'Parameters' -Value $parameters
+
     # Install and import required modules
-    foreach ($module in $Config.Requirements.PowerShell.Modules) {
+    foreach ($module in $requirements.PowerShell.Modules) {
         Install-RequiredModule -ModuleInfo $module
         Import-RequiredModule -ModuleInfo $module
     }
 
     # Update modules if requested
-    if ($Config.Parameters.Update) {
+    if ($parameters.Update) {
         Update-PowerShellModules
     }
 }

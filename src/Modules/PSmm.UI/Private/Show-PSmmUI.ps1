@@ -21,6 +21,51 @@ Set-StrictMode -Version Latest
 
 # Note: Build-UIRuntimeFromConfig has been removed. UI functions now work directly with AppConfiguration.
 
+function _TryGetConfigValue {
+    [CmdletBinding()]
+    param(
+        [Parameter()][AllowNull()]$Object,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
+        return $null
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
+        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+        try {
+            foreach ($k in $Object.Keys) {
+                if ($k -eq $Name) {
+                    return $Object[$k]
+                }
+            }
+        }
+        catch { }
+        return $null
+    }
+
+    $p = $Object.PSObject.Properties[$Name]
+    if ($null -ne $p) { return $p.Value }
+    return $null
+}
+
+function _TryGetNestedValue {
+    [CmdletBinding()]
+    param(
+        [Parameter()][AllowNull()]$Root,
+        [Parameter(Mandatory)][string[]]$PathParts
+    )
+
+    $cur = $Root
+    foreach ($part in $PathParts) {
+        if ($null -eq $cur) { return $null }
+        $cur = _TryGetConfigValue -Object $cur -Name $part
+    }
+    return $cur
+}
+
 #endregion ########## Helpers ##########
 
 #region ########## Header/Footer ##########
@@ -70,75 +115,76 @@ function Show-Header {
 
         [Parameter()]
         [string]$StorageGroupFilter = $null
-    )    $Columns = @(
-        @{
-            Text = $Config.DisplayName
-            Width = '50%'
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Primary
-            Bold = $true
-            Italic = $true
+    )
+
+    $displayName = [string](_TryGetConfigValue -Object $Config -Name 'DisplayName')
+    if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = 'PSmediaManager' }
+
+    $appVersion = [string](_TryGetConfigValue -Object $Config -Name 'AppVersion')
+
+    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidth = 80
+    if ($null -ne $uiWidthSource) {
+        try {
+            $uiWidth = [int]$uiWidthSource
+            if ($uiWidth -lt 1) { $uiWidth = 80 }
         }
-        @{
-            Text = $Config.AppVersion
-            Width = 'auto'
-            Alignment = 'r'
-            TextColor = $Config.UI.ANSI.FG.Accent
-            Italic = $true
+        catch {
+            $uiWidth = 80
         }
+    }
+
+    $fgPrimary     = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Primary')
+    $fgAccent      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
+    $fgError       = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Error')
+    $fgWarning     = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Warning')
+    $fgNeutral4    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral4')
+    $fgBackupDrive = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'BackupDrive')
+    $fgMasterDrive = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'MasterDrive')
+
+    $Columns = @(
+        New-UiColumn -Text $displayName -Width '50%' -Alignment 'l' -TextColor $fgPrimary -Bold -Italic
+        New-UiColumn -Text $appVersion -Width 'auto' -Alignment 'r' -TextColor $fgAccent -Italic
     )
 
     # PS 7.5.4+ baseline guarantees $PSSpecialChar
     $borderChar = $PSSpecialChar.SixPointStar
 
-    Format-UI -Columns $Columns -Width $Config.UI.Width -ColumnSeparator '' -Border $borderChar -Config $Config
+    Format-UI -Columns $Columns -Width $uiWidth -ColumnSeparator '' -Border $borderChar -Config $Config
     Write-PSmmHost ''
 
     # Display error messages if enabled
     if ($ShowStorageErrors) {
-        # Filter error messages based on storage group if specified
-        $ErrorHashtable = if (-not [string]::IsNullOrWhiteSpace($StorageGroupFilter) -and
-            $Config.InternalErrorMessages.ContainsKey('Storage')) {
-            # Create filtered hashtable with only errors matching the storage group
-            $FilteredErrors = @{}
-            foreach ($errorKey in $Config.InternalErrorMessages.Storage.Keys) {
-                # Error keys are formatted as: "StorageGroup.Type.BackupId" or "StorageGroup.Type"
-                # e.g., "1.Backup.2" or "1.Master"
-                if ($errorKey -match "^$([regex]::Escape($StorageGroupFilter))\.") {
-                    $FilteredErrors[$errorKey] = $Config.InternalErrorMessages.Storage[$errorKey]
-                }
-            }
-            @{ Storage = $FilteredErrors }
-        }
-        else {
-            $Config.InternalErrorMessages
+        $internalErrorsSource = _TryGetConfigValue -Object $Config -Name 'InternalErrorMessages'
+        $errorCatalog = [UiErrorCatalog]::FromObject($internalErrorsSource)
+        if (-not [string]::IsNullOrWhiteSpace($StorageGroupFilter)) {
+            $errorCatalog = $errorCatalog.FilterStorageGroup($StorageGroupFilter)
         }
 
-        $ErrorMessages = Get-ErrorMessages -ErrorHashtable $ErrorHashtable
+        $ErrorMessages = Get-ErrorMessages -ErrorHashtable $errorCatalog
         if ($ErrorMessages -and @($ErrorMessages).Count -gt 0) {
             foreach ($ErrorMsg in $ErrorMessages) {
                 $ErrorColumns = @(
-                    @{
-                        Text = $ErrorMsg
-                        Width = $Config.UI.Width
-                        Alignment = 'c'
-                        TextColor = $Config.UI.ANSI.FG.Error
-                        Bold = $true
-                        Blink = $true
-                    }
+                    New-UiColumn -Text $ErrorMsg -Width $uiWidth -Alignment 'c' -TextColor $fgError -Bold -Blink
                 )
-                Format-UI -Columns $ErrorColumns -Width $Config.UI.Width -Config $Config
+                Format-UI -Columns $ErrorColumns -Width $uiWidth -Config $Config
             }
             Write-PSmmHost ''
         }
     }
 
     # Display current project information if available and ShowProject is enabled
-    if ($ShowProject -and $Config.Projects.ContainsKey('Current') -and $Config.Projects.Current.ContainsKey('Name')) {
+    $projects = _TryGetConfigValue -Object $Config -Name 'Projects'
+    $currentProjectSource = _TryGetConfigValue -Object $projects -Name 'Current'
+    if ($ShowProject -and $null -ne $currentProjectSource) {
+        $currentProject = [ProjectCurrentConfig]::FromObject($currentProjectSource)
+        if ([string]::IsNullOrWhiteSpace($currentProject.Name)) {
+            return
+        }
         Write-PSmmHost ''
 
         # Get project name
-        $CurrentProjectName = $Config.Projects.Current.Name
+        $CurrentProjectName = $currentProject.Name
 
         # Build project display with folder icon
         # Use UTF-16 surrogate pairs for emoji > U+FFFF (0x1F4C1 = 📁)
@@ -146,10 +192,10 @@ function Show-Header {
 
         # Get storage disk information if available
         $DiskDisplay = ''
-        $DiskColor = $Config.UI.ANSI.FG.Accent
+        $DiskColor = $fgAccent
 
-        if ($Config.Projects.Current.ContainsKey('StorageDrive')) {
-            $storageDrive = $Config.Projects.Current.StorageDrive
+        if ($null -ne $currentProject.StorageDrive -and -not [string]::IsNullOrWhiteSpace($currentProject.StorageDrive.Label)) {
+            $storageDrive = $currentProject.StorageDrive
 
             # Determine drive type and icon based on label pattern
             # Use UTF-16 surrogate pairs for emoji > U+FFFF
@@ -157,11 +203,11 @@ function Show-Header {
 
             if ($storageDrive.Label -match '-Backup-\d+$') {
                 $driveIcon = [char]::ConvertFromUtf32(0x1F4C0)  # 📀 backup disc icon
-                $DiskColor = $Config.UI.ANSI.FG.BackupDrive
+                $DiskColor = $fgBackupDrive
             }
             elseif ($storageDrive.Label -notmatch '-Backup-') {
                 $driveIcon = [char]::ConvertFromUtf32(0x1F4BF)  # 💿 master disc icon
-                $DiskColor = $Config.UI.ANSI.FG.MasterDrive
+                $DiskColor = $fgMasterDrive
             }
 
             # Build disk display string with icon
@@ -172,62 +218,32 @@ function Show-Header {
         if (-not [string]::IsNullOrWhiteSpace($DiskDisplay)) {
             # Two-column layout: Project on left, Disk info on right
             $ProjectMetadataColumns = @(
-                @{
-                    Text = $ProjectDisplay
-                    Width = '50%'
-                    Alignment = 'l'
-                    TextColor = $Config.UI.ANSI.FG.Warning
-                    Bold = $true
-                }
-                @{
-                    Text = $DiskDisplay
-                    Width = '50%'
-                    Alignment = 'r'
-                    TextColor = $DiskColor
-                    Bold = $true
-                }
+                New-UiColumn -Text $ProjectDisplay -Width '50%' -Alignment 'l' -TextColor $fgWarning -Bold
+                New-UiColumn -Text $DiskDisplay -Width '50%' -Alignment 'r' -TextColor $DiskColor -Bold
             )
         }
         else {
             # Single column layout if no disk info
             $ProjectMetadataColumns = @(
-                @{
-                    Text = $ProjectDisplay
-                    Width = $Config.UI.Width
-                    Alignment = 'c'
-                    TextColor = $Config.UI.ANSI.FG.Warning
-                    Bold = $true
-                    Underline = $true
-                }
+                New-UiColumn -Text $ProjectDisplay -Width $uiWidth -Alignment 'c' -TextColor $fgWarning -Bold -Underline
             )
         }
 
-        Format-UI -Columns $ProjectMetadataColumns -Width $Config.UI.Width -Config $Config
+        Format-UI -Columns $ProjectMetadataColumns -Width $uiWidth -Config $Config
 
         # Add a subtle separator line for visual clarity
         $SeparatorColumns = @(
-            @{
-                Text = [string]::new([char]0x2500, $Config.UI.Width)  # ─ horizontal line
-                Width = $Config.UI.Width
-                Alignment = 'c'
-                TextColor = $Config.UI.ANSI.FG.Neutral4
-                Dim = $true
-            }
+            New-UiColumn -Text ([string]::new([char]0x2500, $uiWidth)) -Width $uiWidth -Alignment 'c' -TextColor $fgNeutral4 -Dim
         )
-        Format-UI -Columns $SeparatorColumns -Width $Config.UI.Width -Config $Config
+        Format-UI -Columns $SeparatorColumns -Width $uiWidth -Config $Config
     }
     elseif (-not [string]::IsNullOrWhiteSpace($ProjectName)) {
         # Fallback to legacy parameter if no current project is set
         Write-PSmmHost ''
         $TitleColumns = @(
-            @{
-                Text = "$($Title): $ProjectName"
-                Width = $Config.UI.Width
-                Alignment = 'c'
-                Underline = $true
-            }
+            New-UiColumn -Text "$($Title): $ProjectName" -Width $uiWidth -Alignment 'c' -Underline
         )
-        Format-UI -Columns $TitleColumns -Width $Config.UI.Width -Config $Config
+        Format-UI -Columns $TitleColumns -Width $uiWidth -Config $Config
     }
 }
 
@@ -244,24 +260,31 @@ function Show-Footer {
         [Parameter(Mandatory)]
         [ValidateNotNull()]
         [object]$Config
-    )    $FooterColumns = @(
-        @{
-            Text = '[K] Start KeePassXC'
-            Width = '50%'
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Accent
+    )
+
+    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidth = 80
+    if ($null -ne $uiWidthSource) {
+        try {
+            $uiWidth = [int]$uiWidthSource
+            if ($uiWidth -lt 1) { $uiWidth = 80 }
         }
-        @{
-            Text = "Show System Info [I]`nQuit [Q]"
-            Width = 'auto'
-            Alignment = 'r'
-            TextColor = $Config.UI.ANSI.FG.Info
+        catch {
+            $uiWidth = 80
         }
+    }
+
+    $fgAccent = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
+    $fgInfo   = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
+
+    $FooterColumns = @(
+        New-UiColumn -Text '[K] Start KeePassXC' -Width '50%' -Alignment 'l' -TextColor $fgAccent
+        New-UiColumn -Text "Show System Info [I]`nQuit [Q]" -Width 'auto' -Alignment 'r' -TextColor $fgInfo
     )
 
     $borderChar = $PSSpecialChar.SixPointStar
 
-    Format-UI -Columns $FooterColumns -Width $Config.UI.Width -Border $borderChar -Config $Config
+    Format-UI -Columns $FooterColumns -Width $uiWidth -Border $borderChar -Config $Config
 }
 
 #endregion ########## Header/Footer ##########
@@ -295,65 +318,142 @@ function Show-MenuMain {
         [string]$StorageGroup = $null,
 
         [Parameter()]
-        [hashtable]$Projects = $null
-    )    if ($Config.Parameters.Debug -or $Config.Parameters.Dev) {
-        Write-Verbose '[UI] Show-MenuMain starting diagnostics...'
-        Write-Verbose ("[UI] Storage groups present: {0}" -f ($Config.Storage.Keys -join ', '))
-        if ($Config.Projects -is [hashtable] -and $Config.Projects.ContainsKey('Registry') -and $null -ne $Config.Projects.Registry) {
-            $hasRegMaster = ($Config.Projects.Registry -is [hashtable] -and $Config.Projects.Registry.ContainsKey('Master')) -or ($null -ne $Config.Projects.Registry.PSObject.Properties['Master'])
-            if ($hasRegMaster -and $null -ne $Config.Projects.Registry.Master) {
-                $keys = if ($Config.Projects.Registry.Master -is [hashtable]) { $Config.Projects.Registry.Master.Keys } else { @() }
-                Write-Verbose ("[UI] Registry Master keys: {0}" -f ($keys -join ', '))
+        [object]$Projects = $null
+    )
+
+    function _TryGetConfigValue {
+        [CmdletBinding()]
+        param(
+            [Parameter()][AllowNull()][object]$Object,
+            [Parameter()][string]$Name
+        )
+
+        if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) {
+                    return $Object[$Name]
+                }
             }
-        } else {
+            catch {
+                # ignore
+            }
+
+            try {
+                if ($Object.Contains($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # ignore
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) {
+                        return $Object[$k]
+                    }
+                }
+            }
+            catch {
+                # ignore
+            }
+
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
+    $storageMap = _TryGetConfigValue -Object $Config -Name 'Storage'
+    $storageKeys = @()
+    if ($storageMap -is [System.Collections.IDictionary]) {
+        $storageKeys = @($storageMap.Keys)
+    }
+    elseif ($null -ne $storageMap) {
+        try {
+            $k = $storageMap.Keys
+            if ($null -ne $k) { $storageKeys = @($k) }
+        }
+        catch {
+            # ignore
+        }
+    }
+
+    $parameters = _TryGetConfigValue -Object $Config -Name 'Parameters'
+    $isDebugOrDev = [bool](_TryGetConfigValue -Object $parameters -Name 'Debug') -or [bool](_TryGetConfigValue -Object $parameters -Name 'Dev')
+
+    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidth = 80
+    if ($null -ne $uiWidthSource) {
+        try {
+            $uiWidth = [int]$uiWidthSource
+            if ($uiWidth -lt 1) { $uiWidth = 80 }
+        }
+        catch {
+            $uiWidth = 80
+        }
+    }
+
+    $fgAccent       = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
+    $fgWarning      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Warning')
+    $fgSuccess      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Success')
+    $fgSuccessLight = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'SuccessLight')
+    $fgError        = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Error')
+
+    if ($isDebugOrDev) {
+        Write-Verbose '[UI] Show-MenuMain starting diagnostics...'
+        Write-Verbose ("[UI] Storage groups present: {0}" -f ($storageKeys -join ', '))
+
+        $projectsObj = _TryGetConfigValue -Object $Config -Name 'Projects'
+        $registry = _TryGetConfigValue -Object $projectsObj -Name 'Registry'
+
+        if ($null -ne $registry) {
+            $master = _TryGetConfigValue -Object $registry -Name 'Master'
+
+            if ($master -is [System.Collections.IDictionary]) {
+                Write-Verbose ("[UI] Registry Master keys: {0}" -f (($master.Keys | Sort-Object) -join ', '))
+            }
+            else {
+                Write-Verbose '[UI] Projects.Registry present but Master keys not enumerable'
+            }
+        }
+        else {
             Write-Verbose '[UI] Projects.Registry not present (skipping registry diagnostics)'
         }
     }
 
     # Display filter storage group option
     $FilterOptionColumns = @(
-        @{
-            Text = '[S] Filter Storage Group'
-            Width = $Config.UI.Width
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Accent
-        }
+        New-UiColumn -Text '[S] Filter Storage Group' -Width $uiWidth -Alignment 'l' -TextColor $fgAccent
     )
-    Format-UI -Columns $FilterOptionColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $FilterOptionColumns -Width $uiWidth -Config $Config
     Write-PSmmHost ''
 
     # Display current filter status
     if (-not [string]::IsNullOrWhiteSpace($StorageGroup)) {
         $FilterColumns = @(
-            @{
-                Text = "$('=' * 18) Storage Group $StorageGroup $('=' * 18)"
-                Width = $Config.UI.Width
-                Alignment = 'c'
-                TextColor = $Config.UI.ANSI.FG.Warning
-                Bold = $true
-            }
+            New-UiColumn -Text "$('=' * 18) Storage Group $StorageGroup $('=' * 18)" -Width $uiWidth -Alignment 'c' -TextColor $fgWarning -Bold
         )
-        Format-UI -Columns $FilterColumns -Width $Config.UI.Width -Config $Config
+        Format-UI -Columns $FilterColumns -Width $uiWidth -Config $Config
         Write-PSmmHost ''
     }
 
     # Action buttons
     $Columns = @(
-        @{
-            Text = '[C] Create Project'
-            Width = '50%'
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Success
-        },
-        @{
-            Text = '[R] Reconfigure Storage'
-            Width = '50%'
-            Alignment = 'r'
-            TextColor = $Config.UI.ANSI.FG.Accent
-        }
+        New-UiColumn -Text '[C] Create Project' -Width '50%' -Alignment 'l' -TextColor $fgSuccess
+        New-UiColumn -Text '[R] Reconfigure Storage' -Width '50%' -Alignment 'r' -TextColor $fgAccent
 
     )
-    Format-UI -Columns $Columns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $Columns -Width $uiWidth -Config $Config
     Write-PSmmHost ''
 
     Write-PSmmLog -Level NOTICE -Context 'Show-Projects' -Message 'Load available projects' -File
@@ -361,31 +461,38 @@ function Show-MenuMain {
         $Projects = Get-PSmmProjects -Config $Config
     }
 
-    if ($Config.Parameters.Debug -or $Config.Parameters.Dev) {
-        $masterTotal = ($Projects.Master.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
-        $backupTotal = ($Projects.Backup.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
+    $projectsIndex = [UiProjectsIndex]::FromObject($Projects)
+
+    if ($isDebugOrDev) {
+        $masterTotal = ($projectsIndex.Master.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
+        $backupTotal = ($projectsIndex.Backup.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
         Write-Verbose ("[UI] Retrieved projects: MasterTotal={0} BackupTotal={1}" -f $masterTotal, $backupTotal)
-        foreach ($k in $Projects.Master.Keys) { Write-Verbose ("[UI] Master[{0}] Count={1}" -f $k, $Projects.Master[$k].Count) }
-        foreach ($k in $Projects.Backup.Keys) { Write-Verbose ("[UI] Backup[{0}] Count={1}" -f $k, $Projects.Backup[$k].Count) }
+        foreach ($k in $projectsIndex.Master.Keys) { Write-Verbose ("[UI] Master[{0}] Count={1}" -f $k, $projectsIndex.Master[$k].Count) }
+        foreach ($k in $projectsIndex.Backup.Keys) { Write-Verbose ("[UI] Backup[{0}] Count={1}" -f $k, $projectsIndex.Backup[$k].Count) }
     }
 
     # Determine which storage groups to display
     $StorageGroupsToDisplay = if ([string]::IsNullOrWhiteSpace($StorageGroup)) {
         # Show all storage groups
-        $Config.Storage.Keys | Sort-Object
+        $storageKeys | Sort-Object
     }
     else {
         # Show only the specified storage group
         # Find matching storage group key (handles string vs int comparison)
-        $MatchingKey = $Config.Storage.Keys | Where-Object { $_.ToString() -eq $StorageGroup.ToString() } | Select-Object -First 1
+        $MatchingKey = $storageKeys | Where-Object { $_.ToString() -eq $StorageGroup.ToString() } | Select-Object -First 1
 
         if ($MatchingKey) {
             @($MatchingKey)
         }
         else {
-            Write-PSmmHost "Storage Group '$StorageGroup' not found. Available groups: $($Config.Storage.Keys -join ', ')" -ForegroundColor Red
+            Write-PSmmHost "Storage Group '$StorageGroup' not found. Available groups: $($storageKeys -join ', ')" -ForegroundColor Red
             return
         }
+    }
+
+    if ($null -eq $StorageGroupsToDisplay -or $StorageGroupsToDisplay.Count -eq 0) {
+        Write-PSmmHost 'No storage groups configured.' -ForegroundColor DarkGray
+        return
     }
 
     # Group and display projects by storage group
@@ -393,34 +500,24 @@ function Show-MenuMain {
         # Display Storage Group Header (only when not filtered, as it's shown above when filtered)
         if ([string]::IsNullOrWhiteSpace($StorageGroup)) {
             $StorageGroupColumns = @(
-                @{
-                    Text = "$('=' * 16) Storage Group $storageGroupKey $('=' * 16)"
-                    Width = $Config.UI.Width
-                    Alignment = 'c'
-                    TextColor = $Config.UI.ANSI.FG.Warning
-                    Bold = $true
-                }
+                New-UiColumn -Text "$('=' * 16) Storage Group $storageGroupKey $('=' * 16)" -Width $uiWidth -Alignment 'c' -TextColor $fgWarning -Bold
             )
-            Format-UI -Columns $StorageGroupColumns -Width $Config.UI.Width -Config $Config
+            Format-UI -Columns $StorageGroupColumns -Width $uiWidth -Config $Config
             Write-PSmmHost ''
         }
 
         # Collect all drives (Master and Backup) for this storage group
-        $AllDrivesInGroup = @{}
+        $AllDrivesInGroup = [System.Collections.Generic.Dictionary[string, UiDriveProjectsInfo]]::new()
 
         # Add Master drives
-        if ($Projects.ContainsKey('Master') -and $null -ne $Projects.Master -and $Projects.Master.Count -gt 0) {
-            foreach ($driveLabel in $Projects.Master.Keys) {
-                $driveProjects = $Projects.Master[$driveLabel]
+        if ($null -ne $projectsIndex.Master -and $projectsIndex.Master.Count -gt 0) {
+            foreach ($driveLabel in $projectsIndex.Master.Keys) {
+                $driveProjects = $projectsIndex.Master[$driveLabel]
                 if ($driveProjects -and $driveProjects.Count -gt 0) {
                     $firstProject = $driveProjects | Select-Object -First 1
                     if ($firstProject -and (Get-Member -InputObject $firstProject -Name 'StorageGroup' -MemberType Properties)) {
                         if ($firstProject.StorageGroup -eq $storageGroupKey) {
-                            $AllDrivesInGroup[$driveLabel] = @{
-                                Projects = $driveProjects
-                                DriveType = 'Master Drive'
-                                Prefix = ''
-                            }
+                            $AllDrivesInGroup[$driveLabel] = [UiDriveProjectsInfo]::new([object[]]$driveProjects, 'Master Drive', '', $null, $false)
                         }
                     }
                 }
@@ -428,21 +525,16 @@ function Show-MenuMain {
         }
 
         # Add Backup drives
-        if ($Projects.ContainsKey('Backup') -and $null -ne $Projects.Backup -and $Projects.Backup.Count -gt 0) {
-            foreach ($driveLabel in $Projects.Backup.Keys) {
-                $driveProjects = $Projects.Backup[$driveLabel]
+        if ($null -ne $projectsIndex.Backup -and $projectsIndex.Backup.Count -gt 0) {
+            foreach ($driveLabel in $projectsIndex.Backup.Keys) {
+                $driveProjects = $projectsIndex.Backup[$driveLabel]
                 if ($driveProjects -and $driveProjects.Count -gt 0) {
                     $firstProject = $driveProjects | Select-Object -First 1
                     if ($firstProject -and (Get-Member -InputObject $firstProject -Name 'StorageGroup' -MemberType Properties)) {
                         if ($firstProject.StorageGroup -eq $storageGroupKey) {
                             # Use BackupId from the project object instead of a counter
-                            $backupId = if ($firstProject.BackupId) { $firstProject.BackupId } else { '1' }
-                            $AllDrivesInGroup[$driveLabel] = @{
-                                Projects = $driveProjects
-                                DriveType = 'Backup Drive'
-                                Prefix = "B$backupId"
-                                BackupNumber = $backupId
-                            }
+                            $backupId = if ($firstProject.BackupId) { [int]$firstProject.BackupId } else { 1 }
+                            $AllDrivesInGroup[$driveLabel] = [UiDriveProjectsInfo]::new([object[]]$driveProjects, 'Backup Drive', ("B$backupId"), [Nullable[int]]$backupId, $false)
                         }
                     }
                 }
@@ -451,7 +543,7 @@ function Show-MenuMain {
 
         # Display all drives in this storage group
         if ($AllDrivesInGroup.Count -gt 0) {
-            if ($Config.Parameters.Debug -or $Config.Parameters.Dev) {
+            if ($isDebugOrDev) {
                 Write-Verbose ("[UI] Drives to display for StorageGroup {0}: {1}" -f $storageGroupKey, ($AllDrivesInGroup.Keys -join ', '))
             }
             # Sort drives: Master drives first, then Backup drives
@@ -463,9 +555,9 @@ function Show-MenuMain {
 
             foreach ($driveLabel in $SortedDriveLabels) {
                 $driveInfo = $AllDrivesInGroup[$driveLabel]
-                $isFallback = $driveInfo.ContainsKey('Fallback') -and $driveInfo.Fallback
-                $backupNumber = if ($driveInfo.ContainsKey('BackupNumber')) { $driveInfo.BackupNumber } else { $null }
-                if ($Config.Parameters.Debug -or $Config.Parameters.Dev) {
+                $isFallback = [bool]$driveInfo.IsFallback
+                $backupNumber = $driveInfo.BackupNumber
+                if ($isDebugOrDev) {
                     $projNames = ($driveInfo.Projects | Where-Object { $_.Name } | Select-Object -ExpandProperty Name)
                     Write-Verbose ("[UI] Rendering drive '{0}' Type={1} Projects=[{2}]" -f $driveLabel, $driveInfo.DriveType, ($projNames -join ', '))
                 }
@@ -479,35 +571,33 @@ function Show-MenuMain {
             }
         }
         else {
-            if ($Config.Parameters.Debug -or $Config.Parameters.Dev) {
+            if ($isDebugOrDev) {
                 Write-Verbose ("[UI] No drives found for StorageGroup {0}. Displaying status block." -f $storageGroupKey)
             }
             # No projects found for this storage group - show storage status instead
             # Note: $Config.Storage contains runtime storage info with IsAvailable property
-            $storageConfig = $Config.Storage[$storageGroupKey]
+            $storageConfig = $null
+            if ($storageMap -is [System.Collections.IDictionary]) {
+                $storageConfig = $storageMap[$storageGroupKey]
+            }
+            elseif ($null -ne $storageMap) {
+                try { $storageConfig = $storageMap[$storageGroupKey] } catch { $storageConfig = $null }
+                if ($null -eq $storageConfig) {
+                    $storageConfig = _TryGetConfigValue -Object $storageMap -Name ([string]$storageGroupKey)
+                }
+            }
             if ($storageConfig) {
                 # Display Master drive status
-                # With StrictMode, ensure the 'Master' property exists before dereferencing.
-                if ($null -ne $storageConfig.PSObject.Properties['Master']) {
-                    $master = $storageConfig.Master
+                $master = _TryGetConfigValue -Object $storageConfig -Name 'Master'
+                if ($null -ne $master) {
+                    $labelObj = _TryGetConfigValue -Object $master -Name 'Label'
+                    $label = if ($null -ne $labelObj) { [string]$labelObj } else { '' }
+                    if (-not [string]::IsNullOrWhiteSpace($label)) {
+                        $isAvailableObj = _TryGetConfigValue -Object $master -Name 'IsAvailable'
+                        $isAvailable = if ($null -ne $isAvailableObj) { [bool]$isAvailableObj } else { $false }
 
-                    # Check if Master has a Label property (indicates it's configured)
-                    $hasLabel = if ($master -is [hashtable]) {
-                        $master.ContainsKey('Label')
-                    } else {
-                        $null -ne $master.PSObject.Properties['Label']
-                    }
-
-                    if ($hasLabel) {
-                        $isAvailable = if ($master -is [hashtable]) {
-                            if ($master.ContainsKey('IsAvailable')) { $master.IsAvailable } else { $false }
-                        } elseif ($null -ne $master.PSObject.Properties['IsAvailable']) {
-                            $master.IsAvailable
-                        } else {
-                            $false
-                        }
-
-                        $driveLetter = if ($master -is [hashtable]) { $master.DriveLetter } else { $master.DriveLetter }
+                        $driveLetterObj = _TryGetConfigValue -Object $master -Name 'DriveLetter'
+                        $driveLetter = if ($null -ne $driveLetterObj) { [string]$driveLetterObj } else { $null }
                         $statusText = if ($isAvailable -and -not [string]::IsNullOrWhiteSpace($driveLetter)) {
                             "Available ($driveLetter)"
                         } elseif ($isAvailable) {
@@ -517,42 +607,29 @@ function Show-MenuMain {
                         }
 
                         $masterColumns = @(
-                            @{
-                                Text = "Master: $($master.Label)"
-                                Width = '60%'
-                                Alignment = 'l'
-                                TextColor = if ($isAvailable) { $Config.UI.ANSI.FG.Success } else { $Config.UI.ANSI.FG.Error }
-                            }
-                            @{
-                                Text = $statusText
-                                Width = 'auto'
-                                Alignment = 'r'
-                                TextColor = if ($isAvailable) { $Config.UI.ANSI.FG.SuccessLight } else { $Config.UI.ANSI.FG.Warning }
-                                Dim = -not $isAvailable
-                            }
+                            New-UiColumn -Text "Master: $label" -Width '60%' -Alignment 'l' -TextColor (if ($isAvailable) { $fgSuccess } else { $fgError })
+                            New-UiColumn -Text $statusText -Width 'auto' -Alignment 'r' -TextColor (if ($isAvailable) { $fgSuccessLight } else { $fgWarning }) -Dim:(-not $isAvailable)
                         )
-                        Format-UI -Columns $masterColumns -Width $Config.UI.Width -Config $Config
+                        Format-UI -Columns $masterColumns -Width $uiWidth -Config $Config
                     }
                 }
 
                 # Display Backup drive(s) status using typed Backups dictionary (defensive against legacy or partial config without Backups)
-                if (
-                    $storageConfig -and
-                    $storageConfig.PSObject.Properties['Backups'] -and
-                    $null -ne $storageConfig.Backups -and
-                    ($storageConfig.Backups -is [hashtable] -or $storageConfig.Backups -is [System.Collections.IDictionary]) -and
-                    $storageConfig.Backups.Count -gt 0
-                ) {
-                    foreach ($backupId in ($storageConfig.Backups.Keys | Sort-Object)) {
-                        $backup = $storageConfig.Backups[$backupId]
+                $backups = _TryGetConfigValue -Object $storageConfig -Name 'Backups'
+                if ($null -ne $backups -and ($backups -is [hashtable] -or $backups -is [System.Collections.IDictionary]) -and $backups.Count -gt 0) {
+                    foreach ($backupId in ($backups.Keys | Sort-Object)) {
+                        $backup = $backups[$backupId]
                         if ($null -eq $backup) { continue }
 
                         # Determine availability & label
-                        $label = $backup.Label
+                        $labelObj = _TryGetConfigValue -Object $backup -Name 'Label'
+                        $label = if ($null -ne $labelObj) { [string]$labelObj } else { '' }
                         if ([string]::IsNullOrWhiteSpace($label)) { continue }
 
-                        $isAvailable = if ($null -ne $backup.PSObject.Properties['IsAvailable']) { $backup.IsAvailable } else { $false }
-                        $driveLetter = if ($null -ne $backup.PSObject.Properties['DriveLetter']) { $backup.DriveLetter } else { $null }
+                        $isAvailableObj = _TryGetConfigValue -Object $backup -Name 'IsAvailable'
+                        $isAvailable = if ($null -ne $isAvailableObj) { [bool]$isAvailableObj } else { $false }
+                        $driveLetterObj = _TryGetConfigValue -Object $backup -Name 'DriveLetter'
+                        $driveLetter = if ($null -ne $driveLetterObj) { [string]$driveLetterObj } else { $null }
                         $statusText = if ($isAvailable -and -not [string]::IsNullOrWhiteSpace($driveLetter)) {
                             "Available ($driveLetter)"
                         } elseif ($isAvailable) {
@@ -562,26 +639,17 @@ function Show-MenuMain {
                         }
 
                         $backupColumns = @(
-                            @{
-                                Text = "Backup $backupId : $label"
-                                Width = '60%'
-                                Alignment = 'l'
-                                TextColor = if ($isAvailable) { $Config.UI.ANSI.FG.Success } else { $Config.UI.ANSI.FG.Error }
-                            }
-                            @{
-                                Text = $statusText
-                                Width = 'auto'
-                                Alignment = 'r'
-                                TextColor = if ($isAvailable) { $Config.UI.ANSI.FG.SuccessLight } else { $Config.UI.ANSI.FG.Warning }
-                                Dim = -not $isAvailable
-                            }
+                            New-UiColumn -Text "Backup $backupId : $label" -Width '60%' -Alignment 'l' -TextColor (if ($isAvailable) { $fgSuccess } else { $fgError })
+                            New-UiColumn -Text $statusText -Width 'auto' -Alignment 'r' -TextColor (if ($isAvailable) { $fgSuccessLight } else { $fgWarning }) -Dim:(-not $isAvailable)
                         )
-                        Format-UI -Columns $backupColumns -Width $Config.UI.Width -Config $Config
+                        Format-UI -Columns $backupColumns -Width $uiWidth -Config $Config
                     }
-                } elseif ($storageConfig -and -not $storageConfig.PSObject.Properties['Backups']) {
+                }
+                elseif ($storageConfig -and $null -eq $backups) {
                     # Older configuration (or not yet built) where Backups property is missing entirely
                     Write-PSmmHost '  No backup configuration defined for this storage group' -ForegroundColor DarkGray
-                } elseif ($storageConfig.PSObject.Properties['Backups'] -and ($null -eq $storageConfig.Backups -or $storageConfig.Backups.Count -eq 0)) {
+                }
+                elseif ($null -ne $backups -and $backups.Count -eq 0) {
                     # Backups property exists but empty
                     Write-PSmmHost '  No backup drives registered for this storage group' -ForegroundColor DarkGray
                 }
@@ -647,7 +715,9 @@ function Show-UnifiedDrive {
         [Parameter(Mandatory)]
         [ValidateNotNull()]
         [object]$Config
-    )    if ($null -eq $Projects -or $Projects.Count -eq 0) {
+    )
+
+    if ($null -eq $Projects -or $Projects.Count -eq 0) {
         return
     }
 
@@ -660,41 +730,58 @@ function Show-UnifiedDrive {
 
     $DriveInfo = $DriveProjects[0]
 
+    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidth = 80
+    if ($null -ne $uiWidthSource) {
+        try {
+            $uiWidth = [int]$uiWidthSource
+            if ($uiWidth -lt 1) { $uiWidth = 80 }
+        }
+        catch {
+            $uiWidth = 80
+        }
+    }
+
+    $fgMasterDrive      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'MasterDrive')
+    $fgMasterDriveLight = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'MasterDriveLight')
+    $fgBackupDrive      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'BackupDrive')
+    $fgBackupDriveLight = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'BackupDriveLight')
+    $fgBackupDriveDark  = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'BackupDriveDark')
+
+    $fgAccent      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
+    $fgSecondary   = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Secondary')
+    $fgInfo        = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
+    $fgSuccess     = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Success')
+    $fgWarning     = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Warning')
+    $fgError       = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Error')
+    $fgNeutral1    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral1')
+    $fgNeutral2    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral2')
+    $fgNeutral3    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral3')
+    $fgNeutral4    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral4')
+
     # Determine colors and styling based on drive type
     $IsMaster = $DriveType -eq 'Master Drive'
     $BorderChar = if ($IsMaster) { [char]0x2550 } else { [char]0x2500 }  # ═ for Master, ─ for Backup
-    $HeaderColor = if ($IsMaster) { $Config.UI.ANSI.FG.MasterDrive } else { $Config.UI.ANSI.FG.BackupDrive }
-    $RoleColor = if ($IsMaster) { $Config.UI.ANSI.FG.MasterDriveLight } else { $Config.UI.ANSI.FG.BackupDriveLight }
+    $HeaderColor = if ($IsMaster) { $fgMasterDrive } else { $fgBackupDrive }
+    $RoleColor = if ($IsMaster) { $fgMasterDriveLight } else { $fgBackupDriveLight }
 
     # Display drive header with label and role
     $DriveHeaderColumns = @(
-        @{
-            Text = "$([string]::new($BorderChar, 18)) $DriveLabel $([string]::new($BorderChar, 18))"
-            Width = $Config.UI.Width
-            Alignment = 'c'
-            TextColor = $HeaderColor
-            Bold = $true
-        }
+        New-UiColumn -Text "$([string]::new($BorderChar, 18)) $DriveLabel $([string]::new($BorderChar, 18))" -Width $uiWidth -Alignment 'c' -TextColor $HeaderColor -Bold
     )
-    Format-UI -Columns $DriveHeaderColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $DriveHeaderColumns -Width $uiWidth -Config $Config
 
     # Display role with icon
     $RoleIcon = if ($IsMaster) { '💿' } else { '📀' }
     $RoleText = "$RoleIcon Role: $DriveType"
     if ($IsFallback) {
         $RoleText += " (Automatic Fallback)"
-        $RoleColor = $Config.UI.ANSI.FG.Warning
+        $RoleColor = $fgWarning
     }
     $RoleColumns = @(
-        @{
-            Text = $RoleText
-            Width = $Config.UI.Width
-            Alignment = 'c'
-            TextColor = $RoleColor
-            Bold = $true
-        }
+        New-UiColumn -Text $RoleText -Width $uiWidth -Alignment 'c' -TextColor $RoleColor -Bold
     )
-    Format-UI -Columns $RoleColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $RoleColumns -Width $uiWidth -Config $Config
 
     # Calculate space usage percentage
     $UsedPercent = if ($DriveInfo.TotalSpace -gt 0) {
@@ -704,29 +791,27 @@ function Show-UnifiedDrive {
         [math]::Round(($DriveInfo.FreeSpace / $DriveInfo.TotalSpace) * 100, 1)
     } else { 0 }
 
+    $healthColor = switch ($DriveInfo.HealthStatus) {
+        'Healthy' { $fgSuccess }
+        'Warning' { $fgWarning }
+        'Unhealthy' { $fgError }
+        default { $fgNeutral1 }
+    }
+
     # Define metadata items in optimal sorted order for two-column display
     $MetadataItems = @(
-        @{ Key = 'Drive Letter'; Value = $DriveInfo.Drive; Color = $Config.UI.ANSI.FG.Accent }
-        @{ Key = 'Serial Number'; Value = $DriveInfo.SerialNumber; Color = $Config.UI.ANSI.FG.Neutral2 }
-        @{ Key = 'Label'; Value = $DriveInfo.Label; Color = $Config.UI.ANSI.FG.Warning }
-        @{ Key = 'Manufacturer'; Value = $DriveInfo.Manufacturer; Color = $Config.UI.ANSI.FG.Neutral1 }
-        @{ Key = 'Model'; Value = $DriveInfo.Model; Color = $Config.UI.ANSI.FG.Neutral1 }
-        @{ Key = 'File System'; Value = $DriveInfo.FileSystem; Color = $Config.UI.ANSI.FG.Info }
-        @{ Key = 'Partition Kind'; Value = $DriveInfo.PartitionKind; Color = $Config.UI.ANSI.FG.Neutral2 }
-        @{ Key = 'Total Space'; Value = "$([math]::Round($DriveInfo.TotalSpace, 2)) GB"; Color = $Config.UI.ANSI.FG.Info }
-        @{ Key = 'Used Space'; Value = "$([math]::Round($DriveInfo.UsedSpace, 2)) GB ($UsedPercent%)"; Color = $Config.UI.ANSI.FG.Secondary }
-        @{ Key = 'Free Space'; Value = "$([math]::Round($DriveInfo.FreeSpace, 2)) GB ($FreePercent%)"; Color = $Config.UI.ANSI.FG.Success }
-        @{
-            Key = 'Health Status'
-            Value = $DriveInfo.HealthStatus
-            Color = switch ($DriveInfo.HealthStatus) {
-                'Healthy' { $Config.UI.ANSI.FG.Success }
-                'Warning' { $Config.UI.ANSI.FG.Warning }
-                'Unhealthy' { $Config.UI.ANSI.FG.Error }
-                default { $Config.UI.ANSI.FG.Neutral1 }
-            }
-        }
-        @{ Key = 'Projects'; Value = @($DriveProjects | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) }).Count; Color = $Config.UI.ANSI.FG.Neutral1 }
+        New-UiKeyValueItem -Key 'Drive Letter' -Value $DriveInfo.Drive -Color $fgAccent
+        New-UiKeyValueItem -Key 'Serial Number' -Value $DriveInfo.SerialNumber -Color $fgNeutral2
+        New-UiKeyValueItem -Key 'Label' -Value $DriveInfo.Label -Color $fgWarning
+        New-UiKeyValueItem -Key 'Manufacturer' -Value $DriveInfo.Manufacturer -Color $fgNeutral1
+        New-UiKeyValueItem -Key 'Model' -Value $DriveInfo.Model -Color $fgNeutral1
+        New-UiKeyValueItem -Key 'File System' -Value $DriveInfo.FileSystem -Color $fgInfo
+        New-UiKeyValueItem -Key 'Partition Kind' -Value $DriveInfo.PartitionKind -Color $fgNeutral2
+        New-UiKeyValueItem -Key 'Total Space' -Value "$([math]::Round($DriveInfo.TotalSpace, 2)) GB" -Color $fgInfo
+        New-UiKeyValueItem -Key 'Used Space' -Value "$([math]::Round($DriveInfo.UsedSpace, 2)) GB ($UsedPercent%)" -Color $fgSecondary
+        New-UiKeyValueItem -Key 'Free Space' -Value "$([math]::Round($DriveInfo.FreeSpace, 2)) GB ($FreePercent%)" -Color $fgSuccess
+        New-UiKeyValueItem -Key 'Health Status' -Value $DriveInfo.HealthStatus -Color $healthColor
+        New-UiKeyValueItem -Key 'Projects' -Value (@($DriveProjects | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Name) }).Count) -Color $fgNeutral1
     )
 
     # Display metadata in side-by-side two-column layout centered
@@ -737,38 +822,14 @@ function Show-UnifiedDrive {
         $RightItem = if ($i + 1 -lt $MetadataItems.Count) { $MetadataItems[$i + 1] } else { $null }
 
         $MetadataColumns = @(
-            @{
-                Text = "$($LeftItem.Key):"
-                Width = 17
-                Alignment = 'r'
-                TextColor = $Config.UI.ANSI.FG.Accent
-                Bold = $false
-            }
-            @{
-                Text = $LeftItem.Value
-                Width = 21
-                Alignment = 'l'
-                TextColor = $LeftItem.Color
-                Bold = $false
-            }
+            New-UiColumn -Text "$($LeftItem.Key):" -Width 17 -Alignment 'r' -TextColor $fgAccent
+            New-UiColumn -Text $LeftItem.Value -Width 21 -Alignment 'l' -TextColor $LeftItem.Color
         )
 
         if ($RightItem) {
             $MetadataColumns += @(
-                @{
-                    Text = "$($RightItem.Key):"
-                    Width = 17
-                    Alignment = 'r'
-                    TextColor = $Config.UI.ANSI.FG.Accent
-                    Bold = $false
-                }
-                @{
-                    Text = $RightItem.Value
-                    Width = 21
-                    Alignment = 'l'
-                    TextColor = $RightItem.Color
-                    Bold = $false
-                }
+                New-UiColumn -Text "$($RightItem.Key):" -Width 17 -Alignment 'r' -TextColor $fgAccent
+                New-UiColumn -Text $RightItem.Value -Width 21 -Alignment 'l' -TextColor $RightItem.Color
             )
         }
 
@@ -778,16 +839,9 @@ function Show-UnifiedDrive {
 
     # Projects header
     $ProjectsColumns = @(
-        @{
-            Text = "$([string]::new([char]0x2500, 7)) PROJECTS $([string]::new([char]0x2500, 7))"
-            Width = $Config.UI.Width
-            Alignment = 'c'
-            TextColor = $Config.UI.ANSI.FG.Success
-            Bold = $true
-            Italic = $true
-        }
+        New-UiColumn -Text "$([string]::new([char]0x2500, 7)) PROJECTS $([string]::new([char]0x2500, 7))" -Width $uiWidth -Alignment 'c' -TextColor $fgSuccess -Bold -Italic
     )
-    Format-UI -Columns $ProjectsColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $ProjectsColumns -Width $uiWidth -Config $Config
     Write-PSmmHost ''
 
     # Display projects
@@ -803,46 +857,24 @@ function Show-UnifiedDrive {
 
         # Determine project numbering color based on drive type
         $ProjectNumColor = if ($IsMaster) {
-            $Config.UI.ANSI.FG.MasterDriveLight
+                $fgMasterDriveLight
         } else {
-            $Config.UI.ANSI.FG.BackupDriveDark
+                $fgBackupDriveDark
         }
 
         $ProjectColumns = @(
-            @{
-                Text = "[$Prefix$Count]"
-                Width = 10
-                Alignment = 'c'
-                TextColor = $ProjectNumColor
-                Bold = $true
-            }
-            @{
-                Text = $DisplayName
-                Width = 20
-                Alignment = 'l'
-                TextColor = $Config.UI.ANSI.FG.Neutral1
-            }
-            @{
-                Text = $Project.Path
-                Width = 'auto'
-                Alignment = 'l'
-                TextColor = $Config.UI.ANSI.FG.Neutral3
-            }
+            New-UiColumn -Text "[$Prefix$Count]" -Width 10 -Alignment 'c' -TextColor $ProjectNumColor -Bold
+            New-UiColumn -Text $DisplayName -Width 20 -Alignment 'l' -TextColor $fgNeutral1
+            New-UiColumn -Text $Project.Path -Width 'auto' -Alignment 'l' -TextColor $fgNeutral3
         )
-        Format-UI -Columns $ProjectColumns -Width $Config.UI.Width -Config $Config
+        Format-UI -Columns $ProjectColumns -Width $uiWidth -Config $Config
     }
 
     if ($Count -eq 0) {
         $NoProjectsColumns = @(
-            @{
-                Text = 'No projects found on this drive.'
-                Width = $Config.UI.Width
-                Alignment = 'c'
-                TextColor = $Config.UI.ANSI.FG.Neutral4
-                Italic = $true
-            }
+            New-UiColumn -Text 'No projects found on this drive.' -Width $uiWidth -Alignment 'c' -TextColor $fgNeutral4 -Italic
         )
-        Format-UI -Columns $NoProjectsColumns -Width $Config.UI.Width -Config $Config
+        Format-UI -Columns $NoProjectsColumns -Width $uiWidth -Config $Config
     }
 
     Write-PSmmLog -Level NOTICE -Context 'Show-UnifiedDrive' -Message "Displayed $Count projects for $DriveType : $DriveLabel" -File
@@ -876,22 +908,43 @@ function Show-Menu_Project {
         [Parameter(Mandatory)]
         [ValidateNotNull()]
         $Process
-    )    # Check for running processes
+    )
+
+    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidth = 80
+    if ($null -ne $uiWidthSource) {
+        try {
+            $uiWidth = [int]$uiWidthSource
+            if ($uiWidth -lt 1) { $uiWidth = 80 }
+        }
+        catch {
+            $uiWidth = 80
+        }
+    }
+
+    $fgInfo = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
+
+    # Check for running processes
     $ProcMariaDB = $null
     $ProcDigiKam = $null
 
-    if ($Config.Projects.ContainsKey('Current')) {
-        if ($Config.Projects.Current.ContainsKey('Databases')) {
+    $projects = _TryGetConfigValue -Object $Config -Name 'Projects'
+    $currentProjectSource = _TryGetConfigValue -Object $projects -Name 'Current'
+
+    if ($null -ne $currentProjectSource) {
+        $currentProject = [ProjectCurrentConfig]::FromObject($currentProjectSource)
+
+        if (-not [string]::IsNullOrWhiteSpace($currentProject.Databases)) {
             $allMariaDB = $Process.GetProcess('mariadbd')
             if ($null -ne $allMariaDB) {
-                $ProcMariaDB = $allMariaDB | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Databases)*" }
+                $ProcMariaDB = $allMariaDB | Where-Object { $_.CommandLine -like "*$($currentProject.Databases)*" }
             }
         }
 
-        if ($Config.Projects.Current.ContainsKey('Config')) {
+        if (-not [string]::IsNullOrWhiteSpace($currentProject.Config)) {
             $allDigiKam = $Process.GetProcess('digikam')
             if ($null -ne $allDigiKam) {
-                $ProcDigiKam = $allDigiKam | Where-Object { $_.CommandLine -like "*$($Config.Projects.Current.Config)*" }
+                $ProcDigiKam = $allDigiKam | Where-Object { $_.CommandLine -like "*$($currentProject.Config)*" }
             }
         }
     }
@@ -923,23 +976,13 @@ function Show-Menu_Project {
 
     # Common footer with navigation options
     $ReturnColumns = @(
-        @{
-            Text = '[R] Return to previous menu'
-            Width = 'auto'
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Info
-        }
-        @{
-            Text = 'Quit [Q]'
-            Width = 'auto'
-            Alignment = 'r'
-            TextColor = $Config.UI.ANSI.FG.Info
-        }
+        New-UiColumn -Text '[R] Return to previous menu' -Width 'auto' -Alignment 'l' -TextColor $fgInfo
+        New-UiColumn -Text 'Quit [Q]' -Width 'auto' -Alignment 'r' -TextColor $fgInfo
     )
 
     $borderChar = $PSSpecialChar.SixPointStar
 
-    Format-UI -Columns $ReturnColumns -Width $Config.UI.Width -Border $borderChar -Config $Config
+    Format-UI -Columns $ReturnColumns -Width $uiWidth -Border $borderChar -Config $Config
 }
 
 <#
@@ -950,25 +993,34 @@ function Show-Menu_Project {
     The runtime configuration hashtable.
 #>
 function Show-ProjectMenuOptions_NoProcesses {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Function displays multiple menu options')]
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
         [object]$Config
-    )    # Note: Backup operations removed - not yet implemented
+    )
+
+    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidth = 80
+    if ($null -ne $uiWidthSource) {
+        try {
+            $uiWidth = [int]$uiWidthSource
+            if ($uiWidth -lt 1) { $uiWidth = 80 }
+        }
+        catch {
+            $uiWidth = 80
+        }
+    }
+
+    $fgPrimary = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Primary')
+
+    # Note: Backup operations removed - not yet implemented
 
     # DigiKam management
     $DigiKamColumns = @(
-        @{
-            Text = '[1] Start digiKam'
-            Width = $Config.UI.Width
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Primary
-            Bold = $true
-        }
+        New-UiColumn -Text '[1] Start digiKam' -Width $uiWidth -Alignment 'l' -TextColor $fgPrimary -Bold
     )
-    Format-UI -Columns $DigiKamColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $DigiKamColumns -Width $uiWidth -Config $Config
 }
 
 <#
@@ -984,87 +1036,72 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         [Parameter(Mandatory)]
         [ValidateNotNull()]
         [object]$Config
-    )    Write-PSmmHost ''
+    )
+
+    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidth = 80
+    if ($null -ne $uiWidthSource) {
+        try {
+            $uiWidth = [int]$uiWidthSource
+            if ($uiWidth -lt 1) { $uiWidth = 80 }
+        }
+        catch {
+            $uiWidth = 80
+        }
+    }
+
+    $fgInfo        = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
+    $fgAccent      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
+    $fgAccentLight = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'AccentLight')
+    $fgSecondary   = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Secondary')
+    $fgError       = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Error')
+
+    Write-PSmmHost ''
 
     # Media overview
     $OverviewColumns = @(
-        @{
-            Text = '[11] Published Media Overview'
-            Width = $Config.UI.Width
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Info
-        }
+        New-UiColumn -Text '[11] Published Media Overview' -Width $uiWidth -Alignment 'l' -TextColor $fgInfo
     )
-    Format-UI -Columns $OverviewColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $OverviewColumns -Width $uiWidth -Config $Config
 
     Write-PSmmHost ''
 
     # Pricing options
     $PricingColumns = @(
-        @{
-            Text = '[2]  Pricing    : Get prices for media files'
-            Width = $Config.UI.Width
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Accent
-        }
+        New-UiColumn -Text '[2]  Pricing    : Get prices for media files' -Width $uiWidth -Alignment 'l' -TextColor $fgAccent
     )
-    Format-UI -Columns $PricingColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $PricingColumns -Width $uiWidth -Config $Config
 
     $BundleColumns = @(
-        @{
-            Text = '[22] Bundle  : Get prices for bundles media files'
-            Width = $Config.UI.Width
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Accent
-        }
+        New-UiColumn -Text '[22] Bundle  : Get prices for bundles media files' -Width $uiWidth -Alignment 'l' -TextColor $fgAccent
     )
-    Format-UI -Columns $BundleColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $BundleColumns -Width $uiWidth -Config $Config
 
     $NewPricingColumns = @(
-        @{
-            Text = '[2n] Pricing : NEW Get prices for media files'
-            Width = $Config.UI.Width
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.AccentLight
-        }
+        New-UiColumn -Text '[2n] Pricing : NEW Get prices for media files' -Width $uiWidth -Alignment 'l' -TextColor $fgAccentLight
     )
-    Format-UI -Columns $NewPricingColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $NewPricingColumns -Width $uiWidth -Config $Config
 
     Write-PSmmHost ''
 
     # Media processing plugins
     $ImageMagickColumns = @(
-        @{
-            Text = '[3] ImageMagick: Convert and process Images'
-            Width = $Config.UI.Width
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Secondary
-        }
+        New-UiColumn -Text '[3] ImageMagick: Convert and process Images' -Width $uiWidth -Alignment 'l' -TextColor $fgSecondary
     )
-    Format-UI -Columns $ImageMagickColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $ImageMagickColumns -Width $uiWidth -Config $Config
 
     $FfmpegColumns = @(
-        @{
-            Text = '[4] FFmpeg     : Rebuild Chunk Offset Table (mp4, mov)'
-            Width = $Config.UI.Width
-            Alignment = 'l'
-            TextColor = $Config.UI.ANSI.FG.Secondary
-        }
+        New-UiColumn -Text '[4] FFmpeg     : Rebuild Chunk Offset Table (mp4, mov)' -Width $uiWidth -Alignment 'l' -TextColor $fgSecondary
     )
-    Format-UI -Columns $FfmpegColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $FfmpegColumns -Width $uiWidth -Config $Config
 
     Write-PSmmHost ''
 
     # Stop processes option
     $StopColumns = @(
-        @{
-            Text = 'Stop digiKam Processes [S]'
-            Width = $Config.UI.Width
-            Alignment = 'r'
-            TextColor = $Config.UI.ANSI.FG.Error
-        }
+        New-UiColumn -Text 'Stop digiKam Processes [S]' -Width $uiWidth -Alignment 'r' -TextColor $fgError
     )
-    Format-UI -Columns $StopColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $StopColumns -Width $uiWidth -Config $Config
 }
 
 #endregion ########## Project Menu ##########
@@ -1089,41 +1126,39 @@ function Show-Menu_SysInfo {
         [Parameter(Mandatory)]
         [ValidateNotNull()]
         [object]$Config
-    )    $StorageColumns = @(
-        @{
-            Text = '[1] Show Storage Information'
-                        TextColor = $Config.UI.ANSI.FG.Info
-            Width = $Config.UI.Width
-            Alignment = 'l'
-        }
     )
-    Format-UI -Columns $StorageColumns -Width $Config.UI.Width -Config $Config
+
+    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidth = 80
+    if ($null -ne $uiWidthSource) {
+        try {
+            $uiWidth = [int]$uiWidthSource
+            if ($uiWidth -lt 1) { $uiWidth = 80 }
+        }
+        catch {
+            $uiWidth = 80
+        }
+    }
+
+    $fgInfo = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
+
+    $StorageColumns = @(
+        New-UiColumn -Text '[1] Show Storage Information' -Width $uiWidth -Alignment 'l' -TextColor $fgInfo
+    )
+    Format-UI -Columns $StorageColumns -Width $uiWidth -Config $Config
 
     $ConfigColumns = @(
-        @{
-            Text = '[2] Show Runtime Configuration'
-                        TextColor = $Config.UI.ANSI.FG.Info
-            Width = $Config.UI.Width
-            Alignment = 'l'
-        }
+        New-UiColumn -Text '[2] Show Runtime Configuration' -Width $uiWidth -Alignment 'l' -TextColor $fgInfo
     )
-    Format-UI -Columns $ConfigColumns -Width $Config.UI.Width -Config $Config
+    Format-UI -Columns $ConfigColumns -Width $uiWidth -Config $Config
 
     Write-PSmmHost ''
 
     $ReturnColumns = @(
-        @{
-            Text = '[R] Return to previous menu'
-            Width = 'auto'
-            Alignment = 'l'
-        }
-        @{
-            Text = 'Quit [Q]'
-            Width = 'auto'
-            Alignment = 'r'
-        }
+        New-UiColumn -Text '[R] Return to previous menu' -Width 'auto' -Alignment 'l'
+        New-UiColumn -Text 'Quit [Q]' -Width 'auto' -Alignment 'r'
     )
-    Format-UI -Columns $ReturnColumns -Width $Config.UI.Width -Border 'Box' -Config $Config
+    Format-UI -Columns $ReturnColumns -Width $uiWidth -Border 'Box' -Config $Config
 }
 
 #endregion ########## System Info ##########

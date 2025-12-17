@@ -62,16 +62,87 @@ function Initialize-Logging {
         Write-Verbose 'ENTER Initialize-Logging'
         Write-Verbose 'Initializing logging system...'
 
+        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+            if ($null -eq $Object) {
+                return $null
+            }
+
+            if ($Object -is [System.Collections.IDictionary]) {
+                try {
+                    if ($Object.ContainsKey($Name)) {
+                        return $Object[$Name]
+                    }
+                }
+                catch {
+                    # fall through
+                }
+
+                try {
+                    if ($Object.Contains($Name)) {
+                        return $Object[$Name]
+                    }
+                }
+                catch {
+                    # fall through
+                }
+
+                try {
+                    foreach ($k in $Object.Keys) {
+                        if ($k -eq $Name) {
+                            return $Object[$k]
+                        }
+                    }
+                }
+                catch {
+                    # fall through
+                }
+
+                return $null
+            }
+
+            $p = $Object.PSObject.Properties[$Name]
+            if ($null -ne $p) {
+                return $p.Value
+            }
+
+            return $null
+        }
+
         # Basic structure validation supporting both PSObjects and IDictionary (hashtable) inputs
         $hasParameters = $false
         $hasLogging = $false
         if ($Config -is [System.Collections.IDictionary]) {
             try { $hasParameters = $Config.ContainsKey('Parameters') } catch { $hasParameters = $false }
-            try { $hasLogging    = $Config.ContainsKey('Logging')    } catch { $hasLogging    = $false }
+            if (-not $hasParameters) {
+                try { $hasParameters = $Config.Contains('Parameters') } catch { $hasParameters = $false }
+            }
+
+            if (-not $hasParameters) {
+                try {
+                    foreach ($k in $Config.Keys) {
+                        if ($k -eq 'Parameters') { $hasParameters = $true; break }
+                    }
+                }
+                catch { $hasParameters = $false }
+            }
+
+            try { $hasLogging = $Config.ContainsKey('Logging') } catch { $hasLogging = $false }
+            if (-not $hasLogging) {
+                try { $hasLogging = $Config.Contains('Logging') } catch { $hasLogging = $false }
+            }
+
+            if (-not $hasLogging) {
+                try {
+                    foreach ($k in $Config.Keys) {
+                        if ($k -eq 'Logging') { $hasLogging = $true; break }
+                    }
+                }
+                catch { $hasLogging = $false }
+            }
         }
         else {
-            $hasParameters = [bool]($Config | Get-Member -Name 'Parameters' -ErrorAction SilentlyContinue)
-            $hasLogging    = [bool]($Config | Get-Member -Name 'Logging'    -ErrorAction SilentlyContinue)
+            $hasParameters = ($null -ne $Config.PSObject.Properties['Parameters'])
+            $hasLogging    = ($null -ne $Config.PSObject.Properties['Logging'])
         }
 
         if (-not $hasParameters -or -not $hasLogging) {
@@ -79,11 +150,23 @@ function Initialize-Logging {
             throw $ex
         }
 
-        $nonInteractive = [bool]$Config.Parameters.NonInteractive
+        $parametersSource = Get-ConfigMemberValue -Object $Config -Name 'Parameters'
+        if ($null -eq $parametersSource) {
+            $ex = [ConfigurationException]::new("Invalid configuration object: 'Parameters' is null")
+            throw $ex
+        }
+
+        $nonInteractive = $false
+        if ($parametersSource -is [System.Collections.IDictionary]) {
+            try { $nonInteractive = [bool]$parametersSource['NonInteractive'] } catch { $nonInteractive = $false }
+        }
+        else {
+            $nonInteractive = [bool](Get-ConfigMemberValue -Object $parametersSource -Name 'NonInteractive')
+        }
 
         # Initialize script-level logging context
         $script:Context = @{ Context = $null }
-        $loggingSource = $Config.Logging
+        $loggingSource = Get-ConfigMemberValue -Object $Config -Name 'Logging'
 
         if ($null -eq $loggingSource) {
             $ex = [ConfigurationException]::new("Logging configuration is null. Run.App.Logging was not properly initialized.")
@@ -103,15 +186,33 @@ function Initialize-Logging {
         }
         else {
             # Convert objects (PSCustomObject or typed) to hashtable for easier merging
-            $convertedLogging = @{}
-            foreach ($property in $loggingSource.PSObject.Properties) {
-                $convertedLogging[$property.Name] = $property.Value
+            # Prefer ToHashtable() when available (stable schema for typed config)
+            $toHashtableMethod = $null
+            try { $toHashtableMethod = $loggingSource.PSObject.Methods['ToHashtable'] } catch { $toHashtableMethod = $null }
+            if ($null -ne $toHashtableMethod) {
+                try {
+                    $loggingSettings = $loggingSource.ToHashtable()
+                    $keyCount = @($loggingSettings.Keys).Count
+                    $convertedKeys = $loggingSettings.Keys -join ', '
+                    Write-Verbose "Converted LoggingConfiguration via ToHashtable() with $keyCount keys: $convertedKeys"
+                }
+                catch {
+                    Write-Verbose "[Initialize-Logging] ToHashtable() failed; falling back to PSObject.Properties: $($_.Exception.Message)"
+                    $loggingSettings = $null
+                }
             }
-            # Use Keys count to avoid relying on .Count property availability across types
-            $keyCount = @($convertedLogging.Keys).Count
-            $convertedKeys = $convertedLogging.Keys -join ', '
-            Write-Verbose "Converted LoggingConfiguration to hashtable with $keyCount keys: $convertedKeys"
-            $loggingSettings = $convertedLogging
+
+            if ($null -eq $loggingSettings) {
+                $convertedLogging = @{}
+                foreach ($property in $loggingSource.PSObject.Properties) {
+                    $convertedLogging[$property.Name] = $property.Value
+                }
+                # Use Keys count to avoid relying on .Count property availability across types
+                $keyCount = @($convertedLogging.Keys).Count
+                $convertedKeys = $convertedLogging.Keys -join ', '
+                Write-Verbose "Converted LoggingConfiguration to hashtable with $keyCount keys: $convertedKeys"
+                $loggingSettings = $convertedLogging
+            }
         }
 
         if ($null -eq $loggingSettings) {
@@ -167,12 +268,20 @@ function Initialize-Logging {
                 throw $ex
             }
 
-        try {
-            $containsPath = $script:Logging.ContainsKey('Path')
+        $containsPath = $false
+        try { $containsPath = [bool]$script:Logging.ContainsKey('Path') } catch { $containsPath = $false }
+        if (-not $containsPath) {
+            try { $containsPath = [bool]$script:Logging.Contains('Path') } catch { $containsPath = $false }
         }
-        catch {
-                $ex = [ConfigurationException]::new("Failed checking Logging.ContainsKey('Path'): $_")
-            throw $ex
+        if (-not $containsPath) {
+            try {
+                foreach ($k in $script:Logging.Keys) {
+                    if ($k -eq 'Path') { $containsPath = $true; break }
+                }
+            }
+            catch {
+                $containsPath = $false
+            }
         }
         if (-not $containsPath) {
             $keysCount = @($script:Logging.Keys).Count
@@ -186,12 +295,42 @@ function Initialize-Logging {
             throw $ex
         }
 
-        if (-not $script:Logging.ContainsKey('DefaultLevel') -or [string]::IsNullOrWhiteSpace($script:Logging.DefaultLevel)) {
+        $hasDefaultLevel = $false
+        try { $hasDefaultLevel = [bool]$script:Logging.ContainsKey('DefaultLevel') } catch { $hasDefaultLevel = $false }
+        if (-not $hasDefaultLevel) {
+            try { $hasDefaultLevel = [bool]$script:Logging.Contains('DefaultLevel') } catch { $hasDefaultLevel = $false }
+        }
+        if (-not $hasDefaultLevel) {
+            try {
+                foreach ($k in $script:Logging.Keys) {
+                    if ($k -eq 'DefaultLevel') { $hasDefaultLevel = $true; break }
+                }
+            }
+            catch {
+                $hasDefaultLevel = $false
+            }
+        }
+        if (-not $hasDefaultLevel -or [string]::IsNullOrWhiteSpace($script:Logging.DefaultLevel)) {
             Write-Warning "Logging configuration is missing 'DefaultLevel', using 'INFO' as default"
             $script:Logging.DefaultLevel = 'INFO'
         }
 
-        if (-not $script:Logging.ContainsKey('Format') -or [string]::IsNullOrWhiteSpace($script:Logging.Format)) {
+        $hasFormat = $false
+        try { $hasFormat = [bool]$script:Logging.ContainsKey('Format') } catch { $hasFormat = $false }
+        if (-not $hasFormat) {
+            try { $hasFormat = [bool]$script:Logging.Contains('Format') } catch { $hasFormat = $false }
+        }
+        if (-not $hasFormat) {
+            try {
+                foreach ($k in $script:Logging.Keys) {
+                    if ($k -eq 'Format') { $hasFormat = $true; break }
+                }
+            }
+            catch {
+                $hasFormat = $false
+            }
+        }
+        if (-not $hasFormat -or [string]::IsNullOrWhiteSpace($script:Logging.Format)) {
             Write-Warning "Logging configuration is missing 'Format', using default format"
             $script:Logging.Format = '[%{timestamp}] [%{level}] %{message}'
         }
@@ -353,7 +492,8 @@ function Initialize-Logging {
         }
 
         # Clear log file in Dev mode
-        if ($Config.Parameters.Dev) {
+        $devMode = [bool](Get-ConfigMemberValue -Object $parametersSource -Name 'Dev')
+        if ($devMode) {
             Write-Verbose 'Dev mode: Clearing log file'
             $logFilePath = $script:Logging.Path
             $logFileExists = if ($FileSystem) {

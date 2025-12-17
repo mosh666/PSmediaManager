@@ -7,6 +7,94 @@ Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
 
+function Get-ConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        try {
+            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            if ($Object.Contains($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            foreach ($k in $Object.Keys) {
+                if ($k -eq $Name) { return $Object[$k] }
+            }
+        }
+        catch { }
+
+        return $null
+    }
+
+    try {
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) { return $p.Value }
+    }
+    catch { }
+
+    return $null
+}
+
+function Set-ConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
+
+        [Parameter()]
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Object) {
+        return
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        $Object[$Name] = $Value
+        return
+    }
+
+    try {
+        $Object.$Name = $Value
+        return
+    }
+    catch { }
+
+    try {
+        if ($null -eq $Object.PSObject.Properties[$Name]) {
+            $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+        }
+        else {
+            $Object.PSObject.Properties[$Name].Value = $Value
+        }
+    }
+    catch { }
+}
+
 function Get-CurrentVersion-ExifTool {
     param(
         [hashtable]$Plugin,
@@ -25,15 +113,21 @@ function Get-CurrentVersion-ExifTool {
         }
     }
 
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'ExifTool' }
+
     if ($FileSystem) {
-        $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
+        $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
     }
     else {
-        $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
+        $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
     }
 
     if ($InstallPath) {
-        $bin = Join-Path -Path $InstallPath -ChildPath $Plugin.Config.CommandPath -AdditionalChildPath $Plugin.Config.Command
+        $commandPath = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'CommandPath')
+        $command = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Command')
+        $bin = Join-Path -Path $InstallPath -ChildPath $commandPath -AdditionalChildPath $command
         $CurrentVersion = (& $bin -ver)
         return $CurrentVersion
     }
@@ -49,13 +143,26 @@ function Get-LatestUrlFromUrl-ExifTool {
         $ServiceContainer
     )
     $null = $Paths, $ServiceContainer
-    $LatestVersion = Invoke-RestMethod -Uri $Plugin.Config.VersionUrl
-    $LatestVersion = '{0:N2}' -f $latestVersion
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'ExifTool' }
+    $versionUrl = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
+    $baseUri = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'BaseUri')
+
+    $LatestVersion = Invoke-RestMethod -Uri $versionUrl
+    $LatestVersion = '{0:N2}' -f $LatestVersion
     $LatestVersion = $LatestVersion -replace ',', '.'
     $LatestInstaller = "exiftool-$($LatestVersion)_64.zip"
-    $Plugin.Config.State.LatestVersion = $LatestVersion
-    $Plugin.Config.State.LatestInstaller = $LatestInstaller
-    $Url = $Plugin.Config.BaseUri + '/' + $LatestInstaller
+
+    $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+    if ($null -eq $state) {
+        $state = @{}
+        Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
+    }
+    Set-ConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestVersion
+    Set-ConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $LatestInstaller
+
+    $Url = $baseUri + '/' + $LatestInstaller
 
     return $Url
 }
@@ -94,14 +201,24 @@ function Invoke-Installer-ExifTool {
                 Rename-Item -Path $ExeFile.FullName -NewName 'exiftool.exe' -Force -ErrorAction Stop
             }
 
-            Write-PSmmLog -Level SUCCESS -Context "Install $($Plugin.Config.Name)" -Message "Installation completed for $($InstallerPath)" -Console -File
+            $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+            $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+            if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'ExifTool' }
+            Write-PSmmLog -Level SUCCESS -Context "Install $pluginName" -Message "Installation completed for $($InstallerPath)" -Console -File
         }
         else {
             throw "ExifTool directory not found after extraction"
         }
     }
     catch {
-        Write-PSmmLog -Level ERROR -Context "Install $($Plugin.Config.Name)" -Message "Installation failed for $($InstallerPath)" -ErrorRecord $_ -Console -File
+        $pn = 'ExifTool'
+        try {
+            $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+            $pnCandidate = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+            if (-not [string]::IsNullOrWhiteSpace($pnCandidate)) { $pn = $pnCandidate }
+        }
+        catch { }
+        Write-PSmmLog -Level ERROR -Context "Install $pn" -Message "Installation failed for $($InstallerPath)" -ErrorRecord $_ -Console -File
     }
 }
 

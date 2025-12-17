@@ -322,85 +322,69 @@ class AppConfigurationBuilder {
         try {
             $configData = Import-PowerShellDataFile -Path $configPath
 
+            $getMember = {
+                param([AllowNull()][object]$Object, [Parameter(Mandatory)][string]$Name)
+
+                if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
+                    return $null
+                }
+
+                if ($Object -is [System.Collections.IDictionary]) {
+                    $hasKey = $false
+                    try { $hasKey = [bool]$Object.ContainsKey($Name) } catch { $hasKey = $false }
+                    if (-not $hasKey) { try { $hasKey = [bool]$Object.Contains($Name) } catch { $hasKey = $false } }
+                    if (-not $hasKey) {
+                        try {
+                            foreach ($k in $Object.Keys) {
+                                if ($k -eq $Name) { $hasKey = $true; break }
+                            }
+                        }
+                        catch { $hasKey = $false }
+                    }
+                    if ($hasKey) { return $Object[$Name] }
+                    return $null
+                }
+
+                try {
+                    $p = $Object.PSObject.Properties[$Name]
+                    if ($null -ne $p) { return $p.Value }
+                }
+                catch { }
+
+                return $null
+            }
+
             # Merge configuration data
-            if ($configData.ContainsKey('App')) {
-                if ($configData.App.ContainsKey('Storage')) {
-                    foreach ($key in $configData.App.Storage.Keys) {
-                        $storageData = $configData.App.Storage[$key]
-                        $group = [StorageGroupConfig]::new($key)
-
-                        if ($storageData.ContainsKey('Master') -and $storageData.Master) {
-                            $masterLabel = if ($storageData.Master.ContainsKey('Label')) { $storageData.Master.Label } else { '' }
-                            $masterDrive = ''
-                            $masterSerial = if ($storageData.Master.ContainsKey('SerialNumber')) { $storageData.Master.SerialNumber } else { '' }
-
-                            Write-Verbose "Loading Master for Storage.$key : Label=$masterLabel, Serial=$masterSerial"
-                            $group.Master = [StorageDriveConfig]::new($masterLabel, $masterDrive)
-                            $group.Master.SerialNumber = $masterSerial
-                            Write-Verbose "Set Master.SerialNumber to: $($group.Master.SerialNumber)"
-                        }
-
-                        # Handle Backup storage - config file has numbered backups (1, 2, etc.)
-                        if ($storageData.ContainsKey('Backup') -and $storageData.Backup -and $storageData.Backup -is [hashtable]) {
-                            # Load all numbered backup entries
-                            $backupKeys = $storageData.Backup.Keys | Where-Object { $_ -match '^\d+$' } | Sort-Object { [int]$_ }
-
-                            if ($backupKeys) {
-                                foreach ($backupKey in $backupKeys) {
-                                    $backup = $storageData.Backup[$backupKey]
-                                    $backupLabel = if ($backup.ContainsKey('Label')) { $backup.Label } else { '' }
-                                    $backupDriveLetter = ''
-                                    $backupSerial = if ($backup.ContainsKey('SerialNumber')) { $backup.SerialNumber } else { '' }
-
-                                    Write-Verbose "Loading Backup.$backupKey for Storage.$key : Label=$backupLabel, Serial=$backupSerial"
-
-                                    $backupDriveConfig = [StorageDriveConfig]::new($backupLabel, $backupDriveLetter)
-                                    $backupDriveConfig.SerialNumber = $backupSerial
-                                    $group.Backups[$backupKey] = $backupDriveConfig
-                                    Write-Verbose "Set Backup.$backupKey SerialNumber to: $($backupDriveConfig.SerialNumber)"
-                                }
-                            }
-                            else {
-                                Write-Verbose "Storage.$key has Backup hashtable but no numbered entries found"
-                            }
-                        }
-
-                        if ($storageData.ContainsKey('Paths') -and $storageData.Paths) {
-                            foreach ($pathKey in $storageData.Paths.Keys) {
-                                $group.Paths[$pathKey] = $storageData.Paths[$pathKey]
-                            }
-                        }
-
-                        $this._config.Storage[$key] = $group
+            $appData = & $getMember $configData 'App'
+            if ($null -ne $appData) {
+                $storageRoot = & $getMember $appData 'Storage'
+                if ($storageRoot -is [System.Collections.IDictionary]) {
+                    foreach ($key in $storageRoot.Keys) {
+                        $storageData = $storageRoot[$key]
+                        $this._config.Storage[[string]$key] = [StorageGroupConfig]::FromObject([string]$key, $storageData)
                     }
                 }
 
-                if ($configData.App.ContainsKey('UI')) {
-                    $this._config.UI = $configData.App.UI
+                $uiRoot = & $getMember $appData 'UI'
+                if ($null -ne $uiRoot) {
+                    $this._config.UI = [UIConfig]::FromObject($uiRoot)
                 }
 
-                if ($configData.App.ContainsKey('Logging')) {
-                    $loggingTable = $configData.App.Logging
-                    $loggingType = $this._config.Logging.GetType()
-                    foreach ($key in $loggingTable.Keys) {
-                        $prop = $loggingType.GetProperty($key)
-                        if ($null -eq $prop) {
-                            Write-Verbose "Skipping unsupported logging configuration key: $key"
-                            continue
-                        }
+                $loggingRoot = & $getMember $appData 'Logging'
+                if ($null -ne $loggingRoot) {
+                    $existingLogPath = $null
+                    if ($null -ne $this._config.Logging) { $existingLogPath = $this._config.Logging.Path }
 
-                        try {
-                            $prop.SetValue($this._config.Logging, $loggingTable[$key])
-                        }
-                        catch {
-                            Write-Warning "Failed to assign logging configuration key '$key': $_"
-                        }
+                    $this._config.Logging = [LoggingConfiguration]::FromObject($loggingRoot)
+                    if ([string]::IsNullOrWhiteSpace($this._config.Logging.Path) -and -not [string]::IsNullOrWhiteSpace($existingLogPath)) {
+                        $this._config.Logging.Path = $existingLogPath
                     }
                 }
             }
 
-            if ($configData.ContainsKey('Projects')) {
-                $this._config.Projects = $configData.Projects
+            $projectsRoot = & $getMember $configData 'Projects'
+            if ($null -ne $projectsRoot) {
+                $this._config.Projects = [ProjectsConfig]::FromObject($projectsRoot)
             }
         }
         catch {
@@ -424,8 +408,8 @@ class AppConfigurationBuilder {
             throw [ConfigurationException]::new("Failed to load requirements file '$requirementsPath': $_", $requirementsPath, $_.Exception)
         }
 
-            # Store the loaded requirements in the configuration
-            $this._config.Requirements = $requirementsContent
+            # Store the loaded requirements in the configuration (typed normalization)
+            $this._config.Requirements = [RequirementsConfig]::FromObject($requirementsContent)
 
             return $this
     }
@@ -444,23 +428,46 @@ class AppConfigurationBuilder {
             throw [ConfigurationException]::new("Failed to load plugins file '$pluginsPath': $_", $pluginsPath, $_.Exception)
         }
 
-        if (-not ($pluginsContent -is [hashtable]) -or -not $pluginsContent.ContainsKey('Plugins')) {
-            throw [ConfigurationException]::new("Plugins file is invalid. Expected a hashtable with 'Plugins' root.", $pluginsPath)
+        $pluginsRoot = $null
+        if ($pluginsContent -is [System.Collections.IDictionary]) {
+            $hasPluginsKey = $false
+            try { $hasPluginsKey = [bool]$pluginsContent.ContainsKey('Plugins') } catch { $hasPluginsKey = $false }
+            if (-not $hasPluginsKey) { try { $hasPluginsKey = [bool]$pluginsContent.Contains('Plugins') } catch { $hasPluginsKey = $false } }
+            if (-not $hasPluginsKey) {
+                try {
+                    foreach ($k in $pluginsContent.Keys) {
+                        if ($k -eq 'Plugins') { $hasPluginsKey = $true; break }
+                    }
+                }
+                catch {
+                    $hasPluginsKey = $false
+                }
+            }
+            if ($hasPluginsKey) { $pluginsRoot = $pluginsContent['Plugins'] }
+        }
+        elseif ($null -ne $pluginsContent) {
+            try {
+                $p = $pluginsContent.PSObject.Properties['Plugins']
+                if ($null -ne $p) { $pluginsRoot = $p.Value }
+            }
+            catch { }
         }
 
-        if (-not $this._config.Plugins) {
-            $this._config.Plugins = @{ Global = $null; Project = $null; Resolved = $null; Paths = @{ Global = $null; Project = $null } }
+        if ($null -eq $pluginsRoot) {
+            throw [ConfigurationException]::new("Plugins file is invalid. Expected an IDictionary/hashtable with 'Plugins' root.", $pluginsPath)
         }
+
+        $this._config.Plugins = [PluginsConfig]::FromObject($this._config.Plugins)
 
         $normalizedScope = if ([string]::IsNullOrWhiteSpace($scope)) { 'Global' } else { $scope }
 
         switch -Regex ($normalizedScope) {
             '^Project$' {
-                $this._config.Plugins.Project = $pluginsContent.Plugins
+                $this._config.Plugins.Project = $pluginsRoot
                 $this._config.Plugins.Paths.Project = $pluginsPath
             }
             default {
-                $this._config.Plugins.Global = $pluginsContent.Plugins
+                $this._config.Plugins.Global = $pluginsRoot
                 $this._config.Plugins.Paths.Global = $pluginsPath
             }
         }
@@ -487,35 +494,49 @@ class AppConfigurationBuilder {
             throw [ConfigurationException]::new("Failed to load storage file '$storagePath': $_", $storagePath, $_.Exception)
         }
 
-        if (-not ($storageContent -is [System.Collections.IDictionary] -or $null -ne $storageContent.PSObject.Properties)) {
-            throw [ConfigurationException]::new("Storage file is invalid. Expected a hashtable with 'Storage' root.", $storagePath)
+        # Expect shape: @{ Storage = @{ '1' = @{ ... }; '2' = @{ ... } } }
+        $storageRoot = $null
+        if ($storageContent -is [System.Collections.IDictionary]) {
+            $hasKey = $false
+            try { $hasKey = $storageContent.ContainsKey('Storage') } catch { $hasKey = $false }
+            if (-not $hasKey) { try { $hasKey = $storageContent.Contains('Storage') } catch { $hasKey = $false } }
+            if (-not $hasKey) {
+                try {
+                    foreach ($k in $storageContent.Keys) {
+                        if ($k -eq 'Storage') { $hasKey = $true; break }
+                    }
+                }
+                catch { }
+            }
+            if ($hasKey) {
+                $storageRoot = $storageContent['Storage']
+            }
+        }
+        else {
+            $prop = $storageContent.PSObject.Properties['Storage']
+            if ($null -ne $prop) {
+                $storageRoot = $prop.Value
+            }
         }
 
-        foreach ($groupKey in $storageContent.Storage.Keys) {
-            $groupTable = $storageContent.Storage[$groupKey]
-            $group = [StorageGroupConfig]::new([string]$groupKey)
-            if ($groupTable.ContainsKey('DisplayName')) { $group.DisplayName = $groupTable.DisplayName }
-
-            if ($groupTable.ContainsKey('Master') -and $groupTable.Master) {
-                $mLabel = if ($groupTable.Master.ContainsKey('Label')) { $groupTable.Master.Label } else { '' }
-                $mSerial = if ($groupTable.Master.ContainsKey('SerialNumber')) { $groupTable.Master.SerialNumber } else { '' }
-                $group.Master = [StorageDriveConfig]::new($mLabel, '')
-                $group.Master.SerialNumber = $mSerial
+        $storageMap = $null
+        if ($storageRoot -is [System.Collections.IDictionary]) {
+            $storageMap = $storageRoot
+        }
+        elseif ($null -ne $storageRoot -and $null -ne $storageRoot.PSObject -and $storageRoot.PSObject.Properties.Count -gt 0) {
+            $storageMap = @{}
+            foreach ($p in $storageRoot.PSObject.Properties) {
+                $storageMap[$p.Name] = $p.Value
             }
+        }
 
-            if ($groupTable.ContainsKey('Backup') -and $groupTable.Backup -is [hashtable]) {
-                foreach ($bk in ($groupTable.Backup.Keys | Where-Object { $_ -match '^[0-9]+' } | Sort-Object {[int]$_})) {
-                    $b = $groupTable.Backup[$bk]
-                    if ($null -eq $b) { continue }
-                    $bLabel = if ($b.ContainsKey('Label')) { $b.Label } else { '' }
-                    $bSerial = if ($b.ContainsKey('SerialNumber')) { $b.SerialNumber } else { '' }
-                    $cfg = [StorageDriveConfig]::new($bLabel, '')
-                    $cfg.SerialNumber = $bSerial
-                    $group.Backups[[string]$bk] = $cfg
-                }
-            }
+        if ($null -eq $storageMap) {
+            throw [ConfigurationException]::new("Storage file is invalid. Expected a hashtable/object with a 'Storage' root table.", $storagePath)
+        }
 
-            $this._config.Storage[[string]$groupKey] = $group
+        foreach ($groupKey in $storageMap.Keys) {
+            $groupTable = $storageMap[$groupKey]
+            $this._config.Storage[[string]$groupKey] = [StorageGroupConfig]::FromObject([string]$groupKey, $groupTable)
         }
 
         return $this
@@ -617,6 +638,52 @@ class AppConfigurationBuilder {
         # Ensure initialization is complete
         $this._config.Initialize()
 
+        # Normalize Parameters bag (supports legacy hashtable/PSCustomObject shapes)
+        $this._config.Parameters = [RuntimeParameters]::FromObject($this._config.Parameters)
+
+        # Normalize Requirements bag (supports legacy hashtable shapes)
+        $this._config.Requirements = [RequirementsConfig]::FromObject($this._config.Requirements)
+
+        # Normalize UI bag (supports legacy hashtable shapes)
+        $this._config.UI = [UIConfig]::FromObject($this._config.UI)
+
+        # Normalize InternalErrorMessages to the typed catalog (supports legacy hashtable shapes)
+        $this._config.InternalErrorMessages = [UiErrorCatalog]::FromObject($this._config.InternalErrorMessages)
+
+        # Normalize Projects bag (supports missing Projects and legacy Current hashtable)
+        $this._config.Projects = [ProjectsConfig]::FromObject($this._config.Projects)
+
+        # Normalize Plugins bag (supports legacy hashtable shape)
+        $this._config.Plugins = [PluginsConfig]::FromObject($this._config.Plugins)
+
+        # Normalize Storage groups (supports legacy hashtable/object shapes)
+        if ($null -eq $this._config.Storage) {
+            $this._config.Storage = [Dictionary[string, StorageGroupConfig]]::new()
+        }
+        else {
+            $normalizedStorage = [Dictionary[string, StorageGroupConfig]]::new()
+            if ($this._config.Storage -is [System.Collections.IDictionary]) {
+                foreach ($k in $this._config.Storage.Keys) {
+                    $key = [string]$k
+                    $normalizedStorage[$key] = [StorageGroupConfig]::FromObject($key, $this._config.Storage[$k])
+                }
+            }
+            else {
+                foreach ($k in $this._config.Storage.Keys) {
+                    $key = [string]$k
+                    $normalizedStorage[$key] = [StorageGroupConfig]::FromObject($key, $this._config.Storage[$k])
+                }
+            }
+            $this._config.Storage = $normalizedStorage
+        }
+
+        # Fail-fast validation (strict: warnings are fatal)
+        $validator = if ($null -ne $this._fileSystem) { [ConfigValidator]::new($this._fileSystem) } else { [ConfigValidator]::new() }
+        $issues = $validator.ValidateConfiguration($this._config)
+        if ($null -ne $issues -and $issues.Count -gt 0) {
+            throw [ConfigValidationException]::new('Configuration validation failed', $issues)
+        }
+
         # Mark as built to prevent further modifications
         $this._built = $true
 
@@ -648,11 +715,51 @@ class AppConfigurationBuilder {
 
         try {
             $storageData = Import-PowerShellDataFile -Path $storagePath
-            if (-not ($storageData -is [hashtable]) -or -not $storageData.ContainsKey('Storage')) {
-                Write-Warning "Storage file is invalid. Expected a hashtable with 'Storage' root."
+
+            $storageRoot = $null
+            if ($storageData -is [System.Collections.IDictionary]) {
+                $hasStorage = $false
+                try { $hasStorage = [bool]$storageData.ContainsKey('Storage') } catch { $hasStorage = $false }
+                if (-not $hasStorage) { try { $hasStorage = [bool]$storageData.Contains('Storage') } catch { $hasStorage = $false } }
+                if (-not $hasStorage) {
+                    try {
+                        foreach ($k in $storageData.Keys) {
+                            if ($k -eq 'Storage') { $hasStorage = $true; break }
+                        }
+                    }
+                    catch {
+                        $hasStorage = $false
+                    }
+                }
+                if ($hasStorage) { $storageRoot = $storageData['Storage'] }
+            }
+            elseif ($null -ne $storageData) {
+                try {
+                    $p = $storageData.PSObject.Properties['Storage']
+                    if ($null -ne $p) { $storageRoot = $p.Value }
+                }
+                catch { }
+            }
+
+            if ($null -eq $storageRoot) {
+                Write-Warning "Storage file is invalid. Expected an IDictionary/hashtable with 'Storage' root."
                 return $null
             }
-            return $storageData.Storage
+
+            if ($storageRoot -is [hashtable]) {
+                return $storageRoot
+            }
+
+            if ($storageRoot -is [System.Collections.IDictionary]) {
+                $fixed = @{}
+                foreach ($k in $storageRoot.Keys) {
+                    $fixed[[string]$k] = $storageRoot[$k]
+                }
+                return $fixed
+            }
+
+            Write-Warning "Storage file is invalid. Storage root is not a map type. Type: $($storageRoot.GetType().FullName)"
+            return $null
         }
         catch {
             Write-Warning "Failed to read storage file '$storagePath': $_"
@@ -711,31 +818,92 @@ class AppConfigurationBuilder {
         $lines += '@{'
         $lines += '    Storage = @{'
 
+        $mapHasKey = {
+            param([AllowNull()][object]$Map, [Parameter(Mandatory)][string]$Key)
+
+            if ($null -eq $Map -or $Map -isnot [System.Collections.IDictionary]) {
+                return $false
+            }
+
+            $hasKey = $false
+            try { $hasKey = [bool]$Map.ContainsKey($Key) } catch { $hasKey = $false }
+            if (-not $hasKey) { try { $hasKey = [bool]$Map.Contains($Key) } catch { $hasKey = $false } }
+            if (-not $hasKey) {
+                try {
+                    foreach ($k in $Map.Keys) {
+                        if ($k -eq $Key) { $hasKey = $true; break }
+                    }
+                }
+                catch { $hasKey = $false }
+            }
+
+            return $hasKey
+        }
+
+        $getMember = {
+            param([AllowNull()][object]$Object, [Parameter(Mandatory)][string]$Name)
+
+            if ($null -eq $Object) { return $null }
+
+            if ($Object -is [System.Collections.IDictionary]) {
+                if (& $mapHasKey $Object $Name) {
+                    return $Object[$Name]
+                }
+                return $null
+            }
+
+            try {
+                $p = $Object.PSObject.Properties[$Name]
+                if ($null -ne $p) { return $p.Value }
+            }
+            catch { }
+
+            return $null
+        }
+
         if ($storageHashtable.Count -eq 0) {
             $lines += '    }'
         }
         else {
             foreach ($groupId in ($storageHashtable.Keys | Sort-Object {[int]$_})) {
                 $group = $storageHashtable[$groupId]
-                $displayName = if ($group.ContainsKey('DisplayName')) { $group.DisplayName } else { "Storage Group $groupId" }
+                $displayNameValue = & $getMember $group 'DisplayName'
+                $displayName = if ($null -ne $displayNameValue) { [string]$displayNameValue } else { "Storage Group $groupId" }
                 # Escape single quotes in display name
                 $displayName = $displayName -replace "'", "''"
 
                 $lines += "        '$groupId' = @{"
                 $lines += "            DisplayName = '$displayName'"
 
-                if ($group.ContainsKey('Master') -and $group.Master) {
-                    $mLabel = if ($group.Master.ContainsKey('Label')) { $group.Master.Label -replace "'", "''" } else { '' }
-                    $mSerial = if ($group.Master.ContainsKey('SerialNumber')) { $group.Master.SerialNumber -replace "'", "''" } else { '' }
+                $master = & $getMember $group 'Master'
+                if ($null -ne $master) {
+                    $mLabelValue = & $getMember $master 'Label'
+                    $mSerialValue = & $getMember $master 'SerialNumber'
+                    $mLabel = if ($null -ne $mLabelValue) { ([string]$mLabelValue) -replace "'", "''" } else { '' }
+                    $mSerial = if ($null -ne $mSerialValue) { ([string]$mSerialValue) -replace "'", "''" } else { '' }
                     $lines += "            Master      = @{ Label = '$mLabel'; SerialNumber = '$mSerial' }"
                 }
 
-                if ($group.ContainsKey('Backup') -and $group.Backup -and $group.Backup.Count -gt 0) {
+                $backup = & $getMember $group 'Backup'
+                $backupMap = $null
+                if ($backup -is [System.Collections.IDictionary]) {
+                    $backupMap = $backup
+                }
+                elseif ($null -ne $backup -and $null -ne $backup.PSObject -and $backup.PSObject.Properties.Count -gt 0) {
+                    $backupMap = @{}
+                    foreach ($p in $backup.PSObject.Properties) {
+                        $backupMap[$p.Name] = $p.Value
+                    }
+                }
+
+                if ($null -ne $backupMap -and $backupMap.Count -gt 0) {
                     $lines += '            Backup      = @{'
-                    foreach ($bKey in ($group.Backup.Keys | Sort-Object {[int]$_})) {
-                        $b = $group.Backup[$bKey]
-                        $bLabel = if ($b.ContainsKey('Label')) { $b.Label -replace "'", "''" } else { '' }
-                        $bSerial = if ($b.ContainsKey('SerialNumber')) { $b.SerialNumber -replace "'", "''" } else { '' }
+                    foreach ($bKey in ($backupMap.Keys | Sort-Object {[int]$_})) {
+                        $b = $backupMap[$bKey]
+                        $bLabelValue = & $getMember $b 'Label'
+                        $bSerialValue = & $getMember $b 'SerialNumber'
+                        $bLabel = if ($null -ne $bLabelValue) { ([string]$bLabelValue) -replace "'", "''" } else { '' }
+                        $bSerial = if ($null -ne $bSerialValue) { ([string]$bSerialValue) -replace "'", "''" } else { '' }
                         $lines += "                '$bKey' = @{ Label = '$bLabel'; SerialNumber = '$bSerial' }"
                     }
                     $lines += '            }'

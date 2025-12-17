@@ -79,6 +79,65 @@ function Initialize-PSmmProjectDigiKamConfig {
 
     process {
         try {
+            function _TryGetConfigValue {
+                [CmdletBinding()]
+                param(
+                    [Parameter()][AllowNull()]$Object,
+                    [Parameter()][string]$Name
+                )
+
+                if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
+                    return $null
+                }
+
+                if ($Object -is [System.Collections.IDictionary]) {
+                    try {
+                        if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+                    }
+                    catch {
+                        # ignore
+                    }
+                    try {
+                        if ($Object.Contains($Name)) { return $Object[$Name] }
+                    }
+                    catch {
+                        # ignore
+                    }
+
+                    try {
+                        foreach ($k in $Object.Keys) {
+                            if ($k -eq $Name) { return $Object[$k] }
+                        }
+                    }
+                    catch {
+                        # ignore
+                    }
+                    return $null
+                }
+
+                $p = $Object.PSObject.Properties[$Name]
+                if ($null -ne $p) {
+                    return $p.Value
+                }
+
+                return $null
+            }
+
+            function _TryGetNestedValue {
+                [CmdletBinding()]
+                param(
+                    [Parameter()][AllowNull()]$Root,
+                    [Parameter(Mandatory)][string[]]$PathParts
+                )
+
+                $cur = $Root
+                foreach ($part in $PathParts) {
+                    if ($null -eq $cur) { return $null }
+                    $cur = _TryGetConfigValue -Object $cur -Name $part
+                }
+                return $cur
+            }
+
             # Confirm the action with ShouldProcess
             if (-not $PSCmdlet.ShouldProcess($ProjectName, 'Initialize digiKam configuration')) {
                 Write-Verbose 'Initialize digiKam configuration operation cancelled by user'
@@ -87,11 +146,14 @@ function Initialize-PSmmProjectDigiKamConfig {
 
             # Get project path - check if this is the current project
             $projectPath = $null
-            if ($Config.Projects.ContainsKey('Current') -and
-                $Config.Projects.Current.ContainsKey('Name') -and
-                $Config.Projects.Current.Name -eq $ProjectName -and
-                $Config.Projects.Current.ContainsKey('Path')) {
-                $projectPath = $Config.Projects.Current.Path
+            $projectsCurrent = $null
+            $projectsCurrent = _TryGetNestedValue -Root $Config -PathParts @('Projects','Current')
+
+            if ($null -ne $projectsCurrent) {
+                $currentProject = [ProjectCurrentConfig]::FromObject($projectsCurrent)
+                if ($currentProject.Name -eq $ProjectName -and -not [string]::IsNullOrWhiteSpace($currentProject.Path)) {
+                    $projectPath = $currentProject.Path
+                }
             }
             else {
                 # Project is not currently selected, need to find it
@@ -122,13 +184,20 @@ function Initialize-PSmmProjectDigiKamConfig {
             $databasePort = Get-PSmmAvailablePort -Config $Config -ProjectName $ProjectName -Force:$Force
 
             # Get plugin paths
-            $digiKamInstallations = $FileSystem.GetChildItem($Config.Paths.App.Plugins.Root, 'digiKam-*', 'Directory')
+            $pluginsRoot = $null
+            $pluginsRoot = _TryGetNestedValue -Root $Config -PathParts @('Paths','App','Plugins','Root')
+            $pluginsRoot = if ($null -eq $pluginsRoot) { '' } else { [string]$pluginsRoot }
+            if ([string]::IsNullOrWhiteSpace($pluginsRoot)) {
+                throw [ConfigurationException]::new('Plugins root path not found in configuration (Paths.App.Plugins.Root)', 'PluginsRoot')
+            }
+
+            $digiKamInstallations = $FileSystem.GetChildItem($pluginsRoot, 'digiKam-*', 'Directory')
             if (-not $digiKamInstallations) {
                 throw [PluginRequirementException]::new('digiKam installation not found in Plugins directory', 'digiKam')
             }
             $digiKamPluginsPath = $digiKamInstallations[0].FullName
 
-            $mariaDbInstallations = $FileSystem.GetChildItem($Config.Paths.App.Plugins.Root, 'mariadb-*', 'Directory')
+            $mariaDbInstallations = $FileSystem.GetChildItem($pluginsRoot, 'mariadb-*', 'Directory')
             if (-not $mariaDbInstallations) {
                 throw [PluginRequirementException]::new('MariaDB installation not found in Plugins directory', 'MariaDB')
             }
@@ -142,7 +211,14 @@ function Initialize-PSmmProjectDigiKamConfig {
             }
             else {
                 # Load template and replace variables
-                $templatePath = $PathProvider.CombinePath(@($Config.Paths.App.ConfigDigiKam, 'digiKam-rc-template'))
+                $configDigiKamPath = $null
+                $configDigiKamPath = _TryGetNestedValue -Root $Config -PathParts @('Paths','App','ConfigDigiKam')
+                $configDigiKamPath = if ($null -eq $configDigiKamPath) { '' } else { [string]$configDigiKamPath }
+                if ([string]::IsNullOrWhiteSpace($configDigiKamPath)) {
+                    throw [ConfigurationException]::new('digiKam config path not found in configuration (Paths.App.ConfigDigiKam)', 'ConfigDigiKam')
+                }
+
+                $templatePath = $PathProvider.CombinePath(@($configDigiKamPath, 'digiKam-rc-template'))
                 if (-not ($FileSystem.TestPath($templatePath))) {
                     throw [ConfigurationException]::new("DigiKam template file not found: $templatePath", 'TemplateFile')
                 }
@@ -167,7 +243,13 @@ function Initialize-PSmmProjectDigiKamConfig {
             }
 
             # Copy metadata profile if it doesn't exist
-            $sourceProfilePath = $PathProvider.CombinePath($Config.Paths.App.ConfigDigiKam,'digiKam-metadataProfile.dkamp')
+            if (-not $configDigiKamPath) {
+                $configDigiKamPath = $null
+                $configDigiKamPath = _TryGetNestedValue -Root $Config -PathParts @('Paths','App','ConfigDigiKam')
+                $configDigiKamPath = if ($null -eq $configDigiKamPath) { '' } else { [string]$configDigiKamPath }
+            }
+
+            $sourceProfilePath = $PathProvider.CombinePath($configDigiKamPath,'digiKam-metadataProfile.dkamp')
             $targetProfilePath = $PathProvider.CombinePath($projectDigiKamAppDir,'digiKam-metadataProfile.dkamp')
 
             if (($FileSystem.TestPath($sourceProfilePath)) -and (-not ($FileSystem.TestPath($targetProfilePath)) -or $Force.IsPresent)) {

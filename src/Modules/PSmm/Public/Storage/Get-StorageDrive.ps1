@@ -52,6 +52,39 @@ function Get-StorageDrive {
     [CmdletBinding()] [OutputType([PSCustomObject[]],[object[]])]
     param()
 
+    function Test-MapContainsKey {
+        param(
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Map,
+
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Key
+        )
+
+        if ($null -eq $Map) { return $false }
+
+        if ($Map -is [System.Collections.IDictionary]) {
+            try { if ([bool]$Map.ContainsKey($Key)) { return $true } } catch { }
+            try { if ([bool]$Map.Contains($Key)) { return $true } } catch { }
+            try {
+                foreach ($k in $Map.Keys) {
+                    if ($k -eq $Key) { return $true }
+                }
+            }
+            catch { }
+            return $false
+        }
+
+        $containsKey = $Map.PSObject.Methods['ContainsKey']
+        if ($containsKey) {
+            try { return [bool]$Map.ContainsKey($Key) } catch { return $false }
+        }
+
+        return $false
+    }
+
     $forceInlineEnumeration = $false
     if ($env:MEDIA_MANAGER_TEST_FORCE_INLINE_STORAGE -eq '1') {
         $forceInlineEnumeration = $true
@@ -110,20 +143,20 @@ function Get-StorageDrive {
 
         foreach ($disk in $disks) {
             try {
-                $diskMetadata = if ($useTestData -and $testData.DiskMetadata -and $testData.DiskMetadata.ContainsKey($disk.Index)) {
+                $diskMetadata = if ($useTestData -and $testData.DiskMetadata -and (Test-MapContainsKey -Map $testData.DiskMetadata -Key $disk.Index)) {
                     $testData.DiskMetadata[$disk.Index]
                 } else {
                     Get-Disk | Where-Object { $_.Number -eq $disk.Index } | Select-Object -First 1
                 }
                 if ($null -eq $diskMetadata) { continue }
-                $partitions = if ($useTestData -and $testData.Partitions -and $testData.Partitions.ContainsKey($disk.Index)) {
+                $partitions = if ($useTestData -and $testData.Partitions -and (Test-MapContainsKey -Map $testData.Partitions -Key $disk.Index)) {
                     $testData.Partitions[$disk.Index]
                 } else {
                     Get-CimAssociatedInstance -ResultClassName Win32_DiskPartition -InputObject $disk
                 }
                 if ($null -eq $partitions -or $partitions.Count -eq 0) { continue }
                 foreach ($partition in $partitions) {
-                    $logicalDisks = if ($useTestData -and $testData.LogicalDisks -and $testData.LogicalDisks.ContainsKey($partition.Index)) {
+                    $logicalDisks = if ($useTestData -and $testData.LogicalDisks -and (Test-MapContainsKey -Map $testData.LogicalDisks -Key $partition.Index)) {
                         $testData.LogicalDisks[$partition.Index]
                     } else {
                         Get-CimAssociatedInstance -ResultClassName Win32_LogicalDisk -InputObject $partition
@@ -135,7 +168,7 @@ function Get-StorageDrive {
                             $freeSpace = [math]::Round($logicalDisk.FreeSpace / 1GB, 3)
                             $usedSpace = [math]::Round($totalSpace - $freeSpace, 3)
                             $driveLetter = $logicalDisk.DeviceID.Trim(':')
-                            $volume = if ($useTestData -and $testData.Volumes -and $testData.Volumes.ContainsKey($driveLetter)) {
+                            $volume = if ($useTestData -and $testData.Volumes -and (Test-MapContainsKey -Map $testData.Volumes -Key $driveLetter)) {
                                 $testData.Volumes[$driveLetter]
                             } else {
                                 Get-Volume | Where-Object { $_.DriveLetter -eq $driveLetter } | Select-Object -First 1

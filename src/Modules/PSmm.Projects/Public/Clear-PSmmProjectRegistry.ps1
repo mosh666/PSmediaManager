@@ -32,31 +32,119 @@ function Clear-PSmmProjectRegistry {
         [object]$Config  # Uses [object] instead of [AppConfiguration] to avoid type resolution issues when module is loaded
     )
 
-    # Validate Config is AppConfiguration type
-    if ($Config.GetType().Name -ne 'AppConfiguration') {
-        throw [ArgumentException]::new("Config parameter must be of type [AppConfiguration]", 'Config')
+    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+        if ($null -eq $Object) {
+            return $null
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) {
+                    return $Object[$Name]
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) {
+                        return $Object[$k]
+                    }
+                }
+            }
+            catch {
+                # fall through
+            }
+
+            return $null
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            return $p.Value
+        }
+
+        return $null
+    }
+
+    function Set-ConfigMemberValue([object]$Object, [string]$Name, [object]$Value) {
+        if ($null -eq $Object) {
+            return
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            $Object[$Name] = $Value
+            return
+        }
+
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) {
+            $Object.$Name = $Value
+            return
+        }
+
+        $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+    }
+
+    # Support legacy dictionary-shaped configs by normalizing Projects into the typed model
+    # and using a PSCustomObject view for property access.
+    if ($Config -is [System.Collections.IDictionary]) {
+        $hasProjects = $false
+        try { $hasProjects = $Config.ContainsKey('Projects') } catch { $hasProjects = $false }
+        if (-not $hasProjects) {
+            try { $hasProjects = $Config.Contains('Projects') } catch { $hasProjects = $false }
+        }
+        if (-not $hasProjects) {
+            try {
+                foreach ($k in $Config.Keys) {
+                    if ($k -eq 'Projects') { $hasProjects = $true; break }
+                }
+            }
+            catch { $hasProjects = $false }
+        }
+
+        if (-not $hasProjects -or $null -eq $Config['Projects']) {
+            $Config['Projects'] = [ProjectsConfig]::FromObject($null)
+        }
+        else {
+            $Config['Projects'] = [ProjectsConfig]::FromObject($Config['Projects'])
+        }
+        $Config = [pscustomobject]$Config
     }
 
     try {
-        if ($Config.Projects.ContainsKey('Registry')) {
-            Write-Verbose 'Clearing project registry cache'
-
-            # Reset the registry to force a rescan
-            $Config.Projects.Registry = @{
-                Master = @{}
-                Backup = @{}
-                LastScanned = [datetime]::MinValue
-                ProjectDirs = @{}
-            }
-
-            Write-PSmmLog -Level DEBUG -Context 'Clear-PSmmProjectRegistry' `
-                -Message 'Project registry cache cleared' -File
-
-            Write-Verbose 'Project registry cache cleared successfully'
+        $projectsConfig = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+        if ($null -eq $projectsConfig) {
+            Write-Verbose 'No Projects configuration present'
+            return
         }
-        else {
-            Write-Verbose 'No project registry to clear'
+
+        if ($projectsConfig -isnot [ProjectsConfig]) {
+            $projectsConfig = [ProjectsConfig]::FromObject($projectsConfig)
+            Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
         }
+
+        Write-Verbose 'Clearing project registry cache'
+
+        # Reset the registry to force a rescan
+        Set-ConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value ([ProjectsRegistryCache]::new())
+        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+
+        Write-PSmmLog -Level DEBUG -Context 'Clear-PSmmProjectRegistry' `
+            -Message 'Project registry cache cleared' -File
+
+        Write-Verbose 'Project registry cache cleared successfully'
     }
     catch {
         Write-PSmmLog -Level ERROR -Context 'Clear-PSmmProjectRegistry' `

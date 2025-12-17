@@ -103,7 +103,8 @@ function New-DirectoriesFromHashtable {
             }
             # Skip non-path values
             else {
-                Write-Verbose "Skipping key '$key' - value type: $($value.GetType().Name), value: $value"
+                $valueType = if ($null -eq $value) { 'null' } else { $value.GetType().Name }
+                Write-Verbose "Skipping key '$key' - value type: $valueType, value: $value"
             }
         }
     }

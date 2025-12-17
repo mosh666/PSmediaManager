@@ -32,6 +32,49 @@ function Get-PSmmHealth {
         [Parameter()] [switch] $Format
     )
     try {
+        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
+            if ($null -eq $Object) {
+                return $null
+            }
+
+            if ($Object -is [System.Collections.IDictionary]) {
+                try {
+                    if ($Object.ContainsKey($Name)) {
+                        return $Object[$Name]
+                    }
+                } catch {
+                    # fall through
+                }
+
+                try {
+                    if ($Object.Contains($Name)) {
+                        return $Object[$Name]
+                    }
+                } catch {
+                    # fall through
+                }
+
+                try {
+                    foreach ($k in $Object.Keys) {
+                        if ($k -eq $Name) {
+                            return $Object[$k]
+                        }
+                    }
+                } catch {
+                    # fall through
+                }
+
+                return $null
+            }
+
+            $p = $Object.PSObject.Properties[$Name]
+            if ($null -ne $p) {
+                return $p.Value
+            }
+
+            return $null
+        }
+
         # Resolve configuration if not provided
         if (-not $Config -and (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue)) {
             try { $Config = Get-AppConfiguration } catch { $Config = $null }
@@ -78,8 +121,12 @@ function Get-PSmmHealth {
         if ($Run -and $Run.App -and $Run.App.Plugins -and $Run.App.Plugins.Manifest) {
             $pluginManifest = $Run.App.Plugins.Manifest
         }
-        elseif ($Config -and $Config.Plugins -and $Config.Plugins.Resolved) {
-            $pluginManifest = $Config.Plugins.Resolved
+        elseif ($Config) {
+            $pluginsSource = Get-ConfigMemberValue -Object $Config -Name 'Plugins'
+            $resolvedPlugins = Get-ConfigMemberValue -Object $pluginsSource -Name 'Resolved'
+            if ($resolvedPlugins) {
+                $pluginManifest = $resolvedPlugins
+            }
         }
 
         if ($pluginManifest) {
@@ -109,43 +156,60 @@ function Get-PSmmHealth {
 
         # Storage status (using Config when possible)
         $storage = @()
-        if ($Config -and $Config.Storage) {
-            foreach ($sg in $Config.Storage.Keys) {
-                $group = $Config.Storage[$sg]
-                $master = if ($group.PSObject.Properties['Master']) { $group.Master } else { $null }
-                $backups = if ($group.PSObject.Properties['Backup']) { $group.Backup } else { $null }
-
-                $masterCount = 0
-                if ($master) {
-                    $masterCount = if ($master -is [hashtable] -or $master.PSObject.Properties['Keys']) {
-                        $master.Keys.Count
-                    } else {
-                        0
-                    }
+        if ($Config) {
+            $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+            if ($storageSource) {
+                $storageKeys = @()
+                try {
+                    $storageKeys = @($storageSource.Keys)
+                }
+                catch {
+                    $storageKeys = @()
                 }
 
-                $backupCount = 0
-                if ($backups) {
-                    $backupCount = if ($backups -is [hashtable] -or $backups.PSObject.Properties['Keys']) {
-                        $backups.Keys.Count
-                    } else {
-                        0
-                    }
-                }
+                foreach ($sg in $storageKeys) {
+                    $group = $null
+                    try { $group = $storageSource[$sg] } catch { $group = $null }
 
-                $storage += [pscustomobject]@{
-                    Group = $sg
-                    MasterDrives = $masterCount
-                    BackupDrives = $backupCount
+                    $master = Get-ConfigMemberValue -Object $group -Name 'Master'
+
+                    $backups = Get-ConfigMemberValue -Object $group -Name 'Backups'
+                    if (-not $backups) {
+                        $backups = Get-ConfigMemberValue -Object $group -Name 'Backup'
+                    }
+
+                    $masterCount = if ($null -ne $master) { 1 } else { 0 }
+
+                    $backupCount = 0
+                    if ($null -ne $backups) {
+                        if ($backups -is [System.Collections.IDictionary]) {
+                            try { $backupCount = @($backups.Keys).Count } catch { $backupCount = 0 }
+                        }
+                        else {
+                            try { $backupCount = @($backups.Keys).Count } catch { $backupCount = 0 }
+                            if ($backupCount -eq 0) {
+                                try { $backupCount = @($backups.PSObject.Properties).Count } catch { $backupCount = 0 }
+                            }
+                        }
+                    }
+
+                    $storage += [pscustomobject]@{
+                        Group = $sg
+                        MasterDrives = $masterCount
+                        BackupDrives = $backupCount
+                    }
                 }
             }
         }
         # Secrets / Vault status
+        $secretsSource = if ($Config) { Get-ConfigMemberValue -Object $Config -Name 'Secrets' } else { $null }
+        $githubToken = Get-ConfigMemberValue -Object $secretsSource -Name 'GitHubToken'
+        $vaultPathValue = Get-ConfigMemberValue -Object $secretsSource -Name 'VaultPath'
         $vaultStatus = [pscustomobject]@{
-            GitHubTokenPresent = ($Config -and $Config.Secrets -and $Config.Secrets.GitHubToken)
-            VaultPath = if ($Config -and $Config.Secrets) { $Config.Secrets.VaultPath } else { $null }
+            GitHubTokenPresent = [bool]$githubToken
+            VaultPath = $vaultPathValue
             KeePassXCAvailable = $false
-            VaultInitialized = ($Config -and $Config.Secrets -and $Config.Secrets.VaultPath)
+            VaultInitialized = [bool]$vaultPathValue
         }
 
         # Update Modules to use 'Installed' property name instead of 'Present'
@@ -162,8 +226,15 @@ function Get-PSmmHealth {
         $configPath = $null
         if ($Config) {
             try {
-                if ($Config.PSObject.Properties -and $Config.PSObject.Properties['Paths']) {
-                    $configPath = $Config.Paths.Config
+                $pathsSource = Get-ConfigMemberValue -Object $Config -Name 'Paths'
+                if ($pathsSource) {
+                    $appPaths = Get-ConfigMemberValue -Object $pathsSource -Name 'App'
+                    $configPath = if ($appPaths) {
+                        Get-ConfigMemberValue -Object $appPaths -Name 'Config'
+                    }
+                    else {
+                        Get-ConfigMemberValue -Object $pathsSource -Name 'Config'
+                    }
                 }
             } catch { $configPath = $null }
         }

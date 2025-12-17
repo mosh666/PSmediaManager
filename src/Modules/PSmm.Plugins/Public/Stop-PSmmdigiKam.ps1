@@ -58,12 +58,97 @@ function Stop-PSmmdigiKam {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
+        function Get-ConfigMemberValue {
+            param(
+                [Parameter(Mandatory = $true)]
+                [AllowNull()]
+                [object]$Object,
+
+                [Parameter(Mandatory = $true)]
+                [ValidateNotNullOrEmpty()]
+                [string]$Name
+            )
+
+            if ($null -eq $Object) { return $null }
+
+            try {
+                if ($Object -is [System.Collections.IDictionary]) {
+                    $hasKey = $false
+                    try { $hasKey = $Object.ContainsKey($Name) } catch { $hasKey = $false }
+                    if (-not $hasKey) { try { $hasKey = $Object.Contains($Name) } catch { $hasKey = $false } }
+
+                    if (-not $hasKey) {
+                        try {
+                            foreach ($k in $Object.Keys) {
+                                if ($k -eq $Name) { $hasKey = $true; break }
+                            }
+                        }
+                        catch { $hasKey = $false }
+                    }
+
+                    if ($hasKey) { return $Object[$Name] }
+                }
+            }
+            catch { }
+
+            try {
+                $prop = $Object.PSObject.Properties[$Name]
+                if ($null -ne $prop) { return $prop.Value }
+            }
+            catch { }
+
+            return $null
+        }
+
+        function Set-ConfigMemberValue {
+            param(
+                [Parameter(Mandatory = $true)]
+                [AllowNull()]
+                [object]$Object,
+
+                [Parameter(Mandatory = $true)]
+                [ValidateNotNullOrEmpty()]
+                [string]$Name,
+
+                [Parameter(Mandatory = $false)]
+                [AllowNull()]
+                [object]$Value
+            )
+
+            if ($null -eq $Object) { return }
+
+            try {
+                if ($Object -is [System.Collections.IDictionary]) {
+                    $Object[$Name] = $Value
+                    return
+                }
+            }
+            catch { }
+
+            try {
+                $prop = $Object.PSObject.Properties[$Name]
+                if ($null -ne $prop) {
+                    $prop.Value = $Value
+                    return
+                }
+            }
+            catch { }
+
+            try {
+                $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+            }
+            catch { }
+        }
+
         # Get current project name from Config
-        $projectName = if ($null -ne $Config.Projects -and $Config.Projects.ContainsKey('Current') -and
-            $Config.Projects.Current.ContainsKey('Name')) {
-            $Config.Projects.Current.Name
-        } else {
-            'Unknown'
+        $projectName = 'Unknown'
+        $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+        $projectsCurrent = Get-ConfigMemberValue -Object $projects -Name 'Current'
+        if ($null -ne $projects -and $null -ne $projectsCurrent) {
+            $currentProject = [ProjectCurrentConfig]::FromObject($projectsCurrent)
+            if (-not [string]::IsNullOrWhiteSpace($currentProject.Name)) {
+                $projectName = $currentProject.Name
+            }
         }
 
         Write-Verbose "Stopping digiKam for project: $projectName"
@@ -82,11 +167,13 @@ function Stop-PSmmdigiKam {
 
             # Get project-specific paths - check if this is the current project
             $projectPath = $null
-            if ($Config.Projects.ContainsKey('Current') -and
-                $Config.Projects.Current.ContainsKey('Name') -and
-                $Config.Projects.Current.Name -eq $projectName -and
-                $Config.Projects.Current.ContainsKey('Path')) {
-                $projectPath = $Config.Projects.Current.Path
+            $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+            $projectsCurrent = Get-ConfigMemberValue -Object $projects -Name 'Current'
+            if ($null -ne $projects -and $null -ne $projectsCurrent) {
+                $currentProject = [ProjectCurrentConfig]::FromObject($projectsCurrent)
+                if ($currentProject.Name -eq $projectName -and -not [string]::IsNullOrWhiteSpace($currentProject.Path)) {
+                    $projectPath = $currentProject.Path
+                }
             }
             else {
                 Write-Warning "Project '$projectName' is not currently selected. Cannot determine project paths for stopping digiKam."
@@ -98,9 +185,14 @@ function Stop-PSmmdigiKam {
 
             # Get project's allocated database port
             $databasePort = $null
-            if ($Config.Projects.ContainsKey('PortRegistry') -and
-                $Config.Projects.PortRegistry.ContainsKey($projectName)) {
-                $databasePort = $Config.Projects.PortRegistry[$projectName]
+            $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+            $projectsPortRegistry = Get-ConfigMemberValue -Object $projects -Name 'PortRegistry'
+            if ($null -ne $projects -and $null -ne $projectsPortRegistry) {
+                $portRegistry = [ProjectsPortRegistry]::FromObject($projectsPortRegistry)
+                Set-ConfigMemberValue -Object $projects -Name 'PortRegistry' -Value $portRegistry
+                if ($portRegistry.ContainsKey($projectName)) {
+                    $databasePort = $portRegistry.GetPort($projectName)
+                }
                 Write-Verbose "Found allocated port $databasePort for project $projectName"
             }
 

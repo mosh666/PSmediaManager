@@ -43,22 +43,38 @@ function Get-ErrorMessages {
     param (
         [Parameter(Mandatory)]
         [AllowNull()]
-        [hashtable]$ErrorHashtable
+        [object]$ErrorHashtable
     )
 
     try {
-        Write-Verbose 'Collecting error messages from hashtable...'
+        Write-Verbose 'Collecting error messages from error catalog...'
 
         $messages = [System.Collections.ArrayList]@()
 
-        # Return empty array if hashtable is null or empty
-        if ($null -eq $ErrorHashtable -or $ErrorHashtable.Count -eq 0) {
-            Write-Verbose 'No errors found (hashtable is null or empty)'
+        # Return empty array if input is null
+        if ($null -eq $ErrorHashtable) {
+            Write-Verbose 'No errors found (error source is null)'
             return [string[]]@()
         }
 
-        # Recursively collect error messages
-        Get-ErrorMessagesRecursive -Hash $ErrorHashtable -MessageList $messages
+        # Preferred: typed catalog
+        if ($ErrorHashtable -is [UiErrorCatalog]) {
+            $msgs = $ErrorHashtable.GetAllMessages()
+            return if ($null -eq $msgs) { [string[]]@() } else { [string[]]$msgs }
+        }
+
+        # Recursively collect error messages (legacy hashtable shape)
+        if ($ErrorHashtable -is [hashtable]) {
+            if ($ErrorHashtable.Count -eq 0) {
+                Write-Verbose 'No errors found (hashtable is empty)'
+                return [string[]]@()
+            }
+            Get-ErrorMessagesRecursive -Hash $ErrorHashtable -MessageList $messages
+        }
+        else {
+            # Unknown shape; nothing to collect
+            return [string[]]@()
+        }
 
         $count = $messages.Count
         Write-Verbose "Collected $count error message(s)"

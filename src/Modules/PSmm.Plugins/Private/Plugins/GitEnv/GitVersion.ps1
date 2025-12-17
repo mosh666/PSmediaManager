@@ -7,10 +7,57 @@ Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
 
+function Get-ConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        try {
+            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            if ($Object.Contains($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            foreach ($k in $Object.Keys) {
+                if ($k -eq $Name) { return $Object[$k] }
+            }
+        }
+        catch { }
+
+        return $null
+    }
+
+    try {
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) { return $p.Value }
+    }
+    catch { }
+
+    return $null
+}
+
 function Get-CurrentVersion-GitVersion {
     param(
         [hashtable]$Plugin,
-        [hashtable]$Paths
+        [hashtable]$Paths,
+        $ServiceContainer
     )
 
     # Resolve FileSystem from ServiceContainer if available
@@ -24,15 +71,25 @@ function Get-CurrentVersion-GitVersion {
         }
     }
 
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'GitVersion' }
+
     if ($FileSystem) {
-        $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
+        $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
     }
     else {
-        $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
+        $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
     }
 
     if ($InstallPath) {
-        $bin = Join-Path -Path $InstallPath -ChildPath $Plugin.Config.CommandPath -AdditionalChildPath $Plugin.Config.Command
+        $commandPath = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'CommandPath')
+        $command = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Command')
+        if ([string]::IsNullOrWhiteSpace($commandPath) -or [string]::IsNullOrWhiteSpace($command)) {
+            return ''
+        }
+
+        $bin = Join-Path -Path $InstallPath -ChildPath $commandPath -AdditionalChildPath $command
         $CurrentVersion = (& $bin -version)
         return $CurrentVersion.Split('+')[0]
     }

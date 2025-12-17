@@ -34,7 +34,7 @@ function Invoke-ManageStorage {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -47,6 +47,111 @@ function Invoke-ManageStorage {
     function Write-ManageLog([string]$level, [string]$context, [string]$msg) {
         if ($logAvail) { Write-PSmmLog -Level $level -Context $context -Message $msg -File }
         else { Write-Verbose "$context : $msg" }
+    }
+
+    function Get-ConfigMemberValue {
+        param(
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Object,
+
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$Name,
+
+            [Parameter()]
+            $Default = $null
+        )
+
+        if ($null -eq $Object) { return $Default }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) { return $Object[$Name] }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) { return $Object[$k] }
+                }
+            }
+            catch {
+                # fall through
+            }
+        }
+
+        $prop = $Object.PSObject.Properties[$Name]
+        if ($null -ne $prop) { return $prop.Value }
+
+        return $Default
+    }
+
+    function Test-MapContainsKey {
+        param(
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Map,
+
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Key
+        )
+
+        if ($null -eq $Map) { return $false }
+
+        if ($Map -is [System.Collections.IDictionary]) {
+            $containsKey = $Map.PSObject.Methods['ContainsKey']
+            if ($containsKey) {
+                try {
+                    if ($Map.ContainsKey($Key)) { return $true }
+                }
+                catch {
+                    # fall through
+                }
+            }
+
+            try {
+                if ([bool]$Map.Contains($Key)) { return $true }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Map.Keys) {
+                    if ($k -eq $Key) { return $true }
+                }
+            }
+            catch { return $false }
+
+            return $false
+        }
+
+        $containsKey = $Map.PSObject.Methods['ContainsKey']
+        if ($containsKey) {
+            try { return [bool]$Map.ContainsKey($Key) } catch { return $false }
+        }
+
+        return $false
+    }
+
+    $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage' -Default $null
+    if ($null -eq $storageMap -and $Config -is [System.Collections.IDictionary]) {
+        # Allow passing a Storage-map directly in legacy/test scenarios
+        $storageMap = $Config
+    }
+    if ($null -eq $storageMap) {
+        $storageMap = @{}
     }
 
     # Test input feed for non-interactive testing
@@ -95,7 +200,7 @@ function Invoke-ManageStorage {
             $menuOptions = @()
             $optionMap = @{}
             $idx = 1
-            $hasStorage = ($null -ne $Config.Storage -and $Config.Storage.Keys.Count -gt 0)
+            $hasStorage = ($null -ne $storageMap -and $storageMap.Keys.Count -gt 0)
             if ($hasStorage) {
                 $menuOptions += "${idx}. Edit Existing Group"
                 $optionMap[$idx] = 'E'
@@ -125,7 +230,7 @@ function Invoke-ManageStorage {
 
             if ($selection -notmatch '^[0-9]+$' -or -not $optionMap.ContainsKey([int]$selection)) {
                 Write-PSmmHost 'Invalid selection. Please choose a valid number from the menu above.' -ForegroundColor Yellow
-                Call-PauseIfInteractive
+                Invoke-PauseIfInteractive
                 continue
             }
             $chosen = $optionMap[[int]$selection]
@@ -136,33 +241,41 @@ function Invoke-ManageStorage {
                     Write-ManageLog -level 'DEBUG' -context 'ManageStorage' -msg 'User selected Edit'
 
                     # List groups
-                    if ($null -eq $Config.Storage -or $Config.Storage.Keys.Count -eq 0) {
+                    if ($null -eq $storageMap -or $storageMap.Keys.Count -eq 0) {
                         Write-PSmmHost 'No storage groups configured.' -ForegroundColor Yellow
-                        Call-PauseIfInteractive
+                        Invoke-PauseIfInteractive
                         continue
                     }
 
                     Write-Information ''
                     Write-PSmmHost 'Select a group to edit:' -ForegroundColor Cyan
                     Write-Information ''
-                    foreach ($groupId in ($Config.Storage.Keys | Sort-Object {[int]$_})) {
-                        $group = $Config.Storage[$groupId]
-                        $displayName = if ($group.DisplayName) { $group.DisplayName } else { "Storage Group $groupId" }
+                    foreach ($groupId in ($storageMap.Keys | Sort-Object {[int]$_})) {
+                        $group = $storageMap[$groupId]
+                        $displayNameValue = Get-ConfigMemberValue -Object $group -Name 'DisplayName' -Default ''
+                        $displayName = if (-not [string]::IsNullOrWhiteSpace([string]$displayNameValue)) { [string]$displayNameValue } else { "Storage Group $groupId" }
                         Write-PSmmHost "  [$groupId] $displayName" -ForegroundColor White
 
                         # Show Master drive
-                        if ($group.Master) {
-                            $masterLabel = if ($group.Master.Label) { $group.Master.Label } else { 'N/A' }
-                            $masterSerial = if ($group.Master.SerialNumber) { $group.Master.SerialNumber } else { 'N/A' }
+                        $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master' -Default $null
+                        if ($masterCfg) {
+                            $masterLabelValue = Get-ConfigMemberValue -Object $masterCfg -Name 'Label' -Default ''
+                            $masterSerialValue = Get-ConfigMemberValue -Object $masterCfg -Name 'SerialNumber' -Default ''
+                            $masterLabel = if (-not [string]::IsNullOrWhiteSpace([string]$masterLabelValue)) { [string]$masterLabelValue } else { 'N/A' }
+                            $masterSerial = if (-not [string]::IsNullOrWhiteSpace([string]$masterSerialValue)) { [string]$masterSerialValue } else { 'N/A' }
                             Write-PSmmHost "      Master: $masterLabel (S/N: $masterSerial)" -ForegroundColor Gray
                         }
 
                         # Show Backup drives
-                        if ($group.Backups -and $group.Backups.Keys.Count -gt 0) {
-                            foreach ($backupId in ($group.Backups.Keys | Sort-Object {[int]$_})) {
-                                $backup = $group.Backups[$backupId]
-                                $backupLabel = if ($backup.Label) { $backup.Label } else { 'N/A' }
-                                $backupSerial = if ($backup.SerialNumber) { $backup.SerialNumber } else { 'N/A' }
+                        $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backups' -Default $null
+                        if ($null -eq $backupsCfg) { $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backup' -Default $null }
+                        if ($backupsCfg -is [System.Collections.IDictionary] -and $backupsCfg.Keys.Count -gt 0) {
+                            foreach ($backupId in ($backupsCfg.Keys | Sort-Object { [int]$_ })) {
+                                $backup = $backupsCfg[$backupId]
+                                $backupLabelValue = Get-ConfigMemberValue -Object $backup -Name 'Label' -Default ''
+                                $backupSerialValue = Get-ConfigMemberValue -Object $backup -Name 'SerialNumber' -Default ''
+                                $backupLabel = if (-not [string]::IsNullOrWhiteSpace([string]$backupLabelValue)) { [string]$backupLabelValue } else { 'N/A' }
+                                $backupSerial = if (-not [string]::IsNullOrWhiteSpace([string]$backupSerialValue)) { [string]$backupSerialValue } else { 'N/A' }
                                 Write-PSmmHost "      Backup $backupId`: $backupLabel (S/N: $backupSerial)" -ForegroundColor Gray
                             }
                         }
@@ -173,9 +286,9 @@ function Invoke-ManageStorage {
                     $groupChoice = Read-ManageInput 'Enter group number or B to go back'
                     if ($groupChoice -match '^(?i)b$') { continue }
 
-                    if ($groupChoice -notmatch '^[0-9]+$' -or -not $Config.Storage.ContainsKey($groupChoice)) {
+                    if ($groupChoice -notmatch '^[0-9]+$' -or -not (Test-MapContainsKey -Map $storageMap -Key $groupChoice)) {
                         Write-PSmmHost 'Invalid group selection.' -ForegroundColor Yellow
-                        Call-PauseIfInteractive
+                        Invoke-PauseIfInteractive
                         continue
                     }
 
@@ -194,7 +307,7 @@ function Invoke-ManageStorage {
                         Write-ManageLog -level 'ERROR' -context 'ManageStorage' -msg "Failed to edit group: $_"
                         Write-PSmmHost "Failed to edit group: $_" -ForegroundColor Red
                     }
-                    Call-PauseIfInteractive
+                    Invoke-PauseIfInteractive
                 }
 
                 '^(?i)a$' {
@@ -215,40 +328,48 @@ function Invoke-ManageStorage {
                         Write-ManageLog -level 'ERROR' -context 'ManageStorage' -msg "Failed to add group: $_"
                         Write-PSmmHost "Failed to add group: $_" -ForegroundColor Red
                     }
-                    Call-PauseIfInteractive
+                    Invoke-PauseIfInteractive
                 }
 
                 '^(?i)r$' {
                     # Remove group(s)
                     Write-ManageLog -level 'DEBUG' -context 'ManageStorage' -msg 'User selected Remove'
 
-                    if ($null -eq $Config.Storage -or $Config.Storage.Keys.Count -eq 0) {
+                    if ($null -eq $storageMap -or $storageMap.Keys.Count -eq 0) {
                         Write-PSmmHost 'No storage groups configured.' -ForegroundColor Yellow
-                        Call-PauseIfInteractive
+                        Invoke-PauseIfInteractive
                         continue
                     }
 
                     Write-Information ''
                     Write-PSmmHost 'Select group(s) to remove:' -ForegroundColor Cyan
                     Write-Information ''
-                    foreach ($groupId in ($Config.Storage.Keys | Sort-Object {[int]$_})) {
-                        $group = $Config.Storage[$groupId]
-                        $displayName = if ($group.DisplayName) { $group.DisplayName } else { "Storage Group $groupId" }
+                    foreach ($groupId in ($storageMap.Keys | Sort-Object {[int]$_})) {
+                        $group = $storageMap[$groupId]
+                        $displayNameValue = Get-ConfigMemberValue -Object $group -Name 'DisplayName' -Default ''
+                        $displayName = if (-not [string]::IsNullOrWhiteSpace([string]$displayNameValue)) { [string]$displayNameValue } else { "Storage Group $groupId" }
                         Write-PSmmHost "  [$groupId] $displayName" -ForegroundColor White
 
                         # Show Master drive
-                        if ($group.Master) {
-                            $masterLabel = if ($group.Master.Label) { $group.Master.Label } else { 'N/A' }
-                            $masterSerial = if ($group.Master.SerialNumber) { $group.Master.SerialNumber } else { 'N/A' }
+                        $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master' -Default $null
+                        if ($masterCfg) {
+                            $masterLabelValue = Get-ConfigMemberValue -Object $masterCfg -Name 'Label' -Default ''
+                            $masterSerialValue = Get-ConfigMemberValue -Object $masterCfg -Name 'SerialNumber' -Default ''
+                            $masterLabel = if (-not [string]::IsNullOrWhiteSpace([string]$masterLabelValue)) { [string]$masterLabelValue } else { 'N/A' }
+                            $masterSerial = if (-not [string]::IsNullOrWhiteSpace([string]$masterSerialValue)) { [string]$masterSerialValue } else { 'N/A' }
                             Write-PSmmHost "      Master: $masterLabel (S/N: $masterSerial)" -ForegroundColor Gray
                         }
 
                         # Show Backup drives
-                        if ($group.Backups -and $group.Backups.Keys.Count -gt 0) {
-                            foreach ($backupId in ($group.Backups.Keys | Sort-Object {[int]$_})) {
-                                $backup = $group.Backups[$backupId]
-                                $backupLabel = if ($backup.Label) { $backup.Label } else { 'N/A' }
-                                $backupSerial = if ($backup.SerialNumber) { $backup.SerialNumber } else { 'N/A' }
+                        $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backups' -Default $null
+                        if ($null -eq $backupsCfg) { $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backup' -Default $null }
+                        if ($backupsCfg -is [System.Collections.IDictionary] -and $backupsCfg.Keys.Count -gt 0) {
+                            foreach ($backupId in ($backupsCfg.Keys | Sort-Object { [int]$_ })) {
+                                $backup = $backupsCfg[$backupId]
+                                $backupLabelValue = Get-ConfigMemberValue -Object $backup -Name 'Label' -Default ''
+                                $backupSerialValue = Get-ConfigMemberValue -Object $backup -Name 'SerialNumber' -Default ''
+                                $backupLabel = if (-not [string]::IsNullOrWhiteSpace([string]$backupLabelValue)) { [string]$backupLabelValue } else { 'N/A' }
+                                $backupSerial = if (-not [string]::IsNullOrWhiteSpace([string]$backupSerialValue)) { [string]$backupSerialValue } else { 'N/A' }
                                 Write-PSmmHost "      Backup $backupId`: $backupLabel (S/N: $backupSerial)" -ForegroundColor Gray
                             }
                         }
@@ -262,14 +383,14 @@ function Invoke-ManageStorage {
                     $groupsToRemove = @()
                     $nums = $removeChoice -split '[, ]+' | Where-Object { $_ -match '^[0-9]+$' } | ForEach-Object { [string]$_ } | Select-Object -Unique
                     foreach ($n in $nums) {
-                        if ($Config.Storage.ContainsKey($n)) {
+                        if (Test-MapContainsKey -Map $storageMap -Key $n) {
                             $groupsToRemove += $n
                         }
                     }
 
                     if ($groupsToRemove.Count -eq 0) {
                         Write-PSmmHost 'No valid groups selected.' -ForegroundColor Yellow
-                        Call-PauseIfInteractive
+                        Invoke-PauseIfInteractive
                         continue
                     }
 
@@ -277,7 +398,7 @@ function Invoke-ManageStorage {
                     Write-Information ''
                     Write-PSmmHost "You are about to remove $($groupsToRemove.Count) group(s):" -ForegroundColor Yellow
                     foreach ($gid in $groupsToRemove) {
-                        $g = $Config.Storage[$gid]
+                        $g = $storageMap[$gid]
                         $dname = if ($g.DisplayName) { $g.DisplayName } else { "Storage Group $gid" }
                         Write-Information "  - Group $gid : $dname"
                     }
@@ -285,7 +406,7 @@ function Invoke-ManageStorage {
                     $confirm = Read-ManageInput 'Confirm removal? (Y/N)'
                     if ($confirm -notmatch '^(?i)y$') {
                         Write-PSmmHost 'Removal cancelled.' -ForegroundColor Yellow
-                        Call-PauseIfInteractive
+                        Invoke-PauseIfInteractive
                         continue
                     }
 
@@ -298,7 +419,7 @@ function Invoke-ManageStorage {
                         Write-ManageLog -level 'ERROR' -context 'ManageStorage' -msg "Failed to remove groups: $_"
                         Write-PSmmHost "Failed to remove groups: $_" -ForegroundColor Red
                     }
-                    Call-PauseIfInteractive
+                    Invoke-PauseIfInteractive
                 }
 
                 '^(?i)b$' {
@@ -309,7 +430,7 @@ function Invoke-ManageStorage {
 
                 default {
                     Write-PSmmHost 'Invalid selection. Please choose E, A, R, or B.' -ForegroundColor Yellow
-                    Call-PauseIfInteractive
+                    Invoke-PauseIfInteractive
                 }
             }
             # In test mode with canned inputs, stop once we've consumed all inputs to avoid waiting for user input

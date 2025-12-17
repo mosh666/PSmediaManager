@@ -308,7 +308,17 @@ try {
 
     # Get repository root from the config builder
     $tempConfig = $configBuilder.GetConfig()
-    $repositoryRoot = $tempConfig.Paths.RepositoryRoot
+    $repositoryRoot = $null
+    try {
+        # Prefer typed normalization before using typed members
+        if ($null -ne $tempConfig -and -not ($tempConfig -is [AppConfiguration])) {
+            $tempConfig = [AppConfiguration]::FromObject($tempConfig)
+        }
+        try { $repositoryRoot = [string]$tempConfig.Paths.RepositoryRoot } catch { $repositoryRoot = $null }
+    }
+    catch {
+        $repositoryRoot = $null
+    }
 
     if ($repositoryRoot) {
         $launcherCmd = Get-Command -Name 'New-DriveRootLauncher' -ErrorAction SilentlyContinue
@@ -395,38 +405,7 @@ try {
     $configBuilder = $configBuilder.UpdateStorageStatus()
     Write-Verbose "Calling Build..."
     $appConfig = $configBuilder.Build()
-    Write-Verbose "Configuration built successfully"
-
-    # Phase 10: Validate configuration
-    Write-Verbose "Validating configuration..."
-    Write-Verbose "Creating ConfigValidator instance..."
-    $validator = [ConfigValidator]::new($script:ServiceContainer.Resolve('FileSystem'))
-    Write-Verbose "ConfigValidator instance created successfully"
-    Write-Verbose "AppConfig type: $($appConfig.GetType().FullName)"
-    Write-Verbose "Calling ValidateConfiguration..."
-    $validationIssues = $validator.ValidateConfiguration($appConfig)
-    Write-Verbose "ValidateConfiguration completed"
-
-    if ($validationIssues.Count -gt 0) {
-        $errors = @($validationIssues | Where-Object { $_.Severity -eq 'Error' })
-        $warnings = @($validationIssues | Where-Object { $_.Severity -eq 'Warning' })
-
-        if ($warnings.Count -gt 0) {
-            Write-Verbose "Configuration validation found $($warnings.Count) warning(s)"
-            foreach ($warning in $warnings) {
-                Write-Warning "[$($warning.Category)] $($warning.Property): $($warning.Message)"
-            }
-        }
-
-        if ($errors.Count -gt 0) {
-            Write-Error "Configuration validation failed with $($errors.Count) error(s):"
-            foreach ($validationError in $errors) {
-                Write-Error "[$($validationError.Category)] $($validationError.Property): $($validationError.Message)"
-            }
-            throw [ValidationException]::new("Configuration validation failed", "AppConfiguration", $appConfig)
-        }
-    }
-    Write-Verbose "Configuration validation passed"
+    Write-Verbose "Configuration built and validated successfully"
 
     # Bootstrap using modern AppConfiguration approach
     # All bootstrap functions now support AppConfiguration natively
@@ -568,8 +547,8 @@ try {
         try {
             $cfgType = $appConfig.GetType().FullName
             $uiExists = if ($null -ne $appConfig.UI) { 'Yes' } else { 'No' }
-            $uiWidth = if ($null -ne $appConfig.UI -and $appConfig.UI.ContainsKey('Width')) { $appConfig.UI.Width } else { 'N/A' }
-            $ansiFgCount = if ($null -ne $appConfig.UI -and $appConfig.UI.ContainsKey('ANSI') -and $appConfig.UI.ANSI.ContainsKey('FG')) { ($appConfig.UI.ANSI.FG.Keys | Measure-Object).Count } else { 0 }
+            $uiWidth = if ($null -ne $appConfig.UI -and $null -ne $appConfig.UI.Width) { $appConfig.UI.Width } else { 'N/A' }
+            $ansiFgCount = if ($null -ne $appConfig.UI -and $null -ne $appConfig.UI.ANSI -and $null -ne $appConfig.UI.ANSI.FG) { ($appConfig.UI.ANSI.FG.Keys | Measure-Object).Count } else { 0 }
             Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=$cfgType, UI=$uiExists, Width=$uiWidth, FGColors=$ansiFgCount)" -ForegroundColor Cyan
         }
         catch { Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=UNKNOWN, error collecting UI details: $($_.Exception.Message))" -ForegroundColor Cyan }

@@ -19,11 +19,7 @@ function Show-InvalidSelection {
 
     Write-PSmmHost ''
     $InvalidColumns = @(
-        @{
-            Text = 'Invalid selection, please try again.'
-            Width = 80
-            Alignment = 'c'
-        }
+        New-UiColumn -Text 'Invalid selection, please try again.' -Width 80 -Alignment 'c'
     )
     # Use no decorative border; 'None' previously produced a literal 'N' border due to non-empty string.
     # Pass empty string to suppress border characters entirely.

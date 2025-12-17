@@ -7,6 +7,94 @@ Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
 
+function Get-ConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        try {
+            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            if ($Object.Contains($Name)) { return $Object[$Name] }
+        }
+        catch { }
+
+        try {
+            foreach ($k in $Object.Keys) {
+                if ($k -eq $Name) { return $Object[$k] }
+            }
+        }
+        catch { }
+
+        return $null
+    }
+
+    try {
+        $p = $Object.PSObject.Properties[$Name]
+        if ($null -ne $p) { return $p.Value }
+    }
+    catch { }
+
+    return $null
+}
+
+function Set-ConfigMemberValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
+
+        [Parameter()]
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Object) {
+        return
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        $Object[$Name] = $Value
+        return
+    }
+
+    try {
+        $Object.$Name = $Value
+        return
+    }
+    catch { }
+
+    try {
+        if ($null -eq $Object.PSObject.Properties[$Name]) {
+            $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+        }
+        else {
+            $Object.PSObject.Properties[$Name].Value = $Value
+        }
+    }
+    catch { }
+}
+
 function Get-CurrentVersion-ImageMagick {
     param(
         [hashtable]$Plugin,
@@ -25,11 +113,15 @@ function Get-CurrentVersion-ImageMagick {
         }
     }
 
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'ImageMagick' }
+
     if ($FileSystem) {
-        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$($Plugin.Config.Name)*", 'Directory')) | Select-Object -First 1
+        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
     }
     else {
-        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($Plugin.Config.Name)*" }
+        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
     }
 
     if ($CurrentVersion) {
@@ -49,17 +141,24 @@ function Get-LatestUrlFromUrl-ImageMagick {
     )
     $null = $Paths, $ServiceContainer
 
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'ImageMagick' }
+    $versionUrl = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
+    $assetPattern = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'AssetPattern')
+    $baseUri = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'BaseUri')
+
     try {
-        $Response = Invoke-WebRequest -Uri $Plugin.Config.VersionUrl -TimeoutSec 10
+        $Response = Invoke-WebRequest -Uri $versionUrl -TimeoutSec 10
     }
     catch {
-        throw [PluginRequirementException]::new("Failed to retrieve version information from $($Plugin.Config.VersionUrl)", "ImageMagick", $_.Exception)
+        throw [PluginRequirementException]::new("Failed to retrieve version information from $versionUrl", $pluginName, $_.Exception)
     }
     # Do not format output; we need raw string parsing
-    $ZipMatches = [System.Text.RegularExpressions.Regex]::Matches($Response.Content, $Plugin.Config.AssetPattern, 'IgnoreCase')
+    $ZipMatches = [System.Text.RegularExpressions.Regex]::Matches($Response.Content, $assetPattern, 'IgnoreCase')
 
     if ($ZipMatches.Count -eq 0) {
-        throw [PluginRequirementException]::new("No matching 'portable-Q16-HDRI-x64.zip' downloads found on $($Plugin.Config.VersionUrl)", "ImageMagick")
+        throw [PluginRequirementException]::new("No matching 'portable-Q16-HDRI-x64.zip' downloads found on $versionUrl", $pluginName)
     }
 
     $Candidates = foreach ($m in $ZipMatches) {
@@ -94,10 +193,17 @@ function Get-LatestUrlFromUrl-ImageMagick {
 
     $LatestVersion = $Latest.Version
     $LatestInstaller = $Latest.FileName
-    $Plugin.Config.State.LatestVersion = $LatestVersion
-    $Plugin.Config.State.LatestInstaller = $LatestInstaller
+
+    $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+    if ($null -eq $state) {
+        $state = @{}
+        Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
+    }
+    Set-ConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestVersion
+    Set-ConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $LatestInstaller
+
     # Compose direct download URL as plain string
-    $Url = "$($Plugin.Config.BaseUri)/$($LatestInstaller)"
+    $Url = "$baseUri/$LatestInstaller"
     return [string]$Url
 }
 
@@ -107,16 +213,23 @@ function Get-Installer-ImageMagick {
         [hashtable]$Plugin,
         [hashtable]$Paths
     )
-    $Url = $Plugin.Config.BaseUri + '/' + $Plugin.Config.State.LatestInstaller
-    Write-PSmmLog -Level INFO -Context "Download $($Plugin.Config.Name)" -Message "Downloading $($Plugin.Config.Name) from $Url ..." -Console -File
+    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'ImageMagick' }
+    $baseUri = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'BaseUri')
+    $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+    $latestInstaller = [string](Get-ConfigMemberValue -Object $state -Name 'LatestInstaller')
+    $Url = $baseUri + '/' + $latestInstaller
+    Write-PSmmLog -Level INFO -Context "Download $pluginName" -Message "Downloading $pluginName from $Url ..." -Console -File
     try {
-        Invoke-WebRequest -Uri "$Url" -OutFile "$($Paths._Downloads)\$($Plugin.Config.State.LatestInstaller)"
-        $InstallerPath = Join-Path -Path $Paths._Downloads -ChildPath $Plugin.Config.State.LatestInstaller
-        Write-PSmmLog -Level SUCCESS -Context "Download $($Plugin.Config.Name)" -Message "$($Plugin.Config.Name) downloaded successfully to $InstallerPath" -Console -File
+        $outFile = Join-Path -Path $Paths._Downloads -ChildPath $latestInstaller
+        Invoke-WebRequest -Uri "$Url" -OutFile $outFile
+        $InstallerPath = Join-Path -Path $Paths._Downloads -ChildPath $latestInstaller
+        Write-PSmmLog -Level SUCCESS -Context "Download $pluginName" -Message "$pluginName downloaded successfully to $InstallerPath" -Console -File
         return $InstallerPath
     }
     catch {
-        Write-PSmmLog -Level ERROR -Context "Download $($Plugin.Config.Name)" -Message "Failed to download $($Plugin.Config.Name) from $Url" -ErrorRecord $_ -Console -File
+        Write-PSmmLog -Level ERROR -Context "Download $pluginName" -Message "Failed to download $pluginName from $Url" -ErrorRecord $_ -Console -File
         return $null
     }
 }

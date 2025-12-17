@@ -263,6 +263,15 @@ function Export-SafeConfiguration {
                     catch {
                         Write-Verbose "[SafeExport] _GetMemberValue IDictionary.Contains lookup failed: $($_.Exception.Message)"
                     }
+
+                    try {
+                        foreach ($k in $InputObject.Keys) {
+                            if ($k -eq $Name) { return $InputObject[$k] }
+                        }
+                    }
+                    catch {
+                        Write-Verbose "[SafeExport] _GetMemberValue IDictionary.Keys lookup failed: $($_.Exception.Message)"
+                    }
                     return $null
                 }
 
@@ -369,15 +378,26 @@ function Export-SafeConfiguration {
             $logging = $null
             $l = _GetMemberValue -InputObject $Configuration -Name 'Logging'
             if ($null -ne $l) {
-                $logging = @{
-                    Path = _GetMemberValue -InputObject $l -Name 'Path'
-                    Level = _GetMemberValue -InputObject $l -Name 'Level'
-                    DefaultLevel = _GetMemberValue -InputObject $l -Name 'DefaultLevel'
-                    Format = _GetMemberValue -InputObject $l -Name 'Format'
-                    EnableConsole = _GetMemberValue -InputObject $l -Name 'EnableConsole'
-                    EnableFile = _GetMemberValue -InputObject $l -Name 'EnableFile'
-                    MaxFileSizeMB = _GetMemberValue -InputObject $l -Name 'MaxFileSizeMB'
-                    MaxLogFiles = _GetMemberValue -InputObject $l -Name 'MaxLogFiles'
+                try {
+                    if ($l -and ($l | Get-Member -Name 'ToHashtable' -MemberType Method -ErrorAction SilentlyContinue)) {
+                        $logging = $l.ToHashtable()
+                    }
+                }
+                catch {
+                    $logging = $null
+                }
+
+                if ($null -eq $logging) {
+                    $logging = @{
+                        Path = _GetMemberValue -InputObject $l -Name 'Path'
+                        Level = _GetMemberValue -InputObject $l -Name 'Level'
+                        DefaultLevel = _GetMemberValue -InputObject $l -Name 'DefaultLevel'
+                        Format = _GetMemberValue -InputObject $l -Name 'Format'
+                        EnableConsole = _GetMemberValue -InputObject $l -Name 'EnableConsole'
+                        EnableFile = _GetMemberValue -InputObject $l -Name 'EnableFile'
+                        MaxFileSizeMB = _GetMemberValue -InputObject $l -Name 'MaxFileSizeMB'
+                        MaxLogFiles = _GetMemberValue -InputObject $l -Name 'MaxLogFiles'
+                    }
                 }
             }
 
@@ -385,11 +405,22 @@ function Export-SafeConfiguration {
             $parameters = $null
             $pr = _GetMemberValue -InputObject $Configuration -Name 'Parameters'
             if ($null -ne $pr) {
-                $parameters = @{
-                    Debug = _GetMemberValue -InputObject $pr -Name 'Debug'
-                    Verbose = _GetMemberValue -InputObject $pr -Name 'Verbose'
-                    Dev = _GetMemberValue -InputObject $pr -Name 'Dev'
-                    Update = _GetMemberValue -InputObject $pr -Name 'Update'
+                try {
+                    if ($pr -and ($pr | Get-Member -Name 'ToHashtable' -MemberType Method -ErrorAction SilentlyContinue)) {
+                        $parameters = $pr.ToHashtable()
+                    }
+                }
+                catch {
+                    $parameters = $null
+                }
+
+                if ($null -eq $parameters) {
+                    $parameters = @{
+                        Debug = _GetMemberValue -InputObject $pr -Name 'Debug'
+                        Verbose = _GetMemberValue -InputObject $pr -Name 'Verbose'
+                        Dev = _GetMemberValue -InputObject $pr -Name 'Dev'
+                        Update = _GetMemberValue -InputObject $pr -Name 'Update'
+                    }
                 }
             }
 
@@ -566,6 +597,16 @@ function Export-SafeConfiguration {
             $projects = $null
             $projectsSource = _GetMemberValue -InputObject $Configuration -Name 'Projects'
             if ($null -ne $projectsSource) {
+                $projectsToClone = $projectsSource
+                try {
+                    $toHashtableMethod = $projectsSource.GetType().GetMethod('ToHashtable')
+                    if ($null -ne $toHashtableMethod) {
+                        $projectsToClone = $projectsSource.ToHashtable()
+                    }
+                }
+                catch {
+                    $projectsToClone = $projectsSource
+                }
                 $plainVisited = @{}
                 function _PlainCopy {
                     param(
@@ -617,19 +658,59 @@ function Export-SafeConfiguration {
                     return $res
                 }
 
-                $projects = _PlainCopy -Obj $projectsSource
+                $projects = _PlainCopy -Obj $projectsToClone
 
                 # Omit per-drive Projects arrays from Projects.Registry in safe export
                 # Requirement: When Config is exported the Projects inside the Drives in Registry must be omitted.
                 try {
+                    $hasRegistry = $false
+                    if ($projects -is [System.Collections.IDictionary]) {
+                        try { $hasRegistry = $projects.ContainsKey('Registry') } catch { $hasRegistry = $false }
+                        if (-not $hasRegistry) { try { $hasRegistry = $projects.Contains('Registry') } catch { $hasRegistry = $false } }
+                        if (-not $hasRegistry) {
+                            try {
+                                foreach ($k in $projects.Keys) {
+                                    if ($k -eq 'Registry') { $hasRegistry = $true; break }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+
                     if ($projects -is [System.Collections.IDictionary] -and
-                        $projects.ContainsKey('Registry') -and
+                        $hasRegistry -and
                         $projects.Registry -is [System.Collections.IDictionary]) {
                         foreach ($kind in @('Master', 'Backup')) {
-                            if ($projects.Registry.ContainsKey($kind) -and ($projects.Registry.$kind -is [System.Collections.IDictionary])) {
+                            $hasKind = $false
+                            try { $hasKind = $projects.Registry.ContainsKey($kind) } catch { $hasKind = $false }
+                            if (-not $hasKind) { try { $hasKind = $projects.Registry.Contains($kind) } catch { $hasKind = $false } }
+                            if (-not $hasKind) {
+                                try {
+                                    foreach ($k in $projects.Registry.Keys) {
+                                        if ($k -eq $kind) { $hasKind = $true; break }
+                                    }
+                                }
+                                catch { }
+                            }
+
+                            if ($hasKind -and ($projects.Registry.$kind -is [System.Collections.IDictionary])) {
                                 foreach ($label in @($projects.Registry.$kind.Keys)) {
                                     $drive = $projects.Registry.$kind[$label]
-                                    if ($drive -is [System.Collections.IDictionary] -and $drive.ContainsKey('Projects')) {
+                                    $hasProjectsKey = $false
+                                    if ($drive -is [System.Collections.IDictionary]) {
+                                        try { $hasProjectsKey = $drive.ContainsKey('Projects') } catch { $hasProjectsKey = $false }
+                                        if (-not $hasProjectsKey) { try { $hasProjectsKey = $drive.Contains('Projects') } catch { $hasProjectsKey = $false } }
+                                        if (-not $hasProjectsKey) {
+                                            try {
+                                                foreach ($k in $drive.Keys) {
+                                                    if ($k -eq 'Projects') { $hasProjectsKey = $true; break }
+                                                }
+                                            }
+                                            catch { }
+                                        }
+                                    }
+
+                                    if ($drive -is [System.Collections.IDictionary] -and $hasProjectsKey) {
                                         [void]$drive.Remove('Projects')
                                     }
                                 }
@@ -642,10 +723,23 @@ function Export-SafeConfiguration {
                 }
             }
 
-            # UI block (already hashtable)
+            # UI block (prefer hashtable for safe export)
             $ui = $null
             $uiSource = _GetMemberValue -InputObject $Configuration -Name 'UI'
-            if ($null -ne $uiSource) { $ui = _CloneGeneric -Value $uiSource }
+            if ($null -ne $uiSource) {
+                $uiToClone = $uiSource
+                try {
+                    $toHashtableMethod = $uiSource.GetType().GetMethod('ToHashtable')
+                    if ($null -ne $toHashtableMethod) {
+                        $uiToClone = $uiSource.ToHashtable()
+                    }
+                }
+                catch {
+                    $uiToClone = $uiSource
+                }
+
+                $ui = _CloneGeneric -Value $uiToClone
+            }
 
             # Requirements
             $requirements = $null
@@ -714,7 +808,18 @@ function Export-SafeConfiguration {
             try {
                 $psRequirementsValue = $null
                 if ($requirements -is [System.Collections.IDictionary]) {
-                    if ($requirements.ContainsKey('PowerShell')) { $psRequirementsValue = $requirements['PowerShell'] }
+                    $hasPowerShell = $false
+                    try { $hasPowerShell = $requirements.ContainsKey('PowerShell') } catch { $hasPowerShell = $false }
+                    if (-not $hasPowerShell) { try { $hasPowerShell = $requirements.Contains('PowerShell') } catch { $hasPowerShell = $false } }
+                    if (-not $hasPowerShell) {
+                        try {
+                            foreach ($k in $requirements.Keys) {
+                                if ($k -eq 'PowerShell') { $hasPowerShell = $true; break }
+                            }
+                        }
+                        catch { }
+                    }
+                    if ($hasPowerShell) { $psRequirementsValue = $requirements['PowerShell'] }
                 }
                 elseif ($null -ne $requirements) {
                     try { $psRequirementsValue = $requirements.PowerShell }
@@ -724,7 +829,18 @@ function Export-SafeConfiguration {
                 if ($null -ne $psRequirementsValue) {
                     $modulesDescriptor = $null
                     if ($psRequirementsValue -is [System.Collections.IDictionary]) {
-                        if ($psRequirementsValue.ContainsKey('Modules')) { $modulesDescriptor = $psRequirementsValue['Modules'] }
+                        $hasModules = $false
+                        try { $hasModules = $psRequirementsValue.ContainsKey('Modules') } catch { $hasModules = $false }
+                        if (-not $hasModules) { try { $hasModules = $psRequirementsValue.Contains('Modules') } catch { $hasModules = $false } }
+                        if (-not $hasModules) {
+                            try {
+                                foreach ($k in $psRequirementsValue.Keys) {
+                                    if ($k -eq 'Modules') { $hasModules = $true; break }
+                                }
+                            }
+                            catch { }
+                        }
+                        if ($hasModules) { $modulesDescriptor = $psRequirementsValue['Modules'] }
                     }
                     else {
                         try { $modulesDescriptor = $psRequirementsValue.Modules }
@@ -766,7 +882,18 @@ function Export-SafeConfiguration {
                 $plugins = @{}
                 if ($pluginsSource -is [System.Collections.IDictionary]) {
                     foreach ($pk in @('Global', 'Project', 'Resolved', 'Paths')) {
-                        if ($pluginsSource.ContainsKey($pk)) {
+                        $hasKey = $false
+                        try { $hasKey = $pluginsSource.ContainsKey($pk) } catch { $hasKey = $false }
+                        if (-not $hasKey) { try { $hasKey = $pluginsSource.Contains($pk) } catch { $hasKey = $false } }
+                        if (-not $hasKey) {
+                            try {
+                                foreach ($k in $pluginsSource.Keys) {
+                                    if ($k -eq $pk) { $hasKey = $true; break }
+                                }
+                            }
+                            catch { }
+                        }
+                        if ($hasKey) {
                             $plugins[$pk] = _PlainCopy -Obj $pluginsSource[$pk]
                         }
                     }
@@ -870,8 +997,19 @@ function Export-SafeConfiguration {
                 for ($i = 0; $i -lt ($segments.Length - 1); $i++) {
                     $segment = $segments[$i]
                     if ($current -is [System.Collections.IDictionary]) {
-                        if ($current.Contains($segment)) { $current = $current[$segment] }
-                        elseif ($current.ContainsKey($segment)) { $current = $current[$segment] }
+                        $hasSegment = $false
+                        try { $hasSegment = $current.ContainsKey($segment) } catch { $hasSegment = $false }
+                        if (-not $hasSegment) { try { $hasSegment = $current.Contains($segment) } catch { $hasSegment = $false } }
+                        if (-not $hasSegment) {
+                            try {
+                                foreach ($k in $current.Keys) {
+                                    if ($k -eq $segment) { $hasSegment = $true; break }
+                                }
+                            }
+                            catch { }
+                        }
+
+                        if ($hasSegment) { $current = $current[$segment] }
                         else { $current = $null; break }
                     }
                     elseif ($current -is [System.Collections.IList]) {
@@ -891,7 +1029,17 @@ function Export-SafeConfiguration {
 
                 $lastSegment = $segments[$segments.Length - 1]
                 if ($current -is [System.Collections.IDictionary]) {
-                    $hasKey = $current.Contains($lastSegment) -or $current.ContainsKey($lastSegment)
+                    $hasKey = $false
+                    try { $hasKey = $current.ContainsKey($lastSegment) } catch { $hasKey = $false }
+                    if (-not $hasKey) { try { $hasKey = $current.Contains($lastSegment) } catch { $hasKey = $false } }
+                    if (-not $hasKey) {
+                        try {
+                            foreach ($k in $current.Keys) {
+                                if ($k -eq $lastSegment) { $hasKey = $true; break }
+                            }
+                        }
+                        catch { }
+                    }
                     if (-not $hasKey) { continue }
                     $candidate = $current[$lastSegment]
                     if ($candidate -is [string] -and $candidate -eq '********') {
@@ -1138,8 +1286,20 @@ function Export-SafeConfiguration {
         try {
             $reqSourceOriginal = $null
             if ($Configuration -is [System.Collections.IDictionary]) {
-                if ($Configuration.Contains('Requirements')) { $reqSourceOriginal = $Configuration['Requirements'] }
-                elseif ($Configuration.ContainsKey('Requirements')) { $reqSourceOriginal = $Configuration['Requirements'] }
+                $hasRequirements = $false
+                try { $hasRequirements = $Configuration.ContainsKey('Requirements') } catch { $hasRequirements = $false }
+                if (-not $hasRequirements) {
+                    try { $hasRequirements = $Configuration.Contains('Requirements') } catch { $hasRequirements = $false }
+                }
+                if (-not $hasRequirements) {
+                    try {
+                        foreach ($k in $Configuration.Keys) {
+                            if ($k -eq 'Requirements') { $hasRequirements = $true; break }
+                        }
+                    }
+                    catch { }
+                }
+                if ($hasRequirements) { $reqSourceOriginal = $Configuration['Requirements'] }
             }
             else {
                 $reqProp = $Configuration.PSObject.Properties['Requirements']
@@ -1149,8 +1309,20 @@ function Export-SafeConfiguration {
             if ($null -ne $reqSourceOriginal) {
                 $modulesCandidate = $null
                 if ($reqSourceOriginal -is [System.Collections.IDictionary]) {
-                    if ($reqSourceOriginal.Contains('PSModules')) { $modulesCandidate = $reqSourceOriginal['PSModules'] }
-                    elseif ($reqSourceOriginal.ContainsKey('PSModules')) { $modulesCandidate = $reqSourceOriginal['PSModules'] }
+                    $hasPSModules = $false
+                    try { $hasPSModules = $reqSourceOriginal.ContainsKey('PSModules') } catch { $hasPSModules = $false }
+                    if (-not $hasPSModules) {
+                        try { $hasPSModules = $reqSourceOriginal.Contains('PSModules') } catch { $hasPSModules = $false }
+                    }
+                    if (-not $hasPSModules) {
+                        try {
+                            foreach ($k in $reqSourceOriginal.Keys) {
+                                if ($k -eq 'PSModules') { $hasPSModules = $true; break }
+                            }
+                        }
+                        catch { }
+                    }
+                    if ($hasPSModules) { $modulesCandidate = $reqSourceOriginal['PSModules'] }
                 }
                 else {
                     $reqModulesProp = $reqSourceOriginal.PSObject.Properties['PSModules']
@@ -1172,8 +1344,20 @@ function Export-SafeConfiguration {
 
                 $powerShellCandidate = $null
                 if ($reqSourceOriginal -is [System.Collections.IDictionary]) {
-                    if ($reqSourceOriginal.Contains('PowerShell')) { $powerShellCandidate = $reqSourceOriginal['PowerShell'] }
-                    elseif ($reqSourceOriginal.ContainsKey('PowerShell')) { $powerShellCandidate = $reqSourceOriginal['PowerShell'] }
+                    $hasPowerShell = $false
+                    try { $hasPowerShell = $reqSourceOriginal.ContainsKey('PowerShell') } catch { $hasPowerShell = $false }
+                    if (-not $hasPowerShell) {
+                        try { $hasPowerShell = $reqSourceOriginal.Contains('PowerShell') } catch { $hasPowerShell = $false }
+                    }
+                    if (-not $hasPowerShell) {
+                        try {
+                            foreach ($k in $reqSourceOriginal.Keys) {
+                                if ($k -eq 'PowerShell') { $hasPowerShell = $true; break }
+                            }
+                        }
+                        catch { }
+                    }
+                    if ($hasPowerShell) { $powerShellCandidate = $reqSourceOriginal['PowerShell'] }
                 }
                 else {
                     $reqPowerShellProp = $reqSourceOriginal.PSObject.Properties['PowerShell']
@@ -1183,8 +1367,20 @@ function Export-SafeConfiguration {
                 if ($null -ne $powerShellCandidate) {
                     $powerShellModulesCandidate = $null
                     if ($powerShellCandidate -is [System.Collections.IDictionary]) {
-                        if ($powerShellCandidate.Contains('Modules')) { $powerShellModulesCandidate = $powerShellCandidate['Modules'] }
-                        elseif ($powerShellCandidate.ContainsKey('Modules')) { $powerShellModulesCandidate = $powerShellCandidate['Modules'] }
+                        $hasModules = $false
+                        try { $hasModules = $powerShellCandidate.ContainsKey('Modules') } catch { $hasModules = $false }
+                        if (-not $hasModules) {
+                            try { $hasModules = $powerShellCandidate.Contains('Modules') } catch { $hasModules = $false }
+                        }
+                        if (-not $hasModules) {
+                            try {
+                                foreach ($k in $powerShellCandidate.Keys) {
+                                    if ($k -eq 'Modules') { $hasModules = $true; break }
+                                }
+                            }
+                            catch { }
+                        }
+                        if ($hasModules) { $powerShellModulesCandidate = $powerShellCandidate['Modules'] }
                     }
                     else {
                         $psModulesProp = $powerShellCandidate.PSObject.Properties['Modules']
@@ -1217,15 +1413,53 @@ function Export-SafeConfiguration {
         if ($originalModules) {
             try {
                 if ($stringified -is [System.Collections.IDictionary]) {
-                    if ($stringified.ContainsKey('Requirements')) {
+                    $hasRequirementsKey = $false
+                    try { $hasRequirementsKey = $stringified.ContainsKey('Requirements') } catch { $hasRequirementsKey = $false }
+                    if (-not $hasRequirementsKey) { try { $hasRequirementsKey = $stringified.Contains('Requirements') } catch { $hasRequirementsKey = $false } }
+                    if (-not $hasRequirementsKey) {
+                        try {
+                            foreach ($k in $stringified.Keys) {
+                                if ($k -eq 'Requirements') { $hasRequirementsKey = $true; break }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if ($hasRequirementsKey) {
                         $reqTarget = $stringified['Requirements']
                         if ($reqTarget -isnot [System.Collections.IDictionary]) { $reqTarget = @{}; $stringified['Requirements'] = $reqTarget }
                         $reqTarget['PSModules'] = @($originalModules)
                     }
 
-                    if ($stringified.ContainsKey('App')) {
+                    $hasAppKey = $false
+                    try { $hasAppKey = $stringified.ContainsKey('App') } catch { $hasAppKey = $false }
+                    if (-not $hasAppKey) { try { $hasAppKey = $stringified.Contains('App') } catch { $hasAppKey = $false } }
+                    if (-not $hasAppKey) {
+                        try {
+                            foreach ($k in $stringified.Keys) {
+                                if ($k -eq 'App') { $hasAppKey = $true; break }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if ($hasAppKey) {
                         $appTarget = $stringified['App']
-                        if ($appTarget -is [System.Collections.IDictionary] -and $appTarget.ContainsKey('Requirements')) {
+                        $hasAppRequirementsKey = $false
+                        if ($appTarget -is [System.Collections.IDictionary]) {
+                            try { $hasAppRequirementsKey = $appTarget.ContainsKey('Requirements') } catch { $hasAppRequirementsKey = $false }
+                            if (-not $hasAppRequirementsKey) { try { $hasAppRequirementsKey = $appTarget.Contains('Requirements') } catch { $hasAppRequirementsKey = $false } }
+                            if (-not $hasAppRequirementsKey) {
+                                try {
+                                    foreach ($k in $appTarget.Keys) {
+                                        if ($k -eq 'Requirements') { $hasAppRequirementsKey = $true; break }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+
+                        if ($appTarget -is [System.Collections.IDictionary] -and $hasAppRequirementsKey) {
                             $appReqTarget = $appTarget['Requirements']
                             if ($appReqTarget -isnot [System.Collections.IDictionary]) { $appReqTarget = @{}; $appTarget['Requirements'] = $appReqTarget }
                             $appReqTarget['PSModules'] = @($originalModules)
@@ -1241,12 +1475,38 @@ function Export-SafeConfiguration {
         if ($hasOriginalPowerShellModules) {
             try {
                 if ($stringified -is [System.Collections.IDictionary]) {
-                    if ($stringified.ContainsKey('Requirements')) {
+                    $hasRequirementsKey = $false
+                    try { $hasRequirementsKey = $stringified.ContainsKey('Requirements') } catch { $hasRequirementsKey = $false }
+                    if (-not $hasRequirementsKey) { try { $hasRequirementsKey = $stringified.Contains('Requirements') } catch { $hasRequirementsKey = $false } }
+                    if (-not $hasRequirementsKey) {
+                        try {
+                            foreach ($k in $stringified.Keys) {
+                                if ($k -eq 'Requirements') { $hasRequirementsKey = $true; break }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if ($hasRequirementsKey) {
                         $reqTarget = $stringified['Requirements']
                         if ($reqTarget -isnot [System.Collections.IDictionary]) { $reqTarget = @{}; $stringified['Requirements'] = $reqTarget }
 
                         $psTarget = $null
-                        if ($reqTarget -is [System.Collections.IDictionary] -and $reqTarget.ContainsKey('PowerShell')) {
+                        $hasPowerShellKey = $false
+                        if ($reqTarget -is [System.Collections.IDictionary]) {
+                            try { $hasPowerShellKey = $reqTarget.ContainsKey('PowerShell') } catch { $hasPowerShellKey = $false }
+                            if (-not $hasPowerShellKey) { try { $hasPowerShellKey = $reqTarget.Contains('PowerShell') } catch { $hasPowerShellKey = $false } }
+                            if (-not $hasPowerShellKey) {
+                                try {
+                                    foreach ($k in $reqTarget.Keys) {
+                                        if ($k -eq 'PowerShell') { $hasPowerShellKey = $true; break }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+
+                        if ($reqTarget -is [System.Collections.IDictionary] -and $hasPowerShellKey) {
                             $psTarget = $reqTarget['PowerShell']
                         }
 
@@ -1260,9 +1520,35 @@ function Export-SafeConfiguration {
                         }
                     }
 
-                    if ($stringified.ContainsKey('App')) {
+                    $hasAppKey = $false
+                    try { $hasAppKey = $stringified.ContainsKey('App') } catch { $hasAppKey = $false }
+                    if (-not $hasAppKey) { try { $hasAppKey = $stringified.Contains('App') } catch { $hasAppKey = $false } }
+                    if (-not $hasAppKey) {
+                        try {
+                            foreach ($k in $stringified.Keys) {
+                                if ($k -eq 'App') { $hasAppKey = $true; break }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if ($hasAppKey) {
                         $appTarget = $stringified['App']
-                        if ($appTarget -is [System.Collections.IDictionary] -and $appTarget.ContainsKey('Requirements')) {
+                        $hasAppRequirementsKey = $false
+                        if ($appTarget -is [System.Collections.IDictionary]) {
+                            try { $hasAppRequirementsKey = $appTarget.ContainsKey('Requirements') } catch { $hasAppRequirementsKey = $false }
+                            if (-not $hasAppRequirementsKey) { try { $hasAppRequirementsKey = $appTarget.Contains('Requirements') } catch { $hasAppRequirementsKey = $false } }
+                            if (-not $hasAppRequirementsKey) {
+                                try {
+                                    foreach ($k in $appTarget.Keys) {
+                                        if ($k -eq 'Requirements') { $hasAppRequirementsKey = $true; break }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+
+                        if ($appTarget -is [System.Collections.IDictionary] -and $hasAppRequirementsKey) {
                             $appReqTarget = $appTarget['Requirements']
                             if ($appReqTarget -isnot [System.Collections.IDictionary]) {
                                 $appReqTarget = @{}
@@ -1271,7 +1557,18 @@ function Export-SafeConfiguration {
 
                             if ($appReqTarget -is [System.Collections.IDictionary]) {
                                 $appPsTarget = $null
-                                if ($appReqTarget.ContainsKey('PowerShell')) { $appPsTarget = $appReqTarget['PowerShell'] }
+                                $hasAppPowerShellKey = $false
+                                try { $hasAppPowerShellKey = $appReqTarget.ContainsKey('PowerShell') } catch { $hasAppPowerShellKey = $false }
+                                if (-not $hasAppPowerShellKey) { try { $hasAppPowerShellKey = $appReqTarget.Contains('PowerShell') } catch { $hasAppPowerShellKey = $false } }
+                                if (-not $hasAppPowerShellKey) {
+                                    try {
+                                        foreach ($k in $appReqTarget.Keys) {
+                                            if ($k -eq 'PowerShell') { $hasAppPowerShellKey = $true; break }
+                                        }
+                                    }
+                                    catch { }
+                                }
+                                if ($hasAppPowerShellKey) { $appPsTarget = $appReqTarget['PowerShell'] }
 
                                 if ($appPsTarget -isnot [System.Collections.IDictionary]) {
                                     $appPsTarget = @{}

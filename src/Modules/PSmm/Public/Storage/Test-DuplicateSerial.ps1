@@ -44,7 +44,7 @@ function Test-DuplicateSerial {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [AppConfiguration]$Config,
+        [object]$Config,
 
         [Parameter(Mandatory)]
         [ValidateNotNull()]
@@ -85,37 +85,100 @@ function Test-DuplicateSerial {
         return Read-Host -Prompt $Prompt
     }
 
+    function Get-ConfigMemberValue {
+        param(
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            $Object,
+
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$Name,
+
+            [Parameter()]
+            $Default = $null
+        )
+
+        if ($null -eq $Object) { return $Default }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            try {
+                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                if ($Object.Contains($Name)) { return $Object[$Name] }
+            }
+            catch {
+                # fall through
+            }
+
+            try {
+                foreach ($k in $Object.Keys) {
+                    if ($k -eq $Name) { return $Object[$k] }
+                }
+            }
+            catch {
+                # fall through
+            }
+        }
+
+        $prop = $Object.PSObject.Properties[$Name]
+        if ($null -ne $prop) { return $prop.Value }
+
+        return $Default
+    }
+
+    $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage' -Default $null
+    if ($null -eq $storageMap -and $Config -is [System.Collections.IDictionary]) {
+        # Allow passing a Storage-map directly in legacy/test scenarios
+        $storageMap = $Config
+    }
+    if ($null -eq $storageMap) {
+        $storageMap = @{}
+    }
+
     # Check each serial against existing groups
     $duplicates = @()
     foreach ($serial in $Serials) {
         if ([string]::IsNullOrWhiteSpace($serial)) { continue }
 
-        foreach ($groupKey in $Config.Storage.Keys) {
+        foreach ($groupKey in $storageMap.Keys) {
             # Skip the group being edited
             if ($groupKey -eq $ExcludeGroupId) { continue }
 
-            $group = $Config.Storage[$groupKey]
+            $group = $storageMap[$groupKey]
 
             # Check Master
-            if ($null -ne $group.Master -and $group.Master.SerialNumber -eq $serial) {
+            $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master' -Default $null
+            $masterSerial = [string](Get-ConfigMemberValue -Object $masterCfg -Name 'SerialNumber' -Default '')
+            if (-not [string]::IsNullOrWhiteSpace($masterSerial) -and $masterSerial -eq $serial) {
                 $duplicates += [PSCustomObject]@{
                     Serial = $serial
                     GroupId = $groupKey
                     DriveType = 'Master'
-                    Label = $group.Master.Label
+                    Label = [string](Get-ConfigMemberValue -Object $masterCfg -Name 'Label' -Default '')
                 }
             }
 
             # Check Backups
-            if ($null -ne $group.Backups) {
-                foreach ($bKey in $group.Backups.Keys) {
-                    $backup = $group.Backups[$bKey]
-                    if ($backup.SerialNumber -eq $serial) {
+            $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backups' -Default $null
+            if ($null -eq $backupsCfg) {
+                $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backup' -Default $null
+            }
+            if ($backupsCfg -is [System.Collections.IDictionary]) {
+                foreach ($bKey in $backupsCfg.Keys) {
+                    $backup = $backupsCfg[$bKey]
+                    $backupSerial = [string](Get-ConfigMemberValue -Object $backup -Name 'SerialNumber' -Default '')
+                    if (-not [string]::IsNullOrWhiteSpace($backupSerial) -and $backupSerial -eq $serial) {
                         $duplicates += [PSCustomObject]@{
                             Serial = $serial
                             GroupId = $groupKey
                             DriveType = "Backup $bKey"
-                            Label = $backup.Label
+                            Label = [string](Get-ConfigMemberValue -Object $backup -Name 'Label' -Default '')
                         }
                     }
                 }
