@@ -19,6 +19,7 @@ publish/
 
 # Test results
 .coverage-debug*
+.coverage-latest*
 .coverage-comparison.*
 TestResults.xml
 PSScriptAnalyzerResults.json
