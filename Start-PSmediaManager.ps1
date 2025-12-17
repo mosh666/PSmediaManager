@@ -120,8 +120,9 @@ $SplatParams = @{}
 if ($Dev) { $SplatParams['Dev'] = $true }
 if ($Update) { $SplatParams['Update'] = $true }
 if ($NonInteractive) { $SplatParams['NonInteractive'] = $true }
-if ($PSCmdlet.MyInvocation.BoundParameters['Verbose']) { $SplatParams['Verbose'] = $true }
-if ($PSCmdlet.MyInvocation.BoundParameters['Debug']) { $SplatParams['Debug'] = $true }
+$boundParameters = $PSCmdlet.MyInvocation.BoundParameters
+if ($boundParameters.ContainsKey('Verbose') -and $boundParameters['Verbose']) { $SplatParams['Verbose'] = $true }
+if ($boundParameters.ContainsKey('Debug') -and $boundParameters['Debug']) { $SplatParams['Debug'] = $true }
 
 # Invoke the main script directly (not in a subprocess)
 # This allows proper module resolution and $PSScriptRoot handling
