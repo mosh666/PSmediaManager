@@ -57,11 +57,41 @@ jobs:
           & $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion'
           "PWSH_754_PATH=$pwshPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Install Pester 5.5+ and PSLogs
-        shell: powershell
+      - name: Install PowerShell modules (pinned)
         run: |
           $pwsh = "$env:PWSH_754_PATH"
-          & $pwsh -NoLogo -NoProfile -Command "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module -Name Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber; Install-Module -Name PSLogs -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber"
+          & $pwsh -NoLogo -NoProfile -Command @'
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+
+          $versionsPath = Join-Path -Path $env:GITHUB_WORKSPACE -ChildPath 'build/versions.psd1'
+          if (-not (Test-Path -Path $versionsPath)) {
+              throw "Missing versions manifest: $versionsPath"
+          }
+
+          $versions = Import-PowerShellDataFile -Path $versionsPath
+          $moduleVersions = $versions.Modules
+
+          function Install-PinnedModule {
+              param(
+                  [Parameter(Mandatory)][string]$Name,
+                  [Parameter()][string]$RequiredVersion
+              )
+
+              if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) {
+                  Install-Module -Name $Name -RequiredVersion $RequiredVersion -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber
+              }
+              else {
+                  Install-Module -Name $Name -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber
+              }
+          }
+
+          Install-PinnedModule -Name 'Pester' -RequiredVersion $moduleVersions.Pester
+          Install-PinnedModule -Name 'PSScriptAnalyzer' -RequiredVersion $moduleVersions.PSScriptAnalyzer
+
+          # Release helper modules
+          Install-PinnedModule -Name 'PSLogs' -RequiredVersion $moduleVersions.PSLogs
+          '@
 
       - name: Run Pester tests
         run: |
