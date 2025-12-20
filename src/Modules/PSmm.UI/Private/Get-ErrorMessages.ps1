@@ -58,9 +58,13 @@ function Get-ErrorMessages {
         }
 
         # Preferred: typed catalog
-        if ($ErrorHashtable -is [UiErrorCatalog]) {
+        $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
+        if ($uiErrorCatalogType -and ($ErrorHashtable -is $uiErrorCatalogType)) {
             $msgs = $ErrorHashtable.GetAllMessages()
-            return if ($null -eq $msgs) { [string[]]@() } else { [string[]]$msgs }
+            if ($null -eq $msgs) {
+                return [string[]]@()
+            }
+            return [string[]]$msgs
         }
 
         # Recursively collect error messages (legacy hashtable shape)

@@ -156,7 +156,25 @@ function Show-Header {
     # Display error messages if enabled
     if ($ShowStorageErrors) {
         $internalErrorsSource = _TryGetConfigValue -Object $Config -Name 'InternalErrorMessages'
-        $errorCatalog = [UiErrorCatalog]::FromObject($internalErrorsSource)
+        $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
+        if (-not $uiErrorCatalogType) {
+            $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
+            if (Test-Path -LiteralPath $psmmManifestPath) {
+                try {
+                    Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
+                }
+                catch {
+                    # ignore - handled below
+                }
+            }
+            $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
+        }
+
+        if (-not $uiErrorCatalogType) {
+            throw 'Unable to resolve type [UiErrorCatalog].'
+        }
+
+        $errorCatalog = $uiErrorCatalogType::FromObject($internalErrorsSource)
         if (-not [string]::IsNullOrWhiteSpace($StorageGroupFilter)) {
             $errorCatalog = $errorCatalog.FilterStorageGroup($StorageGroupFilter)
         }
@@ -461,7 +479,25 @@ function Show-MenuMain {
         $Projects = Get-PSmmProjects -Config $Config
     }
 
-    $projectsIndex = [UiProjectsIndex]::FromObject($Projects)
+    $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
+    if (-not $uiProjectsIndexType) {
+        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
+        if (Test-Path -LiteralPath $psmmManifestPath) {
+            try {
+                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
+            }
+            catch {
+                # ignore - handled below
+            }
+        }
+        $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
+    }
+
+    if (-not $uiProjectsIndexType) {
+        throw 'Unable to resolve type [UiProjectsIndex].'
+    }
+
+    $projectsIndex = $uiProjectsIndexType::FromObject($Projects)
 
     if ($isDebugOrDev) {
         $masterTotal = ($projectsIndex.Master.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
@@ -474,7 +510,7 @@ function Show-MenuMain {
     # Determine which storage groups to display
     $StorageGroupsToDisplay = if ([string]::IsNullOrWhiteSpace($StorageGroup)) {
         # Show all storage groups
-        $storageKeys | Sort-Object
+        @($storageKeys | Sort-Object)
     }
     else {
         # Show only the specified storage group
@@ -490,7 +526,7 @@ function Show-MenuMain {
         }
     }
 
-    if ($null -eq $StorageGroupsToDisplay -or $StorageGroupsToDisplay.Count -eq 0) {
+    if (@($StorageGroupsToDisplay).Count -eq 0) {
         Write-PSmmHost 'No storage groups configured.' -ForegroundColor DarkGray
         return
     }

@@ -190,14 +190,45 @@ function Invoke-PSmmUI {
                 $storageGroupCount = 0
                 try { $storageGroupCount = @($storageSource.Keys).Count } catch { $storageGroupCount = 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $storageGroupCount" -File
-                $loopProjects = [UiProjectsIndex]::FromObject((Get-PSmmProjects -Config $Config -ServiceContainer $ServiceContainer))
+                $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
+                if (-not $uiProjectsIndexType) {
+                    $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
+                    if (Test-Path -LiteralPath $psmmManifestPath) {
+                        try {
+                            Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
+                        }
+                        catch {
+                            # ignore - handled below
+                        }
+                    }
+                    $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
+                }
+
+                if (-not $uiProjectsIndexType) {
+                    throw 'Unable to resolve type [UiProjectsIndex].'
+                }
+
+                $loopProjects = $uiProjectsIndexType::FromObject((Get-PSmmProjects -Config $Config -ServiceContainer $ServiceContainer))
                 $masterCount = if ($null -ne $loopProjects.Master) { $loopProjects.Master.Count } else { 0 }
                 $backupCount = if ($null -ne $loopProjects.Backup) { $loopProjects.Backup.Count } else { 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Projects loaded. Master drives: $masterCount, Backup drives: $backupCount" -File
             }
             catch {
                 Write-PSmmLog -Level ERROR -Context 'Invoke-PSmmUI' -Message "Project retrieval failed: $_" -ErrorRecord $_ -File
-                $loopProjects = [UiProjectsIndex]::new()
+                $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
+                if (-not $uiProjectsIndexType) {
+                    $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
+                    if (Test-Path -LiteralPath $psmmManifestPath) {
+                        try {
+                            Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
+                        }
+                        catch {
+                            # ignore - handled below
+                        }
+                    }
+                    $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
+                }
+                $loopProjects = if ($uiProjectsIndexType) { $uiProjectsIndexType::new() } else { $null }
             }
 
             try {

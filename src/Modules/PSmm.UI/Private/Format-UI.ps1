@@ -183,7 +183,25 @@ function New-UiColumn {
         [int]$MaxWidth = 0
     )
 
-    $col = [UiColumn]::new()
+    $uiColumnType = 'UiColumn' -as [type]
+    if (-not $uiColumnType) {
+        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
+        if (Test-Path -LiteralPath $psmmManifestPath) {
+            try {
+                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
+            }
+            catch {
+                # ignore - handled below
+            }
+        }
+        $uiColumnType = 'UiColumn' -as [type]
+    }
+
+    if (-not $uiColumnType) {
+        throw 'Unable to resolve type [UiColumn].'
+    }
+
+    $col = $uiColumnType::new()
     $col.Text = $Text
     $col.Width = $Width
     $col.Alignment = $Alignment
@@ -215,7 +233,25 @@ function New-UiKeyValueItem {
         [string]$Color = $null
     )
 
-    return [UiKeyValueItem]::new($Key, $Value, $Color)
+    $uiKeyValueItemType = 'UiKeyValueItem' -as [type]
+    if (-not $uiKeyValueItemType) {
+        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
+        if (Test-Path -LiteralPath $psmmManifestPath) {
+            try {
+                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
+            }
+            catch {
+                # ignore - handled below
+            }
+        }
+        $uiKeyValueItemType = 'UiKeyValueItem' -as [type]
+    }
+
+    if (-not $uiKeyValueItemType) {
+        throw 'Unable to resolve type [UiKeyValueItem].'
+    }
+
+    return $uiKeyValueItemType::new($Key, $Value, $Color)
 }
 
 function Format-UI {
