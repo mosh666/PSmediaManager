@@ -845,7 +845,25 @@ function Get-ProjectsFromDrive {
 
     # Safely honor internal storage error flags when present
     $internalErrorMessages = Get-ConfigMemberValue -Object $Config -Name 'InternalErrorMessages'
-    $errorCatalog = [UiErrorCatalog]::FromObject($internalErrorMessages)
+    $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
+    if (-not $uiErrorCatalogType) {
+        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
+        if (Test-Path -LiteralPath $psmmManifestPath) {
+            try {
+                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
+            }
+            catch {
+                # ignore - handled below
+            }
+        }
+        $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
+    }
+
+    if (-not $uiErrorCatalogType) {
+        throw 'Unable to resolve type [UiErrorCatalog].'
+    }
+
+    $errorCatalog = $uiErrorCatalogType::FromObject($internalErrorMessages)
     $storageErrorMap = $errorCatalog.Storage
 
     if ($null -ne $storageErrorMap -and (Test-MapHasKey -Map $storageErrorMap -Key $errorKey)) {
