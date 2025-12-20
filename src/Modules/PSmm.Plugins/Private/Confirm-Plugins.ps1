@@ -1314,8 +1314,8 @@ function Invoke-PluginConfirmation {
 
     # Handle installation or update
     if ([string]::IsNullOrEmpty($state.CurrentVersion)) {
-        Write-PSmmLog -Level WARNING -Context "Check $pluginName" `
-            -Message "$pluginName is not installed" -Console -File
+        Write-PSmmLog -Level NOTICE -Context "Check $pluginName" `
+            -Message "$pluginName is not installed (installing now)" -Console -File
         Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -ServiceContainer $ServiceContainer
     }
     else {
