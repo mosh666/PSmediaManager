@@ -667,12 +667,24 @@ finally {
     }
 
     # Display exit message while module helpers are still available
-    Write-PSmmHost ''
-    if ($exitCode -eq 0) {
-        Write-PSmmHost "$($appConfig.DisplayName) exited successfully.`n" -ForegroundColor Green
+    $writePsmmHost = Get-Command -Name Write-PSmmHost -ErrorAction SilentlyContinue
+    if ($null -ne $writePsmmHost) {
+        Write-PSmmHost ''
+        if ($exitCode -eq 0) {
+            Write-PSmmHost "$($appConfig.DisplayName) exited successfully.`n" -ForegroundColor Green
+        }
+        else {
+            Write-PSmmHost "$($appConfig.DisplayName) exited with errors. Check the log for details.`n" -ForegroundColor Yellow
+        }
     }
     else {
-        Write-PSmmHost "$($appConfig.DisplayName) exited with errors. Check the log for details.`n" -ForegroundColor Yellow
+        Write-Host ''
+        if ($exitCode -eq 0) {
+            Write-Host "$($appConfig.DisplayName) exited successfully.`n"
+        }
+        else {
+            Write-Host "$($appConfig.DisplayName) exited with errors. Check the log for details.`n"
+        }
     }
 
     # Remove imported modules (clean up PowerShell session)
