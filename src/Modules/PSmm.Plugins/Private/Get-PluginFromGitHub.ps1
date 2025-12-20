@@ -460,7 +460,7 @@ function Get-LatestUrlFromGitHub {
         }
 
         Write-PSmmLog -Level ERROR -Context 'Get Plugin URL' `
-            -Message "Failed to get latest URL for $safeName: $_" `
+            -Message "Failed to get latest URL for ${safeName}: $_" `
             -ErrorRecord $_ -Console -File
         return $null
     }

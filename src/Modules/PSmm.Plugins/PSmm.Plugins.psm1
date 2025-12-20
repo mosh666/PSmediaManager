@@ -10,6 +10,7 @@
 #>
 
 #Requires -Version 7.5.4
+using module ..\PSmm\PSmm.psd1
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 

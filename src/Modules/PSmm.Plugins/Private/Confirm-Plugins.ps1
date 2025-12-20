@@ -464,14 +464,18 @@ function Register-PluginsToPATH {
                             Write-Verbose "Plugins root path not available; skipping PATH registration for $pluginName"
                             continue
                         }
-                        $pluginDirs = $FileSystem.GetChildItem($pluginRoot, $null, 'Directory') | Where-Object { $_.Name -match $pluginName }
+                        $pluginDirs = $FileSystem.GetChildItem($pluginRoot, $null, 'Directory') | Where-Object { $null -ne $_ -and $_.Name -match $pluginName }
 
                         if (-not $pluginDirs) {
                             Write-Verbose "Plugin $pluginName directory not found under $pluginRoot - skipping PATH registration"
                             continue
                         }
 
-                        $pluginDir = $pluginDirs | Select-Object -First 1
+                        $pluginDir = $pluginDirs | Where-Object { $null -ne $_ } | Select-Object -First 1
+                        if ($null -eq $pluginDir) {
+                            Write-Verbose "Plugin ${pluginName} directory selection returned null under ${pluginRoot} - skipping PATH registration"
+                            continue
+                        }
                         $commandPath = Get-ConfigMemberValue -Object $resolvedPlugin -Name 'CommandPath'
                         $commandPath = if ($commandPath) { [string]$commandPath } else { '' }
                         $executableDir = if ($commandPath) {
@@ -480,13 +484,32 @@ function Register-PluginsToPATH {
                             $pluginDir.FullName
                         }
 
+                        if ([string]::IsNullOrWhiteSpace($executableDir)) {
+                            Write-Verbose "Executable directory resolved empty for ${pluginName} - skipping PATH registration"
+                            continue
+                        }
+
                         if (-not $FileSystem.TestPath($executableDir)) {
                             Write-Verbose "Executable directory not found: $executableDir - skipping PATH registration"
                             continue
                         }
 
                         # Resolve to full path and add to PATH if not already present
-                        $resolvedDir = (Resolve-Path -LiteralPath $executableDir).Path
+                        # Resolve-Path can emit non-terminating errors and return $null; guard to avoid StrictMode failures
+                        $resolvedPathInfo = $null
+                        try {
+                            $resolvedPathInfo = Resolve-Path -LiteralPath $executableDir -ErrorAction Stop | Select-Object -First 1
+                        }
+                        catch {
+                            Write-Verbose "Failed to resolve executable directory for ${pluginName}: $executableDir ($_)"
+                            continue
+                        }
+
+                        $resolvedDir = if ($null -ne $resolvedPathInfo) { [string]$resolvedPathInfo.Path } else { '' }
+                        if ([string]::IsNullOrWhiteSpace($resolvedDir)) {
+                            Write-Verbose "Resolved executable directory was empty for ${pluginName}: $executableDir - skipping PATH registration"
+                            continue
+                        }
 
                         if ($registeredDirs.Contains($resolvedDir)) {
                             Write-Verbose "Already registered $resolvedDir to PATH in this session - skipping duplicate"
@@ -494,19 +517,24 @@ function Register-PluginsToPATH {
                         }
 
                         # Track for cleanup regardless of whether we add it now (store in config for access during shutdown)
+                        # Avoid method calls on values with uncertain runtime types (StrictMode-safe)
                         $existingAdded = Get-ConfigMemberValue -Object $Config -Name 'AddedPathEntries'
-                        [System.Collections.ArrayList]$pathEntries = if ($existingAdded -is [System.Collections.ArrayList]) {
-                            $existingAdded
+
+                        $existingList = @()
+                        if ($null -ne $existingAdded) {
+                            if ($existingAdded -is [System.Collections.IEnumerable] -and -not ($existingAdded -is [string])) {
+                                $existingList = @($existingAdded) | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+                            }
+                            else {
+                                $existingItem = [string]$existingAdded
+                                if (-not [string]::IsNullOrWhiteSpace($existingItem)) {
+                                    $existingList = @($existingItem)
+                                }
+                            }
                         }
-                        elseif ($null -ne $existingAdded) {
-                            [System.Collections.ArrayList]@($existingAdded)
-                        }
-                        else {
-                            [System.Collections.ArrayList]::new()
-                        }
-                        if (-not $pathEntries.Contains($resolvedDir)) {
-                            $pathEntries.Add($resolvedDir) | Out-Null
-                            Set-ConfigMemberValue -Object $Config -Name 'AddedPathEntries' -Value $pathEntries.ToArray()
+
+                        if ($existingList -notcontains $resolvedDir) {
+                            Set-ConfigMemberValue -Object $Config -Name 'AddedPathEntries' -Value @($existingList + @($resolvedDir))
                         }
 
                         if ($pathSet.Contains($resolvedDir)) {
@@ -524,9 +552,11 @@ function Register-PluginsToPATH {
                     }
                     catch {
                         $pn = [string](Get-ConfigMemberValue -Object $resolvedPlugin -Name 'Name')
-                        Write-Verbose "Failed to register plugin $pn to PATH: $_"
+                        $errMessage = if ($null -ne $_.Exception -and -not [string]::IsNullOrWhiteSpace($_.Exception.Message)) { $_.Exception.Message } else { [string]$_ }
+                        $where = if ($null -ne $_.InvocationInfo -and $_.InvocationInfo.ScriptLineNumber -gt 0) { " ($($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber))" } else { '' }
+                        Write-Verbose "Failed to register plugin $pn to PATH: $errMessage$where"
                         Write-PSmmLog -Level WARNING -Context 'Register-PluginsToPATH' `
-                            -Message "Failed to register plugin $pn to PATH: $_" -Console -File
+                            -Message "Failed to register plugin $pn to PATH: $errMessage$where" -ErrorRecord $_ -Console -File
                     }
                 }
             }
@@ -683,7 +713,25 @@ function Resolve-PluginsConfig {
         throw [ConfigurationException]::new('Plugin manifest not loaded in configuration', 'Plugins')
     }
 
-    $pluginsBag = [PluginsConfig]::FromObject($pluginsSource)
+    $pluginsConfigType = 'PluginsConfig' -as [type]
+    if (-not $pluginsConfigType) {
+        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSmm\PSmm.psd1'
+        if (Test-Path -LiteralPath $psmmManifestPath) {
+            try {
+                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
+            }
+            catch {
+                # ignore - handled below
+            }
+        }
+        $pluginsConfigType = 'PluginsConfig' -as [type]
+    }
+
+    if (-not $pluginsConfigType) {
+        throw [ConfigurationException]::new('Unable to resolve PluginsConfig type (PSmm module not loaded)', 'Plugins')
+    }
+
+    $pluginsBag = $pluginsConfigType::FromObject($pluginsSource)
     _TrySetConfigValue -Object $Config -Name 'Plugins' -Value $pluginsBag
 
     function _UnwrapPluginsManifest {
@@ -1392,7 +1440,7 @@ function Get-InstallState {
     }
     catch {
         $pn = Resolve-PluginNameSafe -PluginOrConfig $Plugin
-        Write-Warning "Failed to get install state for $pn: $_"
+        Write-Warning "Failed to get install state for ${pn}: $_"
         return $state
     }
 }
@@ -1611,7 +1659,7 @@ function Get-LatestDownloadUrl {
     }
     catch {
         $pn = Resolve-PluginNameSafe -PluginOrConfig $Plugin
-        Write-Warning "Failed to get latest download URL for $pn: $_"
+        Write-Warning "Failed to get latest download URL for ${pn}: $_"
         return $null
     }
 }
@@ -2131,7 +2179,7 @@ function Request-PluginUpdate {
     }
     catch {
         $pn = Resolve-PluginNameSafe -PluginOrConfig $Plugin
-        Write-Warning "Failed to check for updates for $pn: $_"
+        Write-Warning "Failed to check for updates for ${pn}: $_"
         return $false
     }
 }
