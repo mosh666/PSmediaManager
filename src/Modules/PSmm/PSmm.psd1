@@ -30,6 +30,8 @@
     ScriptsToProcess = @(
         'Classes\Interfaces.ps1'
         'Classes\Exceptions.ps1'
+        'Classes\UiModels.ps1'
+        'Classes\ProjectModels.ps1'
         'Classes\Services\FileSystemService.ps1'
         'Classes\Services\EnvironmentService.ps1'
         'Classes\Services\HttpService.ps1'

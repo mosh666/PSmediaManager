@@ -22,6 +22,7 @@
 
 using namespace System
 using namespace System.IO
+using namespace System.Collections.Generic
 
 #Requires -Version 7.5.4
 
