@@ -23,7 +23,7 @@ publish/
 .coverage-comparison.*
 TestResults.xml
 PSScriptAnalyzerResults.json
-#coverage.xml
+coverage.xml
 #*.coverage
 
 # IDE
