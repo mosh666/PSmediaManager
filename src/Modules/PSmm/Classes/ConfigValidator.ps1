@@ -527,23 +527,63 @@ class ConfigValidator {
 
             if ($null -ne $master) {
                 $serialValue = $null
+                $masterDrive = $master
                 if ($master -is [System.Collections.IDictionary]) {
-                    $hasSerial = $false
-                    try { $hasSerial = [bool]$master.ContainsKey('Serial') } catch { $hasSerial = $false }
-                    if (-not $hasSerial) { try { $hasSerial = [bool]$master.Contains('Serial') } catch { $hasSerial = $false } }
-                    if (-not $hasSerial) {
+                    $hasDrive = $false
+                    try { $hasDrive = [bool]$master.ContainsKey('Drive') } catch { $hasDrive = $false }
+                    if (-not $hasDrive) { try { $hasDrive = [bool]$master.Contains('Drive') } catch { $hasDrive = $false } }
+                    if (-not $hasDrive) {
                         try {
                             foreach ($k in $master.Keys) {
+                                if ($k -eq 'Drive') { $hasDrive = $true; break }
+                            }
+                        }
+                        catch { $hasDrive = $false }
+                    }
+                    if ($hasDrive) { $masterDrive = $master['Drive'] }
+                }
+                else {
+                    $driveProperty = $master.PSObject.Properties['Drive']
+                    if ($null -ne $driveProperty) { $masterDrive = $driveProperty.Value }
+                }
+
+                if ($masterDrive -is [System.Collections.IDictionary]) {
+                    $hasSerial = $false
+                    try { $hasSerial = [bool]$masterDrive.ContainsKey('Serial') } catch { $hasSerial = $false }
+                    if (-not $hasSerial) { try { $hasSerial = [bool]$masterDrive.Contains('Serial') } catch { $hasSerial = $false } }
+                    if (-not $hasSerial) {
+                        try {
+                            foreach ($k in $masterDrive.Keys) {
                                 if ($k -eq 'Serial') { $hasSerial = $true; break }
                             }
                         }
                         catch { $hasSerial = $false }
                     }
-                    if ($hasSerial) { $serialValue = $master['Serial'] }
+                    if ($hasSerial) {
+                        $serialValue = $masterDrive['Serial']
+                    }
+                    else {
+                        $hasSerialNumber = $false
+                        try { $hasSerialNumber = [bool]$masterDrive.ContainsKey('SerialNumber') } catch { $hasSerialNumber = $false }
+                        if (-not $hasSerialNumber) { try { $hasSerialNumber = [bool]$masterDrive.Contains('SerialNumber') } catch { $hasSerialNumber = $false } }
+                        if (-not $hasSerialNumber) {
+                            try {
+                                foreach ($k in $masterDrive.Keys) {
+                                    if ($k -eq 'SerialNumber') { $hasSerialNumber = $true; break }
+                                }
+                            }
+                            catch { $hasSerialNumber = $false }
+                        }
+                        if ($hasSerialNumber) { $serialValue = $masterDrive['SerialNumber'] }
+                    }
                 }
                 else {
-                    $serialProperty = $master.PSObject.Properties['Serial']
+                    $serialProperty = $masterDrive.PSObject.Properties['Serial']
                     if ($null -ne $serialProperty) { $serialValue = $serialProperty.Value }
+                    if ($null -eq $serialValue) {
+                        $serialNumberProperty = $masterDrive.PSObject.Properties['SerialNumber']
+                        if ($null -ne $serialNumberProperty) { $serialValue = $serialNumberProperty.Value }
+                    }
                 }
 
                 if ([string]::IsNullOrWhiteSpace([string]$serialValue)) {
@@ -574,29 +614,82 @@ class ConfigValidator {
             }
 
             if ($null -ne $backup) {
-                $serialValue = $null
                 if ($backup -is [System.Collections.IDictionary]) {
-                    $hasSerial = $false
-                    try { $hasSerial = [bool]$backup.ContainsKey('Serial') } catch { $hasSerial = $false }
-                    if (-not $hasSerial) { try { $hasSerial = [bool]$backup.Contains('Serial') } catch { $hasSerial = $false } }
-                    if (-not $hasSerial) {
-                        try {
-                            foreach ($k in $backup.Keys) {
-                                if ($k -eq 'Serial') { $hasSerial = $true; break }
+                    $hasDirectSerial = $false
+                    try { $hasDirectSerial = [bool]$backup.ContainsKey('Serial') } catch { $hasDirectSerial = $false }
+                    if (-not $hasDirectSerial) { try { $hasDirectSerial = [bool]$backup.Contains('Serial') } catch { $hasDirectSerial = $false } }
+                    $hasDirectSerialNumber = $false
+                    try { $hasDirectSerialNumber = [bool]$backup.ContainsKey('SerialNumber') } catch { $hasDirectSerialNumber = $false }
+                    if (-not $hasDirectSerialNumber) { try { $hasDirectSerialNumber = [bool]$backup.Contains('SerialNumber') } catch { $hasDirectSerialNumber = $false } }
+
+                    if ($hasDirectSerial -or $hasDirectSerialNumber) {
+                        $serialValue = if ($hasDirectSerial) { $backup['Serial'] } else { $backup['SerialNumber'] }
+                        if ([string]::IsNullOrWhiteSpace([string]$serialValue)) {
+                            $issue = [ValidationIssue]::new('Warning', 'Storage', "Storage.$groupKey.Backup.Serial", "Backup drive serial is empty")
+                            $this._issues.Add($issue)
+                        }
+                    }
+                    else {
+                        foreach ($backupKey in $backup.Keys) {
+                            $backupDrive = $backup[$backupKey]
+                            if ($null -eq $backupDrive) { continue }
+
+                            $driveObj = $backupDrive
+                            if ($backupDrive -is [System.Collections.IDictionary]) {
+                                $hasDrive = $false
+                                try { $hasDrive = [bool]$backupDrive.ContainsKey('Drive') } catch { $hasDrive = $false }
+                                if (-not $hasDrive) { try { $hasDrive = [bool]$backupDrive.Contains('Drive') } catch { $hasDrive = $false } }
+                                if ($hasDrive) { $driveObj = $backupDrive['Drive'] }
+                            }
+                            else {
+                                $driveProperty = $backupDrive.PSObject.Properties['Drive']
+                                if ($null -ne $driveProperty) { $driveObj = $driveProperty.Value }
+                            }
+
+                            $serialValue = $null
+                            if ($driveObj -is [System.Collections.IDictionary]) {
+                                $hasSerial = $false
+                                try { $hasSerial = [bool]$driveObj.ContainsKey('Serial') } catch { $hasSerial = $false }
+                                if (-not $hasSerial) { try { $hasSerial = [bool]$driveObj.Contains('Serial') } catch { $hasSerial = $false } }
+                                if ($hasSerial) {
+                                    $serialValue = $driveObj['Serial']
+                                }
+                                else {
+                                    $hasSerialNumber = $false
+                                    try { $hasSerialNumber = [bool]$driveObj.ContainsKey('SerialNumber') } catch { $hasSerialNumber = $false }
+                                    if (-not $hasSerialNumber) { try { $hasSerialNumber = [bool]$driveObj.Contains('SerialNumber') } catch { $hasSerialNumber = $false } }
+                                    if ($hasSerialNumber) { $serialValue = $driveObj['SerialNumber'] }
+                                }
+                            }
+                            else {
+                                $serialProperty = $driveObj.PSObject.Properties['Serial']
+                                if ($null -ne $serialProperty) { $serialValue = $serialProperty.Value }
+                                if ($null -eq $serialValue) {
+                                    $serialNumberProperty = $driveObj.PSObject.Properties['SerialNumber']
+                                    if ($null -ne $serialNumberProperty) { $serialValue = $serialNumberProperty.Value }
+                                }
+                            }
+
+                            if ([string]::IsNullOrWhiteSpace([string]$serialValue)) {
+                                $issue = [ValidationIssue]::new('Warning', 'Storage', "Storage.$groupKey.Backup.$backupKey.Serial", "Backup drive serial is empty")
+                                $this._issues.Add($issue)
                             }
                         }
-                        catch { $hasSerial = $false }
                     }
-                    if ($hasSerial) { $serialValue = $backup['Serial'] }
                 }
                 else {
+                    $serialValue = $null
                     $serialProperty = $backup.PSObject.Properties['Serial']
                     if ($null -ne $serialProperty) { $serialValue = $serialProperty.Value }
-                }
+                    if ($null -eq $serialValue) {
+                        $serialNumberProperty = $backup.PSObject.Properties['SerialNumber']
+                        if ($null -ne $serialNumberProperty) { $serialValue = $serialNumberProperty.Value }
+                    }
 
-                if ([string]::IsNullOrWhiteSpace([string]$serialValue)) {
-                    $issue = [ValidationIssue]::new('Warning', 'Storage', "Storage.$groupKey.Backup.Serial", "Backup drive serial is empty")
-                    $this._issues.Add($issue)
+                    if ([string]::IsNullOrWhiteSpace([string]$serialValue)) {
+                        $issue = [ValidationIssue]::new('Warning', 'Storage', "Storage.$groupKey.Backup.Serial", "Backup drive serial is empty")
+                        $this._issues.Add($issue)
+                    }
                 }
             }
         }
