@@ -27,19 +27,25 @@ function Get-ConfigMemberValue {
         try {
             if ($Object.ContainsKey($Name)) { return $Object[$Name] }
         }
-        catch { }
+        catch {
+            Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey failed: $($_.Exception.Message)"
+        }
 
         try {
             if ($Object.Contains($Name)) { return $Object[$Name] }
         }
-        catch { }
+        catch {
+            Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains failed: $($_.Exception.Message)"
+        }
 
         try {
             foreach ($k in $Object.Keys) {
                 if ($k -eq $Name) { return $Object[$k] }
             }
         }
-        catch { }
+        catch {
+            Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
+        }
 
         return $null
     }
@@ -48,7 +54,9 @@ function Get-ConfigMemberValue {
         $p = $Object.PSObject.Properties[$Name]
         if ($null -ne $p) { return $p.Value }
     }
-    catch { }
+    catch {
+        Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
+    }
 
     return $null
 }
@@ -115,7 +123,9 @@ function Invoke-Installer-KeePassXC {
             $pnCandidate = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
             if (-not [string]::IsNullOrWhiteSpace($pnCandidate)) { $pn = $pnCandidate }
         }
-        catch { }
+        catch {
+            Write-Verbose "Invoke-Installer-KeePassXC: failed to resolve plugin name: $($_.Exception.Message)"
+        }
         Write-PSmmLog -Level ERROR -Context "Install $pn" -Message "Installation failed for $($InstallerPath)" -ErrorRecord $_ -Console -File
     }
 }

@@ -66,14 +66,26 @@ function Get-StorageDrive {
         if ($null -eq $Map) { return $false }
 
         if ($Map -is [System.Collections.IDictionary]) {
-            try { if ([bool]$Map.ContainsKey($Key)) { return $true } } catch { }
-            try { if ([bool]$Map.Contains($Key)) { return $true } } catch { }
+            try {
+                if ([bool]$Map.ContainsKey($Key)) { return $true }
+            }
+            catch {
+                Write-Verbose "Test-MapContainsKey: ContainsKey() failed: $($_.Exception.Message)"
+            }
+            try {
+                if ([bool]$Map.Contains($Key)) { return $true }
+            }
+            catch {
+                Write-Verbose "Test-MapContainsKey: Contains() failed: $($_.Exception.Message)"
+            }
             try {
                 foreach ($k in $Map.Keys) {
                     if ($k -eq $Key) { return $true }
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Test-MapContainsKey: failed iterating Keys: $($_.Exception.Message)"
+            }
             return $false
         }
 

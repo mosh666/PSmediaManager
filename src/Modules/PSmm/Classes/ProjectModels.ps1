@@ -20,7 +20,7 @@ function _PSmm_DictionaryHasKey {
             }
         }
         catch {
-            # ignore
+            Write-Verbose "_PSmm_DictionaryHasKey: Enumerating dictionary keys failed: $($_.Exception.Message)"
         }
     }
     return $hasKey
@@ -369,7 +369,7 @@ class PluginsConfig {
         }
 
         if ($value.PSObject.Properties.Match('Plugins').Count -gt 0) {
-            try { return $value.Plugins } catch { }
+            try { return $value.Plugins } catch { Write-Verbose "PluginsConfig.UnwrapManifest: Failed to read Plugins property: $($_.Exception.Message)" }
         }
 
         return $value
@@ -757,7 +757,7 @@ class UIConfig {
 
         if ($obj -is [System.Collections.IDictionary]) {
             if ((_PSmm_DictionaryHasKey -Dictionary $obj -Key 'Width') -and $null -ne $obj['Width']) {
-                try { $cfg.Width = [int]$obj['Width'] } catch { }
+                try { $cfg.Width = [int]$obj['Width'] } catch { Write-Verbose "UIConfig.FromObject: Invalid Width value in dictionary: $($_.Exception.Message)" }
             }
             if (_PSmm_DictionaryHasKey -Dictionary $obj -Key 'ANSI') {
                 $cfg.ANSI = [AnsiConfig]::FromObject($obj['ANSI'])
@@ -768,7 +768,7 @@ class UIConfig {
         }
 
         if ($obj.PSObject.Properties.Match('Width').Count -gt 0 -and $null -ne $obj.Width) {
-            try { $cfg.Width = [int]$obj.Width } catch { }
+            try { $cfg.Width = [int]$obj.Width } catch { Write-Verbose "UIConfig.FromObject: Invalid Width property value: $($_.Exception.Message)" }
         }
         if ($obj.PSObject.Properties.Match('ANSI').Count -gt 0) {
             $cfg.ANSI = [AnsiConfig]::FromObject($obj.ANSI)
@@ -865,6 +865,7 @@ class ProjectsConfig {
             }
         }
         catch {
+            Write-Verbose "ProjectsConfig.ToHashtableMaybe: ToHashtable() reflection/invocation failed: $($_.Exception.Message)"
         }
 
         return $value

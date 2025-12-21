@@ -89,18 +89,23 @@ function Stop-PSmmdigiKam {
                     if ($hasKey) { return $Object[$Name] }
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: dictionary access failed: $($_.Exception.Message)"
+            }
 
             try {
                 $prop = $Object.PSObject.Properties[$Name]
                 if ($null -ne $prop) { return $prop.Value }
             }
-            catch { }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
+            }
 
             return $null
         }
 
         function Set-ConfigMemberValue {
+            [CmdletBinding(SupportsShouldProcess = $true)]
             param(
                 [Parameter(Mandatory = $true)]
                 [AllowNull()]
@@ -119,25 +124,37 @@ function Stop-PSmmdigiKam {
 
             try {
                 if ($Object -is [System.Collections.IDictionary]) {
-                    $Object[$Name] = $Value
+                    if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
+                        $Object[$Name] = $Value
+                    }
                     return
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Set-ConfigMemberValue: IDictionary assignment failed: $($_.Exception.Message)"
+            }
 
             try {
                 $prop = $Object.PSObject.Properties[$Name]
                 if ($null -ne $prop) {
-                    $prop.Value = $Value
+                    if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
+                        $prop.Value = $Value
+                    }
                     return
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Set-ConfigMemberValue: PSObject property assignment failed: $($_.Exception.Message)"
+            }
 
             try {
-                $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+                if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
+                    $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+                }
             }
-            catch { }
+            catch {
+                Write-Verbose "Set-ConfigMemberValue: Add-Member failed: $($_.Exception.Message)"
+            }
         }
 
         # Get current project name from Config

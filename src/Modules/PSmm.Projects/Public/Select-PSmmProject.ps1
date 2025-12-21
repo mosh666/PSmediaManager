@@ -149,7 +149,7 @@ function Select-PSmmProject {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Select-PSmmProject] Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
             }
 
             try {
@@ -158,7 +158,7 @@ function Select-PSmmProject {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Select-PSmmProject] Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
             }
 
             try {
@@ -169,7 +169,7 @@ function Select-PSmmProject {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Select-PSmmProject] Get-ConfigMemberValue: IDictionary.Keys enumeration failed (Name='$Name'): $($_.Exception.Message)"
             }
 
             return $null
@@ -183,23 +183,35 @@ function Select-PSmmProject {
         return $null
     }
 
-    function Set-ConfigMemberValue([object]$Object, [string]$Name, [object]$Value) {
+    function Set-ConfigMemberValue {
+        [CmdletBinding(SupportsShouldProcess = $true)]
+        param(
+            [Parameter(Mandatory)][object]$Object,
+            [Parameter(Mandatory)][string]$Name,
+            [Parameter()][object]$Value
+        )
         if ($null -eq $Object) {
             return
         }
 
         if ($Object -is [System.Collections.IDictionary]) {
-            $Object[$Name] = $Value
+            if ($PSCmdlet.ShouldProcess("Config dictionary key '$Name'", 'Set value')) {
+                $Object[$Name] = $Value
+            }
             return
         }
 
         $p = $Object.PSObject.Properties[$Name]
         if ($null -ne $p) {
-            $Object.$Name = $Value
+            if ($PSCmdlet.ShouldProcess("Config property '$Name'", 'Set value')) {
+                $Object.$Name = $Value
+            }
             return
         }
 
-        $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+        if ($PSCmdlet.ShouldProcess("Config property '$Name'", 'Add member')) {
+            $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+        }
     }
 
     # Ensure Projects and Plugins are typed models (or have compatible shapes) before any dot access
@@ -418,11 +430,20 @@ function Select-PSmmProject {
         try {
             # Use pre-instantiated services from global context when available,
             # otherwise instantiate new ones (for standalone/test usage)
-            if ($global:PSmmServices) {
-                $httpService = $global:PSmmServices.Http
-                $cryptoService = $global:PSmmServices.Crypto
-                $environmentService = $global:PSmmServices.Environment
-                $processService = $global:PSmmServices.Process
+            $globalServiceContainer = $null
+            try {
+                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+            }
+            catch {
+                Write-Verbose "[Select-PSmmProject] Global ServiceContainer not available: $($_.Exception.Message)"
+                $globalServiceContainer = $null
+            }
+
+            if ($null -ne $globalServiceContainer) {
+                $httpService = $globalServiceContainer.Resolve('Http')
+                $cryptoService = $globalServiceContainer.Resolve('Crypto')
+                $environmentService = $globalServiceContainer.Resolve('Environment')
+                $processService = $globalServiceContainer.Resolve('Process')
             }
             else {
                 $httpService = [HttpService]::new()

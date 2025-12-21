@@ -46,7 +46,7 @@ Set-StrictMode -Version Latest
 #>
 
 function Get-PSmmAvailablePort {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([int])]
     param(
         [Parameter(Mandatory = $true)]
@@ -81,8 +81,18 @@ function Get-PSmmAvailablePort {
             try {
                 if ($Object -is [System.Collections.IDictionary]) {
                     $hasKey = $false
-                    try { $hasKey = $Object.ContainsKey($Name) } catch { $hasKey = $false }
-                    if (-not $hasKey) { try { $hasKey = $Object.Contains($Name) } catch { $hasKey = $false } }
+                    try { $hasKey = $Object.ContainsKey($Name) }
+                    catch {
+                        $hasKey = $false
+                        Write-Verbose "Get-ConfigMemberValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
+                    }
+                    if (-not $hasKey) {
+                        try { $hasKey = $Object.Contains($Name) }
+                        catch {
+                            $hasKey = $false
+                            Write-Verbose "Get-ConfigMemberValue: failed Contains('$Name'): $($_.Exception.Message)"
+                        }
+                    }
 
                     if (-not $hasKey) {
                         try {
@@ -90,24 +100,32 @@ function Get-PSmmAvailablePort {
                                 if ($k -eq $Name) { $hasKey = $true; break }
                             }
                         }
-                        catch { $hasKey = $false }
+                        catch {
+                            $hasKey = $false
+                            Write-Verbose "Get-ConfigMemberValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
+                        }
                     }
 
                     if ($hasKey) { return $Object[$Name] }
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: failed IDictionary lookup for '$Name': $($_.Exception.Message)"
+            }
 
             try {
                 $prop = $Object.PSObject.Properties[$Name]
                 if ($null -ne $prop) { return $prop.Value }
             }
-            catch { }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: failed PSObject lookup for '$Name': $($_.Exception.Message)"
+            }
 
             return $null
         }
 
         function Set-ConfigMemberValue {
+            [CmdletBinding(SupportsShouldProcess = $true)]
             param(
                 [Parameter(Mandatory = $true)]
                 [AllowNull()]
@@ -124,13 +142,19 @@ function Get-PSmmAvailablePort {
 
             if ($null -eq $Object) { return }
 
+            if (-not $PSCmdlet.ShouldProcess("Config member '$Name'", 'Set value')) {
+                return
+            }
+
             try {
                 if ($Object -is [System.Collections.IDictionary]) {
                     $Object[$Name] = $Value
                     return
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Set-ConfigMemberValue: failed IDictionary set for '$Name': $($_.Exception.Message)"
+            }
 
             try {
                 $prop = $Object.PSObject.Properties[$Name]
@@ -139,12 +163,16 @@ function Get-PSmmAvailablePort {
                     return
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Set-ConfigMemberValue: failed PSObject set for '$Name': $($_.Exception.Message)"
+            }
 
             try {
                 $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
             }
-            catch { }
+            catch {
+                Write-Verbose "Set-ConfigMemberValue: failed Add-Member for '$Name': $($_.Exception.Message)"
+            }
         }
 
         # Port allocation settings
@@ -202,7 +230,9 @@ function Get-PSmmAvailablePort {
             }
 
             # Allocate the port to the project
-            $portRegistry.SetPort($ProjectName, $availablePort)
+            if ($PSCmdlet.ShouldProcess("Project '$ProjectName'", "Allocate port $availablePort")) {
+                $portRegistry.SetPort($ProjectName, $availablePort)
+            }
 
             Write-Verbose "Allocated port $availablePort to project $ProjectName"
             Write-PSmmLog -Level INFO -Context 'Get-PSmmAvailablePort' `

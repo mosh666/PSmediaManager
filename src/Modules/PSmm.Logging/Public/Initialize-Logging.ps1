@@ -74,7 +74,7 @@ function Initialize-Logging {
                     }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
                 }
 
                 try {
@@ -83,7 +83,7 @@ function Initialize-Logging {
                     }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
                 }
 
                 try {
@@ -94,7 +94,7 @@ function Initialize-Logging {
                     }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys enumeration failed: $($_.Exception.Message)"
                 }
 
                 return $null

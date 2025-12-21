@@ -27,19 +27,25 @@ function Get-ConfigMemberValue {
         try {
             if ($Object.ContainsKey($Name)) { return $Object[$Name] }
         }
-        catch { }
+        catch {
+            Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey failed: $($_.Exception.Message)"
+        }
 
         try {
             if ($Object.Contains($Name)) { return $Object[$Name] }
         }
-        catch { }
+        catch {
+            Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains failed: $($_.Exception.Message)"
+        }
 
         try {
             foreach ($k in $Object.Keys) {
                 if ($k -eq $Name) { return $Object[$k] }
             }
         }
-        catch { }
+        catch {
+            Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
+        }
 
         return $null
     }
@@ -48,13 +54,15 @@ function Get-ConfigMemberValue {
         $p = $Object.PSObject.Properties[$Name]
         if ($null -ne $p) { return $p.Value }
     }
-    catch { }
+    catch {
+        Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
+    }
 
     return $null
 }
 
 function Set-ConfigMemberValue {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [Parameter(Mandatory = $true)]
         [AllowNull()]
@@ -74,25 +82,35 @@ function Set-ConfigMemberValue {
     }
 
     if ($Object -is [System.Collections.IDictionary]) {
-        $Object[$Name] = $Value
+        if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
+            $Object[$Name] = $Value
+        }
         return
     }
 
     try {
-        $Object.$Name = $Value
+        if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
+            $Object.$Name = $Value
+        }
         return
     }
-    catch { }
+    catch {
+        Write-Verbose "Set-ConfigMemberValue: direct property assignment failed: $($_.Exception.Message)"
+    }
 
     try {
-        if ($null -eq $Object.PSObject.Properties[$Name]) {
-            $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
-        }
-        else {
-            $Object.PSObject.Properties[$Name].Value = $Value
+        if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
+            if ($null -eq $Object.PSObject.Properties[$Name]) {
+                $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
+            }
+            else {
+                $Object.PSObject.Properties[$Name].Value = $Value
+            }
         }
     }
-    catch { }
+    catch {
+        Write-Verbose "Set-ConfigMemberValue: PSObject NoteProperty add/set failed: $($_.Exception.Message)"
+    }
 }
 
 function Get-CurrentVersion-MariaDB {

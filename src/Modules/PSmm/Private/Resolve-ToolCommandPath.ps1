@@ -56,7 +56,7 @@ function Get-OrInitializeToolCommandCache {
                 if ($k -eq 'Commands') { $hasCommands = $true; break }
             }
         }
-        catch { }
+        catch { Write-Verbose "Get-OrInitializeToolCommandCache: Enumerating Paths.Keys failed: $_" }
     }
 
     if ($hasCommands) {
@@ -146,7 +146,7 @@ function Find-ToolCommandInRoot {
                 if ($k -eq 'Root') { $hasRoot = $true; break }
             }
         }
-        catch { }
+        catch { Write-Verbose "Find-ToolCommandInRoot: Enumerating Paths.Keys failed: $_" }
     }
 
     if (-not ($hasRoot -and -not [string]::IsNullOrWhiteSpace([string]$Paths['Root']))) {

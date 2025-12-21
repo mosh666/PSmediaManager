@@ -95,13 +95,13 @@ function Initialize-PSmmProjectDigiKamConfig {
                         if ($Object.ContainsKey($Name)) { return $Object[$Name] }
                     }
                     catch {
-                        # ignore
+                        Write-Verbose "_TryGetConfigValue: ContainsKey('$Name') failed: $($_.Exception.Message)"
                     }
                     try {
                         if ($Object.Contains($Name)) { return $Object[$Name] }
                     }
                     catch {
-                        # ignore
+                        Write-Verbose "_TryGetConfigValue: Contains('$Name') failed: $($_.Exception.Message)"
                     }
 
                     try {
@@ -110,7 +110,7 @@ function Initialize-PSmmProjectDigiKamConfig {
                         }
                     }
                     catch {
-                        # ignore
+                        Write-Verbose "_TryGetConfigValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)"
                     }
                     return $null
                 }

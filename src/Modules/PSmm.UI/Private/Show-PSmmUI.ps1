@@ -33,8 +33,8 @@ function _TryGetConfigValue {
     }
 
     if ($Object -is [System.Collections.IDictionary]) {
-        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
-        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "_TryGetConfigValue: IDictionary.ContainsKey failed: $($_.Exception.Message)" }
+        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "_TryGetConfigValue: IDictionary.Contains failed: $($_.Exception.Message)" }
         try {
             foreach ($k in $Object.Keys) {
                 if ($k -eq $Name) {
@@ -42,7 +42,9 @@ function _TryGetConfigValue {
                 }
             }
         }
-        catch { }
+        catch {
+            Write-Verbose "_TryGetConfigValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
+        }
         return $null
     }
 
@@ -164,7 +166,7 @@ function Show-Header {
                     Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
                 }
                 catch {
-                    # ignore - handled below
+                    Write-Verbose "Show-Header: failed to import PSmm types module: $($_.Exception.Message)"
                 }
             }
             $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
@@ -357,7 +359,7 @@ function Show-MenuMain {
                 }
             }
             catch {
-                # ignore
+                Write-Verbose "Show-MenuMain._TryGetConfigValue: IDictionary.ContainsKey failed: $($_.Exception.Message)"
             }
 
             try {
@@ -366,7 +368,7 @@ function Show-MenuMain {
                 }
             }
             catch {
-                # ignore
+                Write-Verbose "Show-MenuMain._TryGetConfigValue: IDictionary.Contains failed: $($_.Exception.Message)"
             }
 
             try {
@@ -377,7 +379,7 @@ function Show-MenuMain {
                 }
             }
             catch {
-                # ignore
+                Write-Verbose "Show-MenuMain._TryGetConfigValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
             }
 
             return $null
@@ -402,7 +404,7 @@ function Show-MenuMain {
             if ($null -ne $k) { $storageKeys = @($k) }
         }
         catch {
-            # ignore
+            Write-Verbose "Show-MenuMain: failed to enumerate Storage keys: $($_.Exception.Message)"
         }
     }
 
@@ -487,7 +489,7 @@ function Show-MenuMain {
                 Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
             }
             catch {
-                # ignore - handled below
+                Write-Verbose "Show-MenuMain: failed to import PSmm types module: $($_.Exception.Message)"
             }
         }
         $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
@@ -990,10 +992,10 @@ function Show-Menu_Project {
     if (-not $ProcessesRunning) {
         # Display backup and database management options when no processes are running
         try {
-            Show-ProjectMenuOptions_NoProcesses -Config $Config
+            Show-ProjectMenuOption_NoProcess -Config $Config
         }
         catch {
-            Write-Warning "Show-ProjectMenuOptions_NoProcesses failed: $_"
+            Write-Warning "Show-ProjectMenuOption_NoProcess failed: $_"
             Write-PSmmHost "Error details: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
@@ -1028,7 +1030,7 @@ function Show-Menu_Project {
 .PARAMETER Run
     The runtime configuration hashtable.
 #>
-function Show-ProjectMenuOptions_NoProcesses {
+function Show-ProjectMenuOption_NoProcess {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]

@@ -91,6 +91,7 @@ function Get-ConfigMemberValue {
             }
         }
         catch {
+            Write-Verbose "Get-ConfigMemberValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
             # fall through
         }
 
@@ -100,6 +101,7 @@ function Get-ConfigMemberValue {
             }
         }
         catch {
+            Write-Verbose "Get-ConfigMemberValue: failed Contains('$Name'): $($_.Exception.Message)"
             # fall through
         }
 
@@ -111,6 +113,7 @@ function Get-ConfigMemberValue {
             }
         }
         catch {
+            Write-Verbose "Get-ConfigMemberValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
             # fall through
         }
 
@@ -124,6 +127,7 @@ function Get-ConfigMemberValue {
         }
     }
     catch {
+        Write-Verbose "Get-ConfigMemberValue: failed PSObject lookup for '$Name': $($_.Exception.Message)"
         # fall through
     }
 
@@ -131,7 +135,7 @@ function Get-ConfigMemberValue {
 }
 
 function Set-ConfigMemberValue {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [Parameter(Mandatory = $true)]
         [AllowNull()]
@@ -150,11 +154,16 @@ function Set-ConfigMemberValue {
         return
     }
 
+    if (-not $PSCmdlet.ShouldProcess("Config member '$Name'", 'Set value')) {
+        return
+    }
+
     if ($Object -is [System.Collections.IDictionary]) {
         try {
             $Object[$Name] = $Value
         }
         catch {
+            Write-Verbose "Set-ConfigMemberValue: failed IDictionary set for '$Name': $($_.Exception.Message)"
             # ignore
         }
         return
@@ -170,6 +179,7 @@ function Set-ConfigMemberValue {
         $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
     }
     catch {
+        Write-Verbose "Set-ConfigMemberValue: failed setting '$Name': $($_.Exception.Message)"
         # ignore
     }
 }
@@ -355,14 +365,26 @@ function Register-PluginsToPATH {
             }
 
             if ($Object -is [System.Collections.IDictionary]) {
-                try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
-                try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+                try {
+                    if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+                }
+                catch {
+                    Write-Verbose "_TryGetConfigValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
+                }
+                try {
+                    if ($Object.Contains($Name)) { return $Object[$Name] }
+                }
+                catch {
+                    Write-Verbose "_TryGetConfigValue: failed Contains('$Name'): $($_.Exception.Message)"
+                }
                 try {
                     foreach ($k in $Object.Keys) {
                         if ($k -eq $Name) { return $Object[$k] }
                     }
                 }
-                catch { }
+                catch {
+                    Write-Verbose "_TryGetConfigValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
+                }
                 return $null
             }
 
@@ -649,6 +671,7 @@ function Resolve-PluginsConfig {
                 }
             }
             catch {
+                Write-Verbose "Resolve-PluginsConfig._TryGetConfigValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
                 # ignore
             }
 
@@ -658,6 +681,7 @@ function Resolve-PluginsConfig {
                 }
             }
             catch {
+                Write-Verbose "Resolve-PluginsConfig._TryGetConfigValue: failed Contains('$Name'): $($_.Exception.Message)"
                 # ignore
             }
 
@@ -669,6 +693,7 @@ function Resolve-PluginsConfig {
                 }
             }
             catch {
+                Write-Verbose "Resolve-PluginsConfig._TryGetConfigValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
                 # ignore
             }
 
@@ -704,6 +729,7 @@ function Resolve-PluginsConfig {
             $Object.$Name = $Value
         }
         catch {
+            Write-Verbose "Resolve-PluginsConfig._TrySetConfigValue: failed setting '$Name': $($_.Exception.Message)"
             # ignore
         }
     }
@@ -721,6 +747,7 @@ function Resolve-PluginsConfig {
                 Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
             }
             catch {
+                Write-Verbose "Resolve-PluginsConfig: failed importing PSmm module '$psmmManifestPath': $($_.Exception.Message)"
                 # ignore - handled below
             }
         }
@@ -743,12 +770,14 @@ function Resolve-PluginsConfig {
                 if ($Manifest.Contains('Plugins')) { return $Manifest['Plugins'] }
             }
             catch {
+                Write-Verbose "_UnwrapPluginsManifest: failed Contains('Plugins'): $($_.Exception.Message)"
                 # ignore
             }
             try {
                 if ($Manifest.ContainsKey('Plugins')) { return $Manifest['Plugins'] }
             }
             catch {
+                Write-Verbose "_UnwrapPluginsManifest: failed ContainsKey('Plugins'): $($_.Exception.Message)"
                 # ignore
             }
 
@@ -760,11 +789,15 @@ function Resolve-PluginsConfig {
                 }
             }
             catch {
+                Write-Verbose "_UnwrapPluginsManifest: failed iterating Keys: $($_.Exception.Message)"
                 # ignore
             }
         }
         if ($Manifest.PSObject.Properties.Match('Plugins').Count -gt 0) {
-            try { return $Manifest.Plugins } catch { }
+            try { return $Manifest.Plugins }
+            catch {
+                Write-Verbose "_UnwrapPluginsManifest: failed reading 'Plugins' property: $($_.Exception.Message)"
+            }
         }
         return $Manifest
     }
@@ -992,6 +1025,7 @@ function Confirm-Plugins {
                 }
             }
             catch {
+                Write-Verbose "Confirm-Plugins._TryGetConfigValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
                 # ignore
             }
 
@@ -1001,6 +1035,7 @@ function Confirm-Plugins {
                 }
             }
             catch {
+                Write-Verbose "Confirm-Plugins._TryGetConfigValue: failed Contains('$Name'): $($_.Exception.Message)"
                 # ignore
             }
 
@@ -1012,6 +1047,7 @@ function Confirm-Plugins {
                 }
             }
             catch {
+                Write-Verbose "Confirm-Plugins._TryGetConfigValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
                 # ignore
             }
 
@@ -1589,6 +1625,7 @@ function Get-LatestDownloadUrl {
             }
         }
         catch {
+            Write-Verbose "Confirm-Plugins: failed reading plugin config Name/Source: $($_.Exception.Message)"
             # Leave as null; validation below will handle
         }
 

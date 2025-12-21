@@ -40,7 +40,7 @@ Set-StrictMode -Version Latest
                 AssetPattern = 'gitversion-win-x64-*.zip'
                 CommandPath = ''
                 Command = 'gitversion.exe'
-                Name = 'gitversion'
+                Name = 'gitversion-win-x64'
                 RegisterToPath = $true
             }
             GitLFS = @{

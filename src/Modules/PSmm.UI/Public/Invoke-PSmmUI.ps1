@@ -98,7 +98,7 @@ function Invoke-PSmmUI {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Dictionary ContainsKey failed for '$Name'. $($_.Exception.Message)"
             }
 
             try {
@@ -107,7 +107,7 @@ function Invoke-PSmmUI {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Dictionary Contains failed for '$Name'. $($_.Exception.Message)"
             }
 
             try {
@@ -118,7 +118,7 @@ function Invoke-PSmmUI {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Dictionary key enumeration failed for '$Name'. $($_.Exception.Message)"
             }
 
             return $null
@@ -198,7 +198,7 @@ function Invoke-PSmmUI {
                             Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
                         }
                         catch {
-                            # ignore - handled below
+                            Write-Verbose "Import-Module failed for '$psmmManifestPath' (continuing). $($_.Exception.Message)"
                         }
                     }
                     $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
@@ -223,7 +223,7 @@ function Invoke-PSmmUI {
                             Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
                         }
                         catch {
-                            # ignore - handled below
+                            Write-Verbose "Import-Module failed for '$psmmManifestPath' (continuing). $($_.Exception.Message)"
                         }
                     }
                     $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
@@ -643,7 +643,7 @@ function Invoke-ProjectMenu {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Dictionary ContainsKey failed for '$Name'. $($_.Exception.Message)"
             }
 
             try {
@@ -652,7 +652,7 @@ function Invoke-ProjectMenu {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Dictionary Contains failed for '$Name'. $($_.Exception.Message)"
             }
 
             try {
@@ -663,7 +663,7 @@ function Invoke-ProjectMenu {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Dictionary key enumeration failed for '$Name'. $($_.Exception.Message)"
             }
 
             return $null

@@ -55,7 +55,7 @@ function Confirm-Storage {
                         return $Object[$Name]
                     }
                 } catch {
-                    # fall through
+                    Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: Contains('$Name') failed: $_"
                 }
 
                 try {
@@ -63,7 +63,7 @@ function Confirm-Storage {
                         return $Object[$Name]
                     }
                 } catch {
-                    # fall through
+                    Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
                 }
 
                 try {
@@ -73,7 +73,7 @@ function Confirm-Storage {
                         }
                     }
                 } catch {
-                    # fall through
+                    Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
                 }
 
                 return $null
@@ -98,7 +98,7 @@ function Confirm-Storage {
                         return $Map[$Key]
                     }
                 } catch {
-                    # fall through
+                    Write-Verbose "[Confirm-Storage] Get-MapValue: Contains('$Key') failed: $_"
                 }
 
                 try {
@@ -106,7 +106,7 @@ function Confirm-Storage {
                         return $Map[$Key]
                     }
                 } catch {
-                    # fall through
+                    Write-Verbose "[Confirm-Storage] Get-MapValue: ContainsKey('$Key') failed: $_"
                 }
 
                 try {
@@ -116,7 +116,7 @@ function Confirm-Storage {
                         }
                     }
                 } catch {
-                    # fall through
+                    Write-Verbose "[Confirm-Storage] Get-MapValue: enumerating keys for '$Key' failed: $_"
                 }
 
                 return $null
@@ -283,7 +283,7 @@ function Test-StorageDevice {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
             }
 
             try {
@@ -292,7 +292,7 @@ function Test-StorageDevice {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: Contains('$Name') failed: $_"
             }
 
             try {
@@ -303,7 +303,7 @@ function Test-StorageDevice {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
             }
 
             return $null
@@ -329,7 +329,7 @@ function Test-StorageDevice {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Confirm-Storage] Get-MapValue: ContainsKey('$Key') failed: $_"
             }
 
             try {
@@ -338,7 +338,7 @@ function Test-StorageDevice {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Confirm-Storage] Get-MapValue: Contains('$Key') failed: $_"
             }
 
             try {
@@ -349,7 +349,7 @@ function Test-StorageDevice {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Confirm-Storage] Get-MapValue: enumerating keys for '$Key' failed: $_"
             }
 
             return $null
@@ -438,8 +438,10 @@ function Test-StorageDevice {
                         try { $master = if ($configGroup -is [System.Collections.IDictionary]) { $configGroup['Master'] } else { $configGroup.Master } } catch { $master = $null }
                         if ($null -ne $master) {
                             Write-Verbose "Updating Master DriveLetter in Config object: $($drive.DriveLetter)"
-                            try { $master.DriveLetter = $drive.DriveLetter } catch { }
-                            try { $master.UpdateStatus() } catch { }
+                            try { $master.DriveLetter = $drive.DriveLetter }
+                            catch { Write-Verbose "Unable to update Master DriveLetter in Config object: $_" }
+                            try { $master.UpdateStatus() }
+                            catch { Write-Verbose "Unable to update Master status in Config object: $_" }
                         }
                     }
                     elseif ($StorageType -eq 'Backup' -and $BackupId) {
@@ -464,8 +466,10 @@ function Test-StorageDevice {
                             try { $backupTarget = $backups[[string]$BackupId] } catch { $backupTarget = $null }
                             if ($null -ne $backupTarget) {
                                 Write-Verbose "Updating Backup.$BackupId DriveLetter in Config object: $($drive.DriveLetter)"
-                                try { $backupTarget.DriveLetter = $drive.DriveLetter } catch { }
-                                try { $backupTarget.UpdateStatus() } catch { }
+                                try { $backupTarget.DriveLetter = $drive.DriveLetter }
+                                catch { Write-Verbose "Unable to update Backup.$BackupId DriveLetter in Config object: $_" }
+                                try { $backupTarget.UpdateStatus() }
+                                catch { Write-Verbose "Unable to update Backup.$BackupId status in Config object: $_" }
                             }
                         }
                     }
@@ -533,8 +537,18 @@ function Test-StorageDevice {
             if ($StorageType -eq 'Master') {
                 $masterCfg = Get-ConfigMemberValue -Object $configGroup -Name 'Master'
                 if ($null -ne $masterCfg) {
-                    try { $masterCfg.DriveLetter = '' } catch { try { if ($masterCfg -is [System.Collections.IDictionary]) { $masterCfg['DriveLetter'] = '' } } catch { } }
-                    try { $masterCfg.IsAvailable = $false } catch { try { if ($masterCfg -is [System.Collections.IDictionary]) { $masterCfg['IsAvailable'] = $false } } catch { } }
+                    try { $masterCfg.DriveLetter = '' }
+                    catch {
+                        Write-Verbose "Unable to clear Master DriveLetter on Config object: $_"
+                        try { if ($masterCfg -is [System.Collections.IDictionary]) { $masterCfg['DriveLetter'] = '' } }
+                        catch { Write-Verbose "Unable to clear Master DriveLetter on Config dictionary: $_" }
+                    }
+                    try { $masterCfg.IsAvailable = $false }
+                    catch {
+                        Write-Verbose "Unable to clear Master availability flag on Config object: $_"
+                        try { if ($masterCfg -is [System.Collections.IDictionary]) { $masterCfg['IsAvailable'] = $false } }
+                        catch { Write-Verbose "Unable to clear Master availability flag on Config dictionary: $_" }
+                    }
                 }
             }
             elseif ($StorageType -eq 'Backup' -and $BackupId) {
@@ -543,8 +557,18 @@ function Test-StorageDevice {
 
                 $backupCfg = if ($null -ne $backupsCfg) { Get-MapValue -Map $backupsCfg -Key ([string]$BackupId) } else { $null }
                 if ($null -ne $backupCfg) {
-                    try { $backupCfg.DriveLetter = '' } catch { try { if ($backupCfg -is [System.Collections.IDictionary]) { $backupCfg['DriveLetter'] = '' } } catch { } }
-                    try { $backupCfg.IsAvailable = $false } catch { try { if ($backupCfg -is [System.Collections.IDictionary]) { $backupCfg['IsAvailable'] = $false } } catch { } }
+                    try { $backupCfg.DriveLetter = '' }
+                    catch {
+                        Write-Verbose "Unable to clear Backup.$BackupId DriveLetter on Config object: $_"
+                        try { if ($backupCfg -is [System.Collections.IDictionary]) { $backupCfg['DriveLetter'] = '' } }
+                        catch { Write-Verbose "Unable to clear Backup.$BackupId DriveLetter on Config dictionary: $_" }
+                    }
+                    try { $backupCfg.IsAvailable = $false }
+                    catch {
+                        Write-Verbose "Unable to clear Backup.$BackupId availability flag on Config object: $_"
+                        try { if ($backupCfg -is [System.Collections.IDictionary]) { $backupCfg['IsAvailable'] = $false } }
+                        catch { Write-Verbose "Unable to clear Backup.$BackupId availability flag on Config dictionary: $_" }
+                    }
                 }
             }
         }

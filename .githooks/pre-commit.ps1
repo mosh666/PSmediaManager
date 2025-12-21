@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 function Write-Note {
     param([string]$Message)
-    Write-Host "[pre-commit] $Message" -ForegroundColor Cyan
+    Write-Information -MessageData "[pre-commit] $Message" -InformationAction Continue
 }
 
 try {
@@ -33,6 +33,6 @@ try {
     exit 0
 }
 catch {
-    Write-Host "[pre-commit] ERROR: $_" -ForegroundColor Red
+    Write-Error -Message "[pre-commit] ERROR: $_" -ErrorAction Continue
     exit 1
 }

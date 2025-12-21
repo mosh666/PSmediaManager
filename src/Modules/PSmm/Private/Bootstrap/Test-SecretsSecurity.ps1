@@ -125,14 +125,14 @@ function Test-SecretsSecurity {
             }
 
             if ($Object -is [System.Collections.IDictionary]) {
-                try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
-                try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+                try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $_" }
+                try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $_" }
                 try {
                     foreach ($k in $Object.Keys) {
                         if ($k -eq $Name) { return $Object[$k] }
                     }
                 }
-                catch { }
+                catch { Write-Verbose "Get-ConfigMemberValue: Enumerating IDictionary.Keys failed: $_" }
                 return $null
             }
 

@@ -253,14 +253,14 @@ function Get-ConfigMemberValue {
     }
 
     if ($Object -is [System.Collections.IDictionary]) {
-        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
-        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)" }
+        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)" }
         try {
             foreach ($k in $Object.Keys) {
                 if ($k -eq $Name) { return $Object[$k] }
             }
         }
-        catch { }
+        catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys enumeration failed: $($_.Exception.Message)" }
         return $Default
     }
 
@@ -273,7 +273,7 @@ function Get-ConfigMemberValue {
 }
 
 function Set-ConfigMemberValue {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [Parameter(Mandatory)]
         [AllowNull()]
@@ -291,7 +291,12 @@ function Set-ConfigMemberValue {
         return
     }
 
+    $target = try { "{0}.{1}" -f $Object.GetType().Name, $Name } catch { $Name }
+
     if ($Object -is [System.Collections.IDictionary]) {
+        if (-not $PSCmdlet.ShouldProcess($target, 'Set config member value')) {
+            return
+        }
         $Object[$Name] = $Value
         return
     }
@@ -299,15 +304,25 @@ function Set-ConfigMemberValue {
     $existing = $null
     try { $existing = $Object.PSObject.Properties[$Name] } catch { $existing = $null }
     if ($null -ne $existing) {
-        try { $Object.$Name = $Value } catch { }
+        try {
+            if (-not $PSCmdlet.ShouldProcess($target, 'Set config member value')) {
+                return
+            }
+            $Object.$Name = $Value
+        } catch {
+            Write-Verbose "Set-ConfigMemberValue: property set '$Name' failed: $($_.Exception.Message)"
+        }
         return
     }
 
     try {
+        if (-not $PSCmdlet.ShouldProcess($target, 'Add config member value')) {
+            return
+        }
         $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
     }
     catch {
-        # Best-effort: some typed objects may not allow adding properties
+        Write-Verbose "Set-ConfigMemberValue: Add-Member '$Name' failed: $($_.Exception.Message)"
     }
 }
 

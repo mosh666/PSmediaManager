@@ -24,14 +24,18 @@ function _GetConfigMemberValue {
     }
 
     if ($Object -is [System.Collections.IDictionary]) {
-        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
-        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } }
+        catch { Write-Verbose "Dictionary ContainsKey failed for '$Name'. $($_.Exception.Message)" }
+
+        try { if ($Object.Contains($Name)) { return $Object[$Name] } }
+        catch { Write-Verbose "Dictionary Contains failed for '$Name'. $($_.Exception.Message)" }
+
         try {
             foreach ($k in $Object.Keys) {
                 if ($k -eq $Name) { return $Object[$k] }
             }
         }
-        catch { }
+        catch { Write-Verbose "Dictionary key enumeration failed for '$Name'. $($_.Exception.Message)" }
         return $null
     }
 
@@ -64,7 +68,8 @@ function _SetConfigMemberValue {
         $Object.$Name = $Value
     }
     catch {
-        # ignore
+        $typeName = $Object.GetType().FullName
+        Write-Verbose "Failed to set member '$Name' on object type '$typeName'. $($_.Exception.Message)"
     }
 }
 

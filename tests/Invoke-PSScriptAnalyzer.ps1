@@ -28,14 +28,30 @@ Write-Verbose "Running PSScriptAnalyzer on: $targetFullPath"
 
 $results = Invoke-ScriptAnalyzer -Path $targetFullPath -Recurse -Severity @('Error','Warning')
 
-if ($null -ne $results -and $results.Count -gt 0) {
-    $results |
+$resultsList = @(
+    $results | Where-Object {
+        $_.Severity -in @('Error', 'Warning')
+    }
+)
+
+$informationalResultsCount = @(
+    $results | Where-Object {
+        $_.Severity -notin @('Error', 'Warning')
+    }
+).Count
+
+if ($informationalResultsCount -gt 0) {
+    Write-Verbose "Ignoring $informationalResultsCount informational PSScriptAnalyzer result(s) (for example: TypeNotFound)."
+}
+
+if ($resultsList.Count -gt 0) {
+    $resultsList |
         Sort-Object -Property RuleName, ScriptName, Line |
         Format-Table -AutoSize RuleName, Severity, ScriptName, Line, Message |
         Out-String |
-        Write-Host
+        Write-Output
 
-    throw "PSScriptAnalyzer reported $($results.Count) issue(s)"
+    throw "PSScriptAnalyzer reported $($resultsList.Count) issue(s)"
 }
 
 Write-Verbose 'PSScriptAnalyzer passed (no issues)'

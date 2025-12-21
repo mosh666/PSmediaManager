@@ -56,7 +56,10 @@ class ProjectsDriveRegistryEntry {
                     continue
                 }
                 if ($e.PSObject.Properties.Match($prop).Count -gt 0) {
-                    try { $e.$prop = $obj[$prop] } catch { }
+                    try { $e.$prop = $obj[$prop] }
+                    catch {
+                        Write-Verbose "ProjectsDriveRegistryEntry.FromObject: failed setting '$prop': $($_.Exception.Message)"
+                    }
                 }
             }
             return $e
@@ -70,7 +73,10 @@ class ProjectsDriveRegistryEntry {
             }
 
             if ($e.PSObject.Properties.Match($p.Name).Count -gt 0) {
-                try { $e.$($p.Name) = $p.Value } catch { }
+                try { $e.$($p.Name) = $p.Value }
+                catch {
+                    Write-Verbose "ProjectsDriveRegistryEntry.FromObject: failed setting '$($p.Name)': $($_.Exception.Message)"
+                }
             }
         }
 
@@ -89,7 +95,10 @@ class ProjectsDriveRegistryEntry {
                 'PartitionKind','Path','SerialNumber','StorageGroup','TotalSpace','UsedSpace'
             )) {
             if ($firstProject.PSObject.Properties.Match($name).Count -gt 0) {
-                try { $e.$name = $firstProject.$name } catch { }
+                try { $e.$name = $firstProject.$name }
+                catch {
+                    Write-Verbose "ProjectsDriveRegistryEntry.FromProjectSample: failed setting '$name': $($_.Exception.Message)"
+                }
             }
         }
 

@@ -107,13 +107,17 @@ function Start-PSmmdigiKam {
                     if ($hasKey) { return $Object[$Name] }
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: dictionary access failed: $($_.Exception.Message)"
+            }
 
             try {
                 $prop = $Object.PSObject.Properties[$Name]
                 if ($null -ne $prop) { return $prop.Value }
             }
-            catch { }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
+            }
 
             return $null
         }

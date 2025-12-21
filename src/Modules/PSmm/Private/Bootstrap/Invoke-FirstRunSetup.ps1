@@ -65,14 +65,14 @@ function Invoke-FirstRunSetup {
             }
 
             if ($Object -is [System.Collections.IDictionary]) {
-                try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
-                try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+                try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: ContainsKey('$Name') failed: $($_.Exception.Message)" }
+                try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: Contains('$Name') failed: $($_.Exception.Message)" }
                 try {
                     foreach ($k in $Object.Keys) {
                         if ($k -eq $Name) { return $Object[$k] }
                     }
                 }
-                catch { }
+                catch { Write-Verbose "Get-ConfigMemberValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)" }
                 return $null
             }
 

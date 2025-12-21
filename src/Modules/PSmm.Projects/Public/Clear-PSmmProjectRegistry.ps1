@@ -44,7 +44,7 @@ function Clear-PSmmProjectRegistry {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Clear-PSmmProjectRegistry] Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
             }
 
             try {
@@ -53,7 +53,7 @@ function Clear-PSmmProjectRegistry {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Clear-PSmmProjectRegistry] Get-ConfigMemberValue: Contains('$Name') failed: $_"
             }
 
             try {
@@ -64,7 +64,7 @@ function Clear-PSmmProjectRegistry {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Clear-PSmmProjectRegistry] Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
             }
 
             return $null
@@ -78,8 +78,17 @@ function Clear-PSmmProjectRegistry {
         return $null
     }
 
-    function Set-ConfigMemberValue([object]$Object, [string]$Name, [object]$Value) {
-        if ($null -eq $Object) {
+    function Set-ConfigMemberValue {
+        [CmdletBinding(SupportsShouldProcess = $true)]
+        param(
+            [Parameter()][AllowNull()][object]$Object,
+            [Parameter(Mandatory)][string]$Name,
+            [Parameter()][AllowNull()][object]$Value
+        )
+
+        if ($null -eq $Object) { return }
+
+        if (-not $PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
             return
         }
 

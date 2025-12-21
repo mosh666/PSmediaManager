@@ -64,14 +64,14 @@ function Remove-StorageGroup {
                 if ($Object.ContainsKey($Name)) { return $Object[$Name] }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: ContainsKey('$Name') failed: $($_.Exception.Message)"
             }
 
             try {
                 if ($Object.Contains($Name)) { return $Object[$Name] }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: Contains('$Name') failed: $($_.Exception.Message)"
             }
 
             try {
@@ -80,7 +80,7 @@ function Remove-StorageGroup {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)"
             }
         }
 
@@ -91,6 +91,7 @@ function Remove-StorageGroup {
     }
 
     function Set-ConfigMemberValue {
+        [CmdletBinding(SupportsShouldProcess = $true)]
         param(
             [Parameter(Mandatory)]
             [AllowNull()]
@@ -107,16 +108,22 @@ function Remove-StorageGroup {
         if ($null -eq $Object) { return }
 
         if ($Object -is [System.Collections.IDictionary]) {
-            $Object[$Name] = $Value
+            if ($PSCmdlet.ShouldProcess("Dictionary key '$Name'", 'Set value')) {
+                $Object[$Name] = $Value
+            }
             return
         }
 
         if ($Object.PSObject.Properties[$Name]) {
-            $Object.$Name = $Value
+            if ($PSCmdlet.ShouldProcess("Property '$Name'", 'Set value')) {
+                $Object.$Name = $Value
+            }
             return
         }
 
-        $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+        if ($PSCmdlet.ShouldProcess("NoteProperty '$Name'", 'Add member')) {
+            $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+        }
     }
 
     $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage' -Default $null

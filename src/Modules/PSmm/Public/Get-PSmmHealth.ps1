@@ -43,7 +43,7 @@ function Get-PSmmHealth {
                         return $Object[$Name]
                     }
                 } catch {
-                    # fall through
+                    Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
                 }
 
                 try {
@@ -51,7 +51,7 @@ function Get-PSmmHealth {
                         return $Object[$Name]
                     }
                 } catch {
-                    # fall through
+                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
                 }
 
                 try {
@@ -61,7 +61,7 @@ function Get-PSmmHealth {
                         }
                     }
                 } catch {
-                    # fall through
+                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys enumeration failed: $($_.Exception.Message)"
                 }
 
                 return $null

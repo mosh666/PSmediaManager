@@ -46,14 +46,26 @@ function Install-KeePassXC {
         }
 
         if ($Object -is [System.Collections.IDictionary]) {
-            try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
-            try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+            try {
+                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+            }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
+            }
+            try {
+                if ($Object.Contains($Name)) { return $Object[$Name] }
+            }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: failed Contains('$Name'): $($_.Exception.Message)"
+            }
             try {
                 foreach ($k in $Object.Keys) {
                     if ($k -eq $Name) { return $Object[$k] }
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
+            }
             return $null
         }
 

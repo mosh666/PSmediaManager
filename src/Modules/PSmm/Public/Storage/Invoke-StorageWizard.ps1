@@ -60,14 +60,26 @@ function Invoke-StorageWizard {
         if ($null -eq $Object) { return $Default }
 
         if ($Object -is [System.Collections.IDictionary]) {
-            try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
-            try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+            try {
+                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+            }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
+            }
+            try {
+                if ($Object.Contains($Name)) { return $Object[$Name] }
+            }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: failed Contains('$Name'): $($_.Exception.Message)"
+            }
             try {
                 foreach ($k in $Object.Keys) {
                     if ($k -eq $Name) { return $Object[$k] }
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Get-ConfigMemberValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
+            }
         }
 
         $prop = $Object.PSObject.Properties[$Name]
@@ -77,6 +89,7 @@ function Invoke-StorageWizard {
     }
 
     function Set-ConfigMemberValue {
+        [CmdletBinding(SupportsShouldProcess = $true)]
         param(
             [Parameter(Mandatory)]
             [AllowNull()]
@@ -94,6 +107,10 @@ function Invoke-StorageWizard {
             return
         }
 
+        if (-not $PSCmdlet.ShouldProcess("Config member '$Name'", 'Set value')) {
+            return
+        }
+
         if ($Object -is [System.Collections.IDictionary]) {
             $Object[$Name] = $Value
             return
@@ -102,7 +119,10 @@ function Invoke-StorageWizard {
         $existing = $null
         try { $existing = $Object.PSObject.Properties[$Name] } catch { $existing = $null }
         if ($null -ne $existing) {
-            try { $Object.$Name = $Value } catch { }
+            try { $Object.$Name = $Value }
+            catch {
+                Write-Verbose "Set-ConfigMemberValue: failed setting '$Name': $($_.Exception.Message)"
+            }
             return
         }
 
@@ -110,6 +130,7 @@ function Invoke-StorageWizard {
             $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
         }
         catch {
+            Write-Verbose "Set-ConfigMemberValue: failed Add-Member for '$Name': $($_.Exception.Message)"
             # Best-effort: some typed objects may not allow adding properties
         }
     }
@@ -134,6 +155,7 @@ function Invoke-StorageWizard {
                     if ($Map.ContainsKey($Key)) { return $true }
                 }
                 catch {
+                    Write-Verbose "Test-MapContainsKey: ContainsKey() failed: $($_.Exception.Message)"
                     # fall through
                 }
             }
@@ -142,6 +164,7 @@ function Invoke-StorageWizard {
                 if ([bool]$Map.Contains($Key)) { return $true }
             }
             catch {
+                Write-Verbose "Test-MapContainsKey: Contains() failed: $($_.Exception.Message)"
                 # fall through
             }
 

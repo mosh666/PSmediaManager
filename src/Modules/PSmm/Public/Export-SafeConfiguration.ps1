@@ -673,7 +673,10 @@ function Export-SafeConfiguration {
                                     if ($k -eq 'Registry') { $hasRegistry = $true; break }
                                 }
                             }
-                            catch { }
+                            catch {
+                                Write-Verbose "[SafeExport] Unable to enumerate Projects keys for Registry detection: $($_.Exception.Message)"
+                                $hasRegistry = $false
+                            }
                         }
                     }
 
@@ -690,7 +693,10 @@ function Export-SafeConfiguration {
                                         if ($k -eq $kind) { $hasKind = $true; break }
                                     }
                                 }
-                                catch { }
+                                catch {
+                                    Write-Verbose "[SafeExport] Unable to enumerate Projects.Registry keys for '$kind' detection: $($_.Exception.Message)"
+                                    $hasKind = $false
+                                }
                             }
 
                             if ($hasKind -and ($projects.Registry.$kind -is [System.Collections.IDictionary])) {
@@ -706,7 +712,10 @@ function Export-SafeConfiguration {
                                                     if ($k -eq 'Projects') { $hasProjectsKey = $true; break }
                                                 }
                                             }
-                                            catch { }
+                                            catch {
+                                                Write-Verbose "[SafeExport] Unable to enumerate drive keys for Projects pruning: $($_.Exception.Message)"
+                                                $hasProjectsKey = $false
+                                            }
                                         }
                                     }
 
@@ -817,7 +826,10 @@ function Export-SafeConfiguration {
                                 if ($k -eq 'PowerShell') { $hasPowerShell = $true; break }
                             }
                         }
-                        catch { }
+                        catch {
+                            Write-Verbose "[SafeExport] Unable to enumerate Requirements keys for PowerShell detection: $($_.Exception.Message)"
+                            $hasPowerShell = $false
+                        }
                     }
                     if ($hasPowerShell) { $psRequirementsValue = $requirements['PowerShell'] }
                 }
@@ -838,7 +850,10 @@ function Export-SafeConfiguration {
                                     if ($k -eq 'Modules') { $hasModules = $true; break }
                                 }
                             }
-                            catch { }
+                            catch {
+                                Write-Verbose "[SafeExport] Unable to enumerate PowerShell Requirements keys for Modules detection: $($_.Exception.Message)"
+                                $hasModules = $false
+                            }
                         }
                         if ($hasModules) { $modulesDescriptor = $psRequirementsValue['Modules'] }
                     }
@@ -891,7 +906,10 @@ function Export-SafeConfiguration {
                                     if ($k -eq $pk) { $hasKey = $true; break }
                                 }
                             }
-                            catch { }
+                            catch {
+                                Write-Verbose "[SafeExport] Unable to enumerate Plugins keys for '$pk' detection: $($_.Exception.Message)"
+                                $hasKey = $false
+                            }
                         }
                         if ($hasKey) {
                             $plugins[$pk] = _PlainCopy -Obj $pluginsSource[$pk]
@@ -1006,7 +1024,10 @@ function Export-SafeConfiguration {
                                     if ($k -eq $segment) { $hasSegment = $true; break }
                                 }
                             }
-                            catch { }
+                            catch {
+                                Write-Verbose "[SafeExport] Unable to enumerate dictionary keys while locating masked token path segment '$segment': $($_.Exception.Message)"
+                                $hasSegment = $false
+                            }
                         }
 
                         if ($hasSegment) { $current = $current[$segment] }
@@ -1038,7 +1059,10 @@ function Export-SafeConfiguration {
                                 if ($k -eq $lastSegment) { $hasKey = $true; break }
                             }
                         }
-                        catch { }
+                        catch {
+                            Write-Verbose "[SafeExport] Unable to enumerate dictionary keys while locating masked token key '$lastSegment': $($_.Exception.Message)"
+                            $hasKey = $false
+                        }
                     }
                     if (-not $hasKey) { continue }
                     $candidate = $current[$lastSegment]
@@ -1297,7 +1321,10 @@ function Export-SafeConfiguration {
                             if ($k -eq 'Requirements') { $hasRequirements = $true; break }
                         }
                     }
-                    catch { }
+                    catch {
+                        Write-Verbose "[SafeExport] Unable to enumerate Configuration keys for Requirements detection: $($_.Exception.Message)"
+                        $hasRequirements = $false
+                    }
                 }
                 if ($hasRequirements) { $reqSourceOriginal = $Configuration['Requirements'] }
             }
@@ -1320,7 +1347,10 @@ function Export-SafeConfiguration {
                                 if ($k -eq 'PSModules') { $hasPSModules = $true; break }
                             }
                         }
-                        catch { }
+                        catch {
+                            Write-Verbose "[SafeExport] Unable to enumerate Requirements keys for PSModules capture: $($_.Exception.Message)"
+                            $hasPSModules = $false
+                        }
                     }
                     if ($hasPSModules) { $modulesCandidate = $reqSourceOriginal['PSModules'] }
                 }
@@ -1355,7 +1385,10 @@ function Export-SafeConfiguration {
                                 if ($k -eq 'PowerShell') { $hasPowerShell = $true; break }
                             }
                         }
-                        catch { }
+                        catch {
+                            Write-Verbose "[SafeExport] Unable to enumerate Requirements keys for PowerShell capture: $($_.Exception.Message)"
+                            $hasPowerShell = $false
+                        }
                     }
                     if ($hasPowerShell) { $powerShellCandidate = $reqSourceOriginal['PowerShell'] }
                 }
@@ -1378,7 +1411,10 @@ function Export-SafeConfiguration {
                                     if ($k -eq 'Modules') { $hasModules = $true; break }
                                 }
                             }
-                            catch { }
+                            catch {
+                                Write-Verbose "[SafeExport] Unable to enumerate PowerShell requirement keys for Modules capture: $($_.Exception.Message)"
+                                $hasModules = $false
+                            }
                         }
                         if ($hasModules) { $powerShellModulesCandidate = $powerShellCandidate['Modules'] }
                     }
@@ -1422,7 +1458,10 @@ function Export-SafeConfiguration {
                                 if ($k -eq 'Requirements') { $hasRequirementsKey = $true; break }
                             }
                         }
-                        catch { }
+                        catch {
+                            Write-Verbose "[SafeExport] Unable to enumerate serialized output keys for Requirements restore: $($_.Exception.Message)"
+                            $hasRequirementsKey = $false
+                        }
                     }
 
                     if ($hasRequirementsKey) {
@@ -1440,7 +1479,10 @@ function Export-SafeConfiguration {
                                 if ($k -eq 'App') { $hasAppKey = $true; break }
                             }
                         }
-                        catch { }
+                        catch {
+                            Write-Verbose "[SafeExport] Unable to enumerate serialized output keys for App restore: $($_.Exception.Message)"
+                            $hasAppKey = $false
+                        }
                     }
 
                     if ($hasAppKey) {
@@ -1455,7 +1497,10 @@ function Export-SafeConfiguration {
                                         if ($k -eq 'Requirements') { $hasAppRequirementsKey = $true; break }
                                     }
                                 }
-                                catch { }
+                                catch {
+                                    Write-Verbose "[SafeExport] Unable to enumerate serialized App keys for Requirements restore: $($_.Exception.Message)"
+                                    $hasAppRequirementsKey = $false
+                                }
                             }
                         }
 
@@ -1484,7 +1529,10 @@ function Export-SafeConfiguration {
                                 if ($k -eq 'Requirements') { $hasRequirementsKey = $true; break }
                             }
                         }
-                        catch { }
+                        catch {
+                            Write-Verbose "[SafeExport] Unable to enumerate serialized output keys for PowerShell restore: $($_.Exception.Message)"
+                            $hasRequirementsKey = $false
+                        }
                     }
 
                     if ($hasRequirementsKey) {
@@ -1502,7 +1550,10 @@ function Export-SafeConfiguration {
                                         if ($k -eq 'PowerShell') { $hasPowerShellKey = $true; break }
                                     }
                                 }
-                                catch { }
+                                catch {
+                                    Write-Verbose "[SafeExport] Unable to enumerate serialized Requirements keys for PowerShell restore: $($_.Exception.Message)"
+                                    $hasPowerShellKey = $false
+                                }
                             }
                         }
 
@@ -1529,7 +1580,10 @@ function Export-SafeConfiguration {
                                 if ($k -eq 'App') { $hasAppKey = $true; break }
                             }
                         }
-                        catch { }
+                        catch {
+                            Write-Verbose "[SafeExport] Unable to enumerate serialized output keys for App PowerShell restore: $($_.Exception.Message)"
+                            $hasAppKey = $false
+                        }
                     }
 
                     if ($hasAppKey) {
@@ -1544,7 +1598,10 @@ function Export-SafeConfiguration {
                                         if ($k -eq 'Requirements') { $hasAppRequirementsKey = $true; break }
                                     }
                                 }
-                                catch { }
+                                catch {
+                                    Write-Verbose "[SafeExport] Unable to enumerate serialized App keys for Requirements PowerShell restore: $($_.Exception.Message)"
+                                    $hasAppRequirementsKey = $false
+                                }
                             }
                         }
 
@@ -1566,7 +1623,10 @@ function Export-SafeConfiguration {
                                             if ($k -eq 'PowerShell') { $hasAppPowerShellKey = $true; break }
                                         }
                                     }
-                                    catch { }
+                                    catch {
+                                        Write-Verbose "[SafeExport] Unable to enumerate serialized App Requirements keys for PowerShell restore: $($_.Exception.Message)"
+                                        $hasAppPowerShellKey = $false
+                                    }
                                 }
                                 if ($hasAppPowerShellKey) { $appPsTarget = $appReqTarget['PowerShell'] }
 

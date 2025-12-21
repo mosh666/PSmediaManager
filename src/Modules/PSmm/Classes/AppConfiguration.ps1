@@ -46,7 +46,7 @@ function _PSmm_DictionaryHasKey {
             }
         }
         catch {
-            # ignore
+            Write-Verbose "Dictionary key enumeration failed; treating key '$Key' as missing. $($_.Exception.Message)"
         }
     }
     return $hasKey
@@ -501,7 +501,9 @@ class LoggingConfiguration {
                             }
                         }
                     }
-                    catch { }
+                    catch {
+                        Write-Verbose "Dictionary key enumeration failed for '$name'. $($_.Exception.Message)"
+                    }
                 }
                 if ($hasKey) { return $source[$name] }
                 return $null
@@ -632,7 +634,9 @@ class RuntimeParameters {
                             }
                         }
                     }
-                    catch { }
+                    catch {
+                        Write-Verbose "Dictionary key enumeration failed for '$name'. $($_.Exception.Message)"
+                    }
                 }
                 if ($hasKey) { return $source[$name] }
                 return $null
@@ -1063,8 +1067,16 @@ class AppConfiguration {
         }
 
         if ($obj -is [System.Collections.IDictionary]) {
-            try { if ($obj.ContainsKey($name)) { return $obj[$name] } } catch { }
-            try { if ($obj.Contains($name)) { return $obj[$name] } } catch { }
+            try { if ($obj.ContainsKey($name)) { return $obj[$name] } }
+            catch {
+                Write-Verbose "Dictionary ContainsKey failed for '$name'. $($_.Exception.Message)"
+            }
+
+            try { if ($obj.Contains($name)) { return $obj[$name] } }
+            catch {
+                Write-Verbose "Dictionary Contains failed for '$name'. $($_.Exception.Message)"
+            }
+
             try {
                 foreach ($k in $obj.Keys) {
                     if ($k -eq $name) {
@@ -1072,7 +1084,9 @@ class AppConfiguration {
                     }
                 }
             }
-            catch { }
+            catch {
+                Write-Verbose "Dictionary key enumeration failed for '$name'. $($_.Exception.Message)"
+            }
             return $null
         }
 
@@ -1094,7 +1108,11 @@ class AppConfiguration {
             return
         }
 
-        try { $obj.$name = $value } catch { }
+        try { $obj.$name = $value }
+        catch {
+            $typeName = $obj.GetType().FullName
+            Write-Verbose "Failed to set member '$name' on object type '$typeName'. $($_.Exception.Message)"
+        }
     }
 
     hidden static [string] _ToStringOrNull([object]$value) {
@@ -1192,7 +1210,7 @@ class AppConfiguration {
                 $cfg.AddedPathEntries = @($addedPathEntriesValue | ForEach-Object { [string]$_ })
             }
             catch {
-                # ignore
+                Write-Verbose "Failed to normalize AddedPathEntries from enumerable. $($_.Exception.Message)"
             }
         }
 

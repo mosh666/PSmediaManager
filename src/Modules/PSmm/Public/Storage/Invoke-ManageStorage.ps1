@@ -70,14 +70,14 @@ function Invoke-ManageStorage {
                 if ($Object.ContainsKey($Name)) { return $Object[$Name] }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: ContainsKey('$Name') failed: $($_.Exception.Message)"
             }
 
             try {
                 if ($Object.Contains($Name)) { return $Object[$Name] }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: Contains('$Name') failed: $($_.Exception.Message)"
             }
 
             try {
@@ -86,7 +86,7 @@ function Invoke-ManageStorage {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)"
             }
         }
 
@@ -116,7 +116,7 @@ function Invoke-ManageStorage {
                     if ($Map.ContainsKey($Key)) { return $true }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "Test-MapContainsKey: ContainsKey('$Key') failed: $($_.Exception.Message)"
                 }
             }
 
@@ -124,7 +124,7 @@ function Invoke-ManageStorage {
                 if ([bool]$Map.Contains($Key)) { return $true }
             }
             catch {
-                # fall through
+                Write-Verbose "Test-MapContainsKey: Contains('$Key') failed: $($_.Exception.Message)"
             }
 
             try {

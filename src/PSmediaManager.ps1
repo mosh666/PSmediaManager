@@ -234,7 +234,7 @@ try {
     $script:ServiceContainer.RegisterSingleton('Git', [GitService]::new())
 
     # Expose ServiceContainer globally so modules can access services
-    $global:PSmmServiceContainer = $script:ServiceContainer
+    Set-Variable -Name 'PSmmServiceContainer' -Scope Global -Value $script:ServiceContainer -Force
 
     Write-Verbose "Full service layer available (ServiceContainer with $($script:ServiceContainer.Count()) services)"
 }
@@ -678,12 +678,12 @@ finally {
         }
     }
     else {
-        Write-Host ''
+        Write-Output ''
         if ($exitCode -eq 0) {
-            Write-Host "$($appConfig.DisplayName) exited successfully.`n"
+            Write-Output "$($appConfig.DisplayName) exited successfully.`n"
         }
         else {
-            Write-Host "$($appConfig.DisplayName) exited with errors. Check the log for details.`n"
+            Write-Output "$($appConfig.DisplayName) exited with errors. Check the log for details.`n"
         }
     }
 

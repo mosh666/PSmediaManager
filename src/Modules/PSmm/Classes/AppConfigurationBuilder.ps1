@@ -350,7 +350,9 @@ class AppConfigurationBuilder {
                     $p = $Object.PSObject.Properties[$Name]
                     if ($null -ne $p) { return $p.Value }
                 }
-                catch { }
+                catch {
+                    Write-Verbose "Failed to read property '$Name' from object in config data. $($_.Exception.Message)"
+                }
 
                 return $null
             }
@@ -451,7 +453,9 @@ class AppConfigurationBuilder {
                 $p = $pluginsContent.PSObject.Properties['Plugins']
                 if ($null -ne $p) { $pluginsRoot = $p.Value }
             }
-            catch { }
+            catch {
+                Write-Verbose "Failed to read 'Plugins' property from plugins content. $($_.Exception.Message)"
+            }
         }
 
         if ($null -eq $pluginsRoot) {
@@ -507,7 +511,9 @@ class AppConfigurationBuilder {
                         if ($k -eq 'Storage') { $hasKey = $true; break }
                     }
                 }
-                catch { }
+                catch {
+                    Write-Verbose "Failed to enumerate Storage file root keys. $($_.Exception.Message)"
+                }
             }
             if ($hasKey) {
                 $storageRoot = $storageContent['Storage']
@@ -739,7 +745,9 @@ class AppConfigurationBuilder {
                     $p = $storageData.PSObject.Properties['Storage']
                     if ($null -ne $p) { $storageRoot = $p.Value }
                 }
-                catch { }
+                catch {
+                    Write-Verbose "Failed to read 'Storage' property from storage data. $($_.Exception.Message)"
+                }
             }
 
             if ($null -eq $storageRoot) {
@@ -857,7 +865,9 @@ class AppConfigurationBuilder {
                 $p = $Object.PSObject.Properties[$Name]
                 if ($null -ne $p) { return $p.Value }
             }
-            catch { }
+            catch {
+                Write-Verbose "Failed to read property '$Name' while writing storage file. $($_.Exception.Message)"
+            }
 
             return $null
         }

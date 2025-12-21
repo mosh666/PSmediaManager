@@ -313,7 +313,7 @@ function Get-LatestUrlFromGitHub {
                     }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
                 }
 
                 try {
@@ -322,7 +322,7 @@ function Get-LatestUrlFromGitHub {
                     }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
                 }
 
                 try {
@@ -333,7 +333,7 @@ function Get-LatestUrlFromGitHub {
                     }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys enumeration failed: $($_.Exception.Message)"
                 }
 
                 return $null
@@ -346,19 +346,30 @@ function Get-LatestUrlFromGitHub {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: PSObject.Properties['$Name'] lookup failed: $($_.Exception.Message)"
             }
 
             return $null
         }
 
-        function Set-ConfigMemberValue([object]$Object, [string]$Name, [object]$Value) {
+        function Set-ConfigMemberValue {
+            [CmdletBinding(SupportsShouldProcess = $true)]
+            param(
+                [Parameter()] [object]$Object,
+                [Parameter()] [string]$Name,
+                [Parameter()] [object]$Value
+            )
             if ($null -eq $Object) {
                 return $false
             }
 
+            $target = try { "{0}.{1}" -f $Object.GetType().Name, $Name } catch { $Name }
+
             if ($Object -is [System.Collections.IDictionary]) {
                 try {
+                    if (-not $PSCmdlet.ShouldProcess($target, 'Set config member value')) {
+                        return $false
+                    }
                     $Object[$Name] = $Value
                     return $true
                 }
@@ -370,15 +381,21 @@ function Get-LatestUrlFromGitHub {
             try {
                 $prop = $Object.PSObject.Properties[$Name]
                 if ($null -ne $prop) {
+                    if (-not $PSCmdlet.ShouldProcess($target, 'Set config member value')) {
+                        return $false
+                    }
                     $prop.Value = $Value
                     return $true
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Set-ConfigMemberValue: PSObject.Properties['$Name'] lookup failed: $($_.Exception.Message)"
             }
 
             try {
+                if (-not $PSCmdlet.ShouldProcess($target, 'Add config member value')) {
+                    return $false
+                }
                 $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
                 return $true
             }

@@ -71,7 +71,7 @@ function Get-PSmmProjects {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
             }
 
             try {
@@ -80,7 +80,7 @@ function Get-PSmmProjects {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Get-ConfigMemberValue: Contains('$Name') failed: $_"
             }
 
             try {
@@ -91,7 +91,7 @@ function Get-PSmmProjects {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
             }
 
             return $null
@@ -105,8 +105,19 @@ function Get-PSmmProjects {
         return $null
     }
 
-    function Set-ConfigMemberValue([object]$Object, [string]$Name, [object]$Value) {
+    function Set-ConfigMemberValue {
+        [CmdletBinding(SupportsShouldProcess = $true)]
+        param(
+            [Parameter()][AllowNull()][object]$Object,
+            [Parameter(Mandatory)][string]$Name,
+            [Parameter()][AllowNull()][object]$Value
+        )
+
         if ($null -eq $Object) {
+            return
+        }
+
+        if (-not $PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
             return
         }
 
@@ -146,14 +157,14 @@ function Get-PSmmProjects {
                 if ($map.ContainsKey($key)) { return $map[$key] }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Get-PSmmMapValue: ContainsKey('$key') failed: $_"
             }
 
             try {
                 if ($map.Contains($key)) { return $map[$key] }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Get-PSmmMapValue: Contains('$key') failed: $_"
             }
 
             try {
@@ -164,7 +175,7 @@ function Get-PSmmProjects {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Get-PSmmMapValue: enumerating keys for '$key' failed: $_"
             }
             return $null
         }
@@ -173,6 +184,7 @@ function Get-PSmmProjects {
             return $map[$key]
         }
         catch {
+            Write-Verbose "[Get-PSmmProjects] Get-PSmmMapValue: indexer access for '$key' failed: $_"
         }
 
         $p = $map.PSObject.Properties[$key]
@@ -207,7 +219,7 @@ function Get-PSmmProjects {
         return $ht2
     }
 
-    function Normalize-StorageMap([object]$storage) {
+    function ConvertTo-StorageMap([object]$storage) {
         $out = @{}
         if ($null -eq $storage) {
             return $out
@@ -237,7 +249,7 @@ function Get-PSmmProjects {
                     continue
                 }
                 catch {
-                    # fall back to legacy view
+                    Write-Verbose "[Get-PSmmProjects] ConvertTo-StorageMap: failed to convert storage group '$key' via typed model: $_"
                 }
             }
 
@@ -393,7 +405,7 @@ function Get-PSmmProjects {
                 Write-Verbose 'FileSystem service not available, bypassing cache validation'
             } else {
                 $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
-                $Storage = Normalize-StorageMap -storage $storageSource
+                $Storage = ConvertTo-StorageMap -storage $storageSource
 
                 # Only validate cache against storage if storage is configured
                 if ($null -ne $Storage -and $Storage.Count -gt 0) {
@@ -522,7 +534,7 @@ function Get-PSmmProjects {
 
         # Get all storage groups (1, 2, etc.)
         $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
-        $Storage = Normalize-StorageMap -storage $storageSource
+        $Storage = ConvertTo-StorageMap -storage $storageSource
 
         # Process each storage group
         foreach ($storageGroup in $Storage.Keys | Sort-Object) {
@@ -780,7 +792,7 @@ function Get-ProjectsFromDrive {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Get-ProjectsFromDrive.Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
             }
 
             try {
@@ -789,7 +801,7 @@ function Get-ProjectsFromDrive {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Get-ProjectsFromDrive.Get-ConfigMemberValue: Contains('$Name') failed: $_"
             }
 
             try {
@@ -800,7 +812,7 @@ function Get-ProjectsFromDrive {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Get-ProjectsFromDrive.Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
             }
 
             return $null
@@ -853,7 +865,7 @@ function Get-ProjectsFromDrive {
                 Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
             }
             catch {
-                # ignore - handled below
+                Write-Verbose "[Get-PSmmProjects] Unable to import module '$psmmManifestPath' to resolve UiErrorCatalog: $_"
             }
         }
         $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
@@ -1178,7 +1190,7 @@ function Initialize-GlobalProject {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Initialize-GlobalProject.Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
             }
 
             try {
@@ -1187,7 +1199,7 @@ function Initialize-GlobalProject {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Initialize-GlobalProject.Get-ConfigMemberValue: Contains('$Name') failed: $_"
             }
 
             try {
@@ -1198,7 +1210,7 @@ function Initialize-GlobalProject {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "[Get-PSmmProjects] Initialize-GlobalProject.Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
             }
 
             return $null

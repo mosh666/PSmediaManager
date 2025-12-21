@@ -102,14 +102,16 @@ function _TryGetConfigValue {
     }
 
     if ($Object -is [System.Collections.IDictionary]) {
-        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { }
-        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { }
+        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "_TryGetConfigValue: IDictionary.ContainsKey failed: $($_.Exception.Message)" }
+        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "_TryGetConfigValue: IDictionary.Contains failed: $($_.Exception.Message)" }
         try {
             foreach ($k in $Object.Keys) {
                 if ($k -eq $Name) { return $Object[$k] }
             }
         }
-        catch { }
+        catch {
+            Write-Verbose "_TryGetConfigValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
+        }
         return $null
     }
 
@@ -134,6 +136,7 @@ function _TryGetNestedValue {
 }
 
 function New-UiColumn {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Factory function creates an in-memory UI model object and does not modify system state')]
     [CmdletBinding(PositionalBinding = $false)]
     param(
         [Parameter()]
@@ -191,7 +194,7 @@ function New-UiColumn {
                 Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
             }
             catch {
-                # ignore - handled below
+                Write-Verbose "New-UiColumn: failed to import PSmm types module: $($_.Exception.Message)"
             }
         }
         $uiColumnType = 'UiColumn' -as [type]
@@ -220,6 +223,7 @@ function New-UiColumn {
 }
 
 function New-UiKeyValueItem {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Factory function creates an in-memory UI model object and does not modify system state')]
     [CmdletBinding(PositionalBinding = $false)]
     param(
         [Parameter(Mandatory)]
@@ -241,7 +245,7 @@ function New-UiKeyValueItem {
                 Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
             }
             catch {
-                # ignore - handled below
+                Write-Verbose "New-UiKeyValueItem: failed to import PSmm types module: $($_.Exception.Message)"
             }
         }
         $uiKeyValueItemType = 'UiKeyValueItem' -as [type]

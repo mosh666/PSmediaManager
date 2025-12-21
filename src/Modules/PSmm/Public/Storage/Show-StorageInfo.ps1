@@ -39,14 +39,26 @@ function Get-ConfigValue {
     }
 
     if ($InputObject -is [System.Collections.IDictionary]) {
-        try { if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] } } catch { }
-        try { if ($InputObject.Contains($Name)) { return $InputObject[$Name] } } catch { }
+        try {
+            if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
+        }
+        catch {
+            Write-Verbose "Get-ConfigValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
+        }
+        try {
+            if ($InputObject.Contains($Name)) { return $InputObject[$Name] }
+        }
+        catch {
+            Write-Verbose "Get-ConfigValue: failed Contains('$Name'): $($_.Exception.Message)"
+        }
         try {
             foreach ($k in $InputObject.Keys) {
                 if ($k -eq $Name) { return $InputObject[$k] }
             }
         }
-        catch { }
+        catch {
+            Write-Verbose "Get-ConfigValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
+        }
         return $null
     }
 

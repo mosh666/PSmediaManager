@@ -94,14 +94,14 @@ function New-PSmmProject {
                     if ($Object.ContainsKey($Name)) { return $Object[$Name] }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "[New-PSmmProject] Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
                 }
 
                 try {
                     if ($Object.Contains($Name)) { return $Object[$Name] }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "[New-PSmmProject] Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
                 }
 
                 try {
@@ -110,7 +110,7 @@ function New-PSmmProject {
                     }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "[New-PSmmProject] Get-ConfigMemberValue: IDictionary.Keys enumeration failed (Name='$Name'): $($_.Exception.Message)"
                 }
                 return $null
             }
@@ -133,14 +133,14 @@ function New-PSmmProject {
                     if ($Map.ContainsKey($Key)) { return $Map[$Key] }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "[New-PSmmProject] Get-MapValue: IDictionary.ContainsKey('$Key') failed: $($_.Exception.Message)"
                 }
 
                 try {
                     if ($Map.Contains($Key)) { return $Map[$Key] }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "[New-PSmmProject] Get-MapValue: IDictionary.Contains('$Key') failed: $($_.Exception.Message)"
                 }
 
                 try {
@@ -149,7 +149,7 @@ function New-PSmmProject {
                     }
                 }
                 catch {
-                    # fall through
+                    Write-Verbose "[New-PSmmProject] Get-MapValue: IDictionary.Keys enumeration failed (Key='$Key'): $($_.Exception.Message)"
                 }
                 return $null
             }
@@ -158,6 +158,7 @@ function New-PSmmProject {
                 return $Map[$Key]
             }
             catch {
+                Write-Verbose "[New-PSmmProject] Get-MapValue: indexer access failed (Key='$Key'): $($_.Exception.Message)"
             }
 
             $p = $Map.PSObject.Properties[$Key]
@@ -190,6 +191,7 @@ function New-PSmmProject {
                 $group1 = $sgType::FromObject('1', $group1Raw)
             }
             catch {
+                Write-Verbose "[New-PSmmProject] StorageGroupConfig::FromObject() failed; falling back to legacy Storage group: $($_.Exception.Message)"
                 $group1 = $null
             }
         }
@@ -198,7 +200,7 @@ function New-PSmmProject {
         }
 
         $masterLabel = $null
-        try { $masterLabel = $group1.Master.Label } catch { $masterLabel = $null }
+        try { $masterLabel = $group1.Master.Label } catch { Write-Verbose "[New-PSmmProject] Reading group1.Master.Label failed: $($_.Exception.Message)"; $masterLabel = $null }
         if ($null -eq $masterLabel) {
             $masterLabel = Get-NestedValue -Root $group1 -PathParts @('Master', 'Label')
         }

@@ -106,14 +106,14 @@ function Test-DuplicateSerial {
                 if ($Object.ContainsKey($Name)) { return $Object[$Name] }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: ContainsKey('$Name') failed: $($_.Exception.Message)"
             }
 
             try {
                 if ($Object.Contains($Name)) { return $Object[$Name] }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: Contains('$Name') failed: $($_.Exception.Message)"
             }
 
             try {
@@ -122,7 +122,7 @@ function Test-DuplicateSerial {
                 }
             }
             catch {
-                # fall through
+                Write-Verbose "Get-ConfigMemberValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)"
             }
         }
 
