@@ -13,64 +13,25 @@ function Get-KeePassCli {
         [Parameter(Mandatory)]$Process
     )
 
-    function Get-ConfigMemberValue {
-        [CmdletBinding()]
-        param(
-            [Parameter()][AllowNull()][object]$Object,
-            [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name
-        )
-
-        if ($null -eq $Object) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } }
-            catch { Write-Verbose "Dictionary ContainsKey failed for '$Name'. $($_.Exception.Message)" }
-
-            try { if ($Object.Contains($Name)) { return $Object[$Name] } }
-            catch { Write-Verbose "Dictionary Contains failed for '$Name'. $($_.Exception.Message)" }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) { return $Object[$k] }
-                }
-            }
-            catch { Write-Verbose "Dictionary key enumeration failed for '$Name'. $($_.Exception.Message)" }
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
-    function Get-ConfigNestedValue {
-        [CmdletBinding()]
-        param(
-            [Parameter()][AllowNull()][object]$Object,
-            [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Path
-        )
-
-        $current = $Object
-        foreach ($segment in $Path) {
-            $current = Get-ConfigMemberValue -Object $current -Name $segment
-            if ($null -eq $current) {
-                return $null
-            }
-        }
-
-        return $current
-    }
-
     # Resolve vault path using standard resolution order: Config > Environment > Error
     $vaultPath = $null
 
+    if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+        $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmConfigMemberValue.ps1'
+        if (Test-Path -LiteralPath $helperPath) {
+            . $helperPath
+        }
+    }
+
+    if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+        $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmConfigNestedValue.ps1'
+        if (Test-Path -LiteralPath $helperPath) {
+            . $helperPath
+        }
+    }
+
     # 1. Try to get from configuration (Config.Paths.App.Vault)
-    $vaultPath = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Vault')
+    $vaultPath = Get-PSmmConfigNestedValue -Object $Config -Path @('Paths','App','Vault') -Default $null
     if (-not [string]::IsNullOrWhiteSpace($vaultPath)) {
         Write-Verbose "[Get-KeePassCli] Resolved VaultPath from Config.Paths.App.Vault: $vaultPath"
     }

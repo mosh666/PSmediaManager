@@ -141,7 +141,6 @@ try {
     # Register early services required for module loading
     $script:ServiceContainer.RegisterSingleton('FileSystem', [FileSystemService]::new())
     $script:ServiceContainer.RegisterSingleton('Environment', [EnvironmentService]::new())
-    $script:ServiceContainer.RegisterSingleton('PathProvider', [PathProvider]::new())
     $script:ServiceContainer.RegisterSingleton('Process', [ProcessService]::new())
 
     Write-Verbose "Early services registered in ServiceContainer"
@@ -161,8 +160,8 @@ catch {
     needed for configuration and other modules.
 #>
 try {
-    # Calculate modules path using PathProvider
-    $modulesPath = $script:ServiceContainer.Resolve('PathProvider').CombinePath(@($script:ModuleRoot, 'Modules'))
+    # Calculate modules path without PathProvider (PSmm types not imported yet)
+    $modulesPath = Join-Path -Path $script:ModuleRoot -ChildPath 'Modules'
     Write-Verbose "Importing modules from: $modulesPath"
 
     # Define module load order (dependencies first)
@@ -176,8 +175,8 @@ try {
 
     $loadedModules = 0
     foreach ($moduleName in $moduleLoadOrder) {
-        $moduleFolder = $script:ServiceContainer.Resolve('PathProvider').CombinePath(@($modulesPath, $moduleName))
-        $manifestPath = $script:ServiceContainer.Resolve('PathProvider').CombinePath(@($moduleFolder, "$moduleName.psd1"))
+        $moduleFolder = Join-Path -Path $modulesPath -ChildPath $moduleName
+        $manifestPath = Join-Path -Path $moduleFolder -ChildPath "$moduleName.psd1"
 
         if ($script:ServiceContainer.Resolve('FileSystem').TestPath($manifestPath)) {
             try {
@@ -217,6 +216,24 @@ catch {
 }
 
 #endregion ===== Module Imports =====
+
+
+#region ===== Register PSmm PathProvider =====
+
+<#
+    Register PathProvider AFTER importing PSmm so the canonical class definition
+    is available. Early module discovery uses Join-Path to avoid requiring this.
+#>
+try {
+    $script:ServiceContainer.RegisterSingleton('PathProvider', [PathProvider]::new())
+    Write-Verbose "Registered PathProvider service"
+}
+catch {
+    Write-Error "Failed to register PathProvider service: $_"
+    exit 1
+}
+
+#endregion ===== Register PSmm PathProvider =====
 
 
 #region ===== Service Instantiation (Full Set) =====
@@ -278,11 +295,28 @@ try {
 
     # Create builder with repository-aware paths
     $configBuilder = [AppConfigurationBuilder]::new($repositoryRoot).
-    WithParameters($runtimeParams).
+    WithParameters($runtimeParams)
+
+    # Use a PathProvider wrapper over the builder's current Paths so directory initialization
+    # and secrets injection get canonical AppPaths behavior.
+    $pathProviderForConfig = $script:ServiceContainer.Resolve('PathProvider')
+    try {
+        $innerPaths = $configBuilder.GetConfig().Paths
+        if ($null -ne $innerPaths -and ($innerPaths -is [IPathProvider])) {
+            $pathProviderForConfig = [PathProvider]::new([IPathProvider]$innerPaths)
+            $script:ServiceContainer.RegisterSingleton('PathProvider', $pathProviderForConfig)
+            Write-Verbose "Rebound PathProvider to AppPaths from configuration builder"
+        }
+    }
+    catch {
+        Write-Verbose "Unable to bind PathProvider to builder Paths; using existing PathProvider. $($_.Exception.Message)"
+    }
+
+    $configBuilder = $configBuilder.
     WithServices(
         $script:ServiceContainer.Resolve('FileSystem'),
         $script:ServiceContainer.Resolve('Environment'),
-        $script:ServiceContainer.Resolve('PathProvider'),
+        $pathProviderForConfig,
         $script:ServiceContainer.Resolve('Process')
     ).
     InitializeDirectories()
@@ -406,6 +440,21 @@ try {
     Write-Verbose "Calling Build..."
     $appConfig = $configBuilder.Build()
     Write-Verbose "Configuration built and validated successfully"
+
+    # Rebind PathProvider to the final config paths so all downstream consumers
+    # get the canonical AppPaths behavior via the wrapper.
+    try {
+        if ($null -ne $appConfig -and $null -ne $appConfig.Paths -and ($appConfig.Paths -is [IPathProvider])) {
+            $script:ServiceContainer.RegisterSingleton('PathProvider', [PathProvider]::new([IPathProvider]$appConfig.Paths))
+            Write-Verbose "Rebound PathProvider to AppPaths from built configuration"
+        }
+        else {
+            Write-Verbose "Built configuration does not expose IPathProvider Paths; keeping existing PathProvider"
+        }
+    }
+    catch {
+        Write-Warning "Failed to rebind PathProvider to built configuration paths: $_"
+    }
 
     # Bootstrap using modern AppConfiguration approach
     # All bootstrap functions now support AppConfiguration natively

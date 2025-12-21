@@ -1,6 +1,14 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $moduleRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    $helperPath = Join-Path -Path $moduleRoot -ChildPath 'Private\\Get-PSmmConfigMemberValue.ps1'
+    if (Test-Path $helperPath) {
+        . $helperPath
+    }
+}
+
 #region ########## PUBLIC ##########
 
 function Confirm-Storage {
@@ -44,102 +52,11 @@ function Confirm-Storage {
     try {
         Write-Verbose 'Validating storage configuration...'
 
-        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-            if ($null -eq $Object) {
-                return $null
-            }
-
-            if ($Object -is [System.Collections.IDictionary]) {
-                try {
-                    if ($Object.Contains($Name)) {
-                        return $Object[$Name]
-                    }
-                } catch {
-                    Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: Contains('$Name') failed: $_"
-                }
-
-                try {
-                    if ($Object.ContainsKey($Name)) {
-                        return $Object[$Name]
-                    }
-                } catch {
-                    Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
-                }
-
-                try {
-                    foreach ($k in $Object.Keys) {
-                        if ($k -eq $Name) {
-                            return $Object[$k]
-                        }
-                    }
-                } catch {
-                    Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
-                }
-
-                return $null
-            }
-
-            $p = $Object.PSObject.Properties[$Name]
-            if ($null -ne $p) {
-                return $p.Value
-            }
-
-            return $null
-        }
-
-        function Get-MapValue([object]$Map, [string]$Key) {
-            if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Key)) {
-                return $null
-            }
-
-            if ($Map -is [System.Collections.IDictionary]) {
-                try {
-                    if ($Map.Contains($Key)) {
-                        return $Map[$Key]
-                    }
-                } catch {
-                    Write-Verbose "[Confirm-Storage] Get-MapValue: Contains('$Key') failed: $_"
-                }
-
-                try {
-                    if ($Map.ContainsKey($Key)) {
-                        return $Map[$Key]
-                    }
-                } catch {
-                    Write-Verbose "[Confirm-Storage] Get-MapValue: ContainsKey('$Key') failed: $_"
-                }
-
-                try {
-                    foreach ($k in $Map.Keys) {
-                        if ($k -eq $Key) {
-                            return $Map[$k]
-                        }
-                    }
-                } catch {
-                    Write-Verbose "[Confirm-Storage] Get-MapValue: enumerating keys for '$Key' failed: $_"
-                }
-
-                return $null
-            }
-
-            $p = $Map.PSObject.Properties[$Key]
-            if ($null -ne $p) {
-                return $p.Value
-            }
-
-            try {
-                return $Map[$Key]
-            }
-            catch {
-                return $null
-            }
-        }
-
         # Initialize error tracking
         $errorTracker = @{}
 
         # Determine storage root from config
-        $storageRoot = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+        $storageRoot = Get-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Default $null
         $availableDrives = Get-StorageDrive
         if ($null -eq $availableDrives) {
             $availableDrives = @()
@@ -153,13 +70,13 @@ function Confirm-Storage {
         foreach ($storageGroup in $storageRoot.Keys | Sort-Object) {
             Write-Verbose "Processing Storage Group: $storageGroup"
 
-            $group = Get-MapValue -Map $storageRoot -Key ([string]$storageGroup)
+            $group = Get-PSmmConfigMemberValue -Object $storageRoot -Name ([string]$storageGroup) -Default $null
             if ($null -eq $group) {
                 continue
             }
 
             # Validate Master storage
-            $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master'
+            $masterCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Master' -Default $null
             if ($null -ne $masterCfg) {
                 $testParams = @{
                     StorageConfig = $masterCfg
@@ -175,9 +92,9 @@ function Confirm-Storage {
             }
 
             # Validate Backup storage(s)
-            $backupStorage = Get-ConfigMemberValue -Object $group -Name 'Backups'
+            $backupStorage = Get-PSmmConfigMemberValue -Object $group -Name 'Backups' -Default $null
             if ($null -eq $backupStorage) {
-                $backupStorage = Get-ConfigMemberValue -Object $group -Name 'Backup'
+                $backupStorage = Get-PSmmConfigMemberValue -Object $group -Name 'Backup' -Default $null
             }
 
             if ($null -ne $backupStorage) {
@@ -191,7 +108,7 @@ function Confirm-Storage {
                     foreach ($backupId in $backupStorage.Keys | Sort-Object) {
                         Write-Verbose "Processing Backup $backupId for Storage Group $storageGroup"
 
-                        $backupCfg = Get-MapValue -Map $backupStorage -Key ([string]$backupId)
+                        $backupCfg = Get-PSmmConfigMemberValue -Object $backupStorage -Name ([string]$backupId) -Default $null
                         if ($null -eq $backupCfg) {
                             continue
                         }
@@ -271,119 +188,10 @@ function Test-StorageDevice {
         [object]$Config = $null
     )
 
-    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-        if ($null -eq $Object) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: Contains('$Name') failed: $_"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "[Confirm-Storage] Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
-    function Get-MapValue([object]$Map, [string]$Key) {
-        if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Key)) {
-            return $null
-        }
-
-        if ($Map -is [System.Collections.IDictionary]) {
-            try {
-                if ($Map.ContainsKey($Key)) {
-                    return $Map[$Key]
-                }
-            }
-            catch {
-                Write-Verbose "[Confirm-Storage] Get-MapValue: ContainsKey('$Key') failed: $_"
-            }
-
-            try {
-                if ($Map.Contains($Key)) {
-                    return $Map[$Key]
-                }
-            }
-            catch {
-                Write-Verbose "[Confirm-Storage] Get-MapValue: Contains('$Key') failed: $_"
-            }
-
-            try {
-                foreach ($k in $Map.Keys) {
-                    if ($k -eq $Key) {
-                        return $Map[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "[Confirm-Storage] Get-MapValue: enumerating keys for '$Key' failed: $_"
-            }
-
-            return $null
-        }
-
-        $p = $Map.PSObject.Properties[$Key]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        try {
-            return $Map[$Key]
-        }
-        catch {
-            return $null
-        }
-    }
-
     # Extract storage configuration values
-    $serialNumber = $null
-    $label = $null
-    $isOptional = $false
-    try { $serialNumber = $StorageConfig.SerialNumber }
-    catch {
-        Write-Verbose "Storage configuration is missing SerialNumber: $_"
-    }
-    try { $label = $StorageConfig.Label }
-    catch {
-        Write-Verbose "Storage configuration is missing Label: $_"
-    }
-    try { $isOptional = [bool]$StorageConfig.Optional }
-    catch {
-        Write-Verbose "Storage configuration is missing Optional flag: $_"
-    }
+    $serialNumber = [string](Get-PSmmConfigMemberValue -Object $StorageConfig -Name 'SerialNumber' -Default '')
+    $label = [string](Get-PSmmConfigMemberValue -Object $StorageConfig -Name 'Label' -Default '')
+    $isOptional = [bool](Get-PSmmConfigMemberValue -Object $StorageConfig -Name 'Optional' -Default $false)
 
     # Build identifier for logging
     $identifier = if ($BackupId) {
@@ -426,11 +234,14 @@ function Test-StorageDevice {
 
         # Also update the original Config object if provided
         if ($null -ne $Config) {
-            $configStorage = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+            $configStorage = Get-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Default $null
 
             if ($null -ne $configStorage) {
                 $configGroup = $null
                 try { $configGroup = $configStorage[[string]$StorageGroup] } catch { $configGroup = $null }
+                if ($null -eq $configGroup) {
+                    $configGroup = Get-PSmmConfigMemberValue -Object $configStorage -Name ([string]$StorageGroup) -Default $null
+                }
 
                 if ($null -ne $configGroup) {
                     if ($StorageType -eq 'Master') {
@@ -448,9 +259,9 @@ function Test-StorageDevice {
                         $backups = $null
                         try {
                             if ($configGroup -is [System.Collections.IDictionary]) {
-                                $backups = Get-ConfigMemberValue -Object $configGroup -Name 'Backups'
+                                $backups = Get-PSmmConfigMemberValue -Object $configGroup -Name 'Backups' -Default $null
                                 if ($null -eq $backups) {
-                                    $backups = Get-ConfigMemberValue -Object $configGroup -Name 'Backup'
+                                    $backups = Get-PSmmConfigMemberValue -Object $configGroup -Name 'Backup' -Default $null
                                 }
                             }
                             else {
@@ -524,18 +335,22 @@ function Test-StorageDevice {
 
         # Also update Config object if provided
         if ($null -ne $Config) {
-            $storageRoot = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+            $storageRoot = Get-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Default $null
             if ($null -eq $storageRoot) {
                 return
             }
 
-            $configGroup = Get-MapValue -Map $storageRoot -Key ([string]$StorageGroup)
+            $configGroup = $null
+            try { $configGroup = $storageRoot[[string]$StorageGroup] } catch { $configGroup = $null }
+            if ($null -eq $configGroup) {
+                $configGroup = Get-PSmmConfigMemberValue -Object $storageRoot -Name ([string]$StorageGroup) -Default $null
+            }
             if ($null -eq $configGroup) {
                 return
             }
 
             if ($StorageType -eq 'Master') {
-                $masterCfg = Get-ConfigMemberValue -Object $configGroup -Name 'Master'
+                $masterCfg = Get-PSmmStorageConfigMemberValue -Object $configGroup -Name 'Master'
                 if ($null -ne $masterCfg) {
                     try { $masterCfg.DriveLetter = '' }
                     catch {
@@ -552,10 +367,16 @@ function Test-StorageDevice {
                 }
             }
             elseif ($StorageType -eq 'Backup' -and $BackupId) {
-                $backupsCfg = Get-ConfigMemberValue -Object $configGroup -Name 'Backups'
-                if ($null -eq $backupsCfg) { $backupsCfg = Get-ConfigMemberValue -Object $configGroup -Name 'Backup' }
+                $backupsCfg = Get-PSmmConfigMemberValue -Object $configGroup -Name 'Backups' -Default $null
+                if ($null -eq $backupsCfg) { $backupsCfg = Get-PSmmConfigMemberValue -Object $configGroup -Name 'Backup' -Default $null }
 
-                $backupCfg = if ($null -ne $backupsCfg) { Get-MapValue -Map $backupsCfg -Key ([string]$BackupId) } else { $null }
+                $backupCfg = $null
+                if ($null -ne $backupsCfg) {
+                    try { $backupCfg = $backupsCfg[[string]$BackupId] } catch { $backupCfg = $null }
+                    if ($null -eq $backupCfg) {
+                        $backupCfg = Get-PSmmConfigMemberValue -Object $backupsCfg -Name ([string]$BackupId) -Default $null
+                    }
+                }
                 if ($null -ne $backupCfg) {
                     try { $backupCfg.DriveLetter = '' }
                     catch {

@@ -61,43 +61,32 @@ function Invoke-PSmm {
                 $Config = [AppConfiguration]::FromObject($Config)
             }
 
-            function Get-ConfigMemberValue([object]$Object, [string]$Name, $Default = $null) {
-                if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-                    return $Default
+            if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+                $moduleRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+                $helperPath = Join-Path -Path $moduleRoot -ChildPath 'Private\\Get-PSmmConfigMemberValue.ps1'
+                if (Test-Path -Path $helperPath) {
+                    . $helperPath
                 }
+            }
 
-                if ($Object -is [System.Collections.IDictionary]) {
-                    try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: ContainsKey('$Name') failed: $($_.Exception.Message)" }
-                    try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: Contains('$Name') failed: $($_.Exception.Message)" }
-                    try {
-                        foreach ($k in $Object.Keys) {
-                            if ($k -eq $Name) { return $Object[$k] }
-                        }
-                    }
-                    catch { Write-Verbose "Get-ConfigMemberValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)" }
-                    return $Default
+            if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+                $moduleRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+                $helperPath = Join-Path -Path $moduleRoot -ChildPath 'Private\\Get-PSmmConfigNestedValue.ps1'
+                if (Test-Path -Path $helperPath) {
+                    . $helperPath
                 }
-
-                $p = $Object.PSObject.Properties[$Name]
-                if ($null -ne $p) {
-                    return $p.Value
-                }
-
-                return $Default
             }
 
             if ($null -eq $Config.Paths) {
                 throw 'Configuration is missing Paths; unable to bootstrap.'
             }
 
-            $vaultPath = $null
-            try { $vaultPath = [string]$Config.Paths.App.Vault } catch { $vaultPath = $null }
+            $vaultPath = [string](Get-PSmmConfigNestedValue -Object $Config -Path @('Paths','App','Vault') -Default $null)
             if ([string]::IsNullOrWhiteSpace($vaultPath)) {
                 throw 'Configuration is missing Paths.App.Vault; unable to bootstrap.'
             }
 
-            $repositoryRoot = $null
-            try { $repositoryRoot = [string]$Config.Paths.RepositoryRoot } catch { $repositoryRoot = $null }
+            $repositoryRoot = [string](Get-PSmmConfigNestedValue -Object $Config -Path @('Paths','RepositoryRoot') -Default $null)
             if ([string]::IsNullOrWhiteSpace($repositoryRoot)) {
                 throw 'Configuration is missing Paths.RepositoryRoot; unable to bootstrap.'
             }
@@ -109,10 +98,6 @@ function Invoke-PSmm {
             }
 
             try {
-                $ensureMethod = $Config.Paths.PSObject.Methods['EnsureDirectoriesExist']
-                if ($null -eq $ensureMethod) {
-                    throw 'Configuration Paths object does not implement EnsureDirectoriesExist().'
-                }
                 $Config.Paths.EnsureDirectoriesExist()
             }
             catch {
@@ -123,7 +108,7 @@ function Invoke-PSmm {
             #region ----- Initialize Shared Services (Early)
             # Create core services needed for configuration and logging
             $fileSystemService = [FileSystemService]::new()
-            $pathProviderService = [PathProvider]::new()
+            $pathProviderService = [PathProvider]::new([IPathProvider]$Config.Paths)
             $environmentService = [EnvironmentService]::new()
             $processService = [ProcessService]::new()
             $httpService = [HttpService]::new()
@@ -167,10 +152,7 @@ function Invoke-PSmm {
             $setupPending = $false
             $dbPath = $pathProviderService.CombinePath(@($vaultPath,'PSmm_System.kdbx'))
 
-            $nonInteractive = $false
-            if ($Config -and $Config.Parameters) {
-                try { $nonInteractive = [bool]$Config.Parameters.NonInteractive } catch { $nonInteractive = $false }
-            }
+            $nonInteractive = [bool](Get-PSmmConfigNestedValue -Object $Config -Path @('Parameters','NonInteractive') -Default $false)
 
             if (-not ($fileSystemService.TestPath($dbPath))) {
                 Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' -Message 'KeePass vault not found - starting first-run setup' -Console -File
@@ -224,10 +206,6 @@ function Invoke-PSmm {
                     throw 'Configuration is missing Secrets; unable to load secrets.'
                 }
                 try {
-                    $loadMethod = $Config.Secrets.PSObject.Methods['LoadSecrets']
-                    if ($null -eq $loadMethod) {
-                        throw 'Configuration Secrets object does not implement LoadSecrets().'
-                    }
                     $Config.Secrets.LoadSecrets()
                 }
                 catch {
@@ -299,10 +277,6 @@ function Invoke-PSmm {
                     throw 'Configuration is missing Secrets; unable to reload secrets.'
                 }
                 try {
-                    $loadMethod = $Config.Secrets.PSObject.Methods['LoadSecrets']
-                    if ($null -eq $loadMethod) {
-                        throw 'Configuration Secrets object does not implement LoadSecrets().'
-                    }
                     $Config.Secrets.LoadSecrets()
                 }
                 catch {
@@ -325,22 +299,13 @@ function Invoke-PSmm {
             $GitPath = Join-Path -Path $repositoryRoot -ChildPath '.git'
             $gitVersionExecutable = $null
 
-            $pluginsConfig = Get-ConfigMemberValue -Object $Config -Name 'Plugins'
-            $resolvedPlugins = Get-ConfigMemberValue -Object $pluginsConfig -Name 'Resolved'
-            $gitEnvGroup = Get-ConfigMemberValue -Object $resolvedPlugins -Name 'b_GitEnv'
-            $gitVersionPlugin = Get-ConfigMemberValue -Object $gitEnvGroup -Name 'GitVersion'
-            $gitVersionMandatory = [bool](Get-ConfigMemberValue -Object $gitVersionPlugin -Name 'Mandatory' -Default $false)
-            $gitVersionEnabled = [bool](Get-ConfigMemberValue -Object $gitVersionPlugin -Name 'Enabled' -Default $false)
+            $gitVersionPlugin = Get-PSmmConfigNestedValue -Object $Config -Path @('Plugins','Resolved','b_GitEnv','GitVersion') -Default $null
+            $gitVersionMandatory = [bool](Get-PSmmConfigMemberValue -Object $gitVersionPlugin -Name 'Mandatory' -Default $false)
+            $gitVersionEnabled = [bool](Get-PSmmConfigMemberValue -Object $gitVersionPlugin -Name 'Enabled' -Default $false)
 
             if ($null -ne $gitVersionPlugin -and ($gitVersionMandatory -or $gitVersionEnabled)) {
                 # Try to resolve plugins path for GitVersion lookup
-                $pluginsPath = $null
-                try {
-                    $pluginsPath = [string]$Config.Paths.App.Plugins.Root
-                }
-                catch {
-                    Write-Verbose "Could not resolve plugins path from Config.Paths: $_"
-                }
+                $pluginsPath = [string](Get-PSmmConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Root') -Default $null)
 
                 $gitVersionExecutable = Get-LocalPluginExecutablePath -PluginConfig $gitVersionPlugin -PluginsRootPath $pluginsPath
             }
@@ -361,15 +326,10 @@ function Invoke-PSmm {
             # Pause if running in debug/verbose/dev/update mode for user review
             $shouldPause = $false
             if ($Config.Parameters) {
-                $isNonInteractive = $false
-                try { $isNonInteractive = [bool]$Config.Parameters.NonInteractive } catch { $isNonInteractive = $false }
+                $isNonInteractive = [bool](Get-PSmmConfigNestedValue -Object $Config -Path @('Parameters','NonInteractive') -Default $false)
 
                 if (-not $isNonInteractive) {
                     try {
-                        $pauseMethod = $Config.Parameters.PSObject.Methods['ShouldPause']
-                        if ($null -eq $pauseMethod) {
-                            throw 'Config.Parameters.ShouldPause() method not found.'
-                        }
                         $shouldPause = [bool]$Config.Parameters.ShouldPause()
                     }
                     catch {

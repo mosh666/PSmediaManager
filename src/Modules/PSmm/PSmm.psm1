@@ -70,6 +70,7 @@ try {
         $ClassFiles = @(
             # Interfaces and DI Container (required before implementations)
             'Interfaces.ps1',              # Interface contracts and ServiceContainer (no dependencies)
+            'ConfigMemberAccess.ps1',      # Config member access helpers (no dependencies)
             'Exceptions.ps1',              # Exception classes (no dependencies)
             'UiModels.ps1',                # UI model classes (no dependencies)
             'ProjectModels.ps1',           # Project model classes (no dependencies)

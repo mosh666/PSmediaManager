@@ -94,6 +94,12 @@ function Get-GitHubLatestRelease {
         $Process
     )
 
+    $pathProviderType = 'PathProvider' -as [type]
+    $iPathProviderType = 'IPathProvider' -as [type]
+    if ($null -ne $PathProvider -and $null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+        $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
+    }
+
     # Lazy instantiation to avoid parse-time type resolution
     $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
 
@@ -298,121 +304,31 @@ function Get-LatestUrlFromGitHub {
         $Process
     )
 
+    $pathProviderType = 'PathProvider' -as [type]
+    $iPathProviderType = 'IPathProvider' -as [type]
+    if ($null -ne $PathProvider -and $null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+        $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
+    }
+
     # Lazy instantiation to avoid parse-time type resolution
 
     try {
-        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-            if ($null -eq $Object) {
-                return $null
-            }
-
-            if ($Object -is [System.Collections.IDictionary]) {
-                try {
-                    if ($Object.ContainsKey($Name)) {
-                        return $Object[$Name]
-                    }
-                }
-                catch {
-                    Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    if ($Object.Contains($Name)) {
-                        return $Object[$Name]
-                    }
-                }
-                catch {
-                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    foreach ($k in $Object.Keys) {
-                        if ($k -eq $Name) {
-                            return $Object[$k]
-                        }
-                    }
-                }
-                catch {
-                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys enumeration failed: $($_.Exception.Message)"
-                }
-
-                return $null
-            }
-
-            try {
-                $p = $Object.PSObject.Properties[$Name]
-                if ($null -ne $p) {
-                    return $p.Value
-                }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: PSObject.Properties['$Name'] lookup failed: $($_.Exception.Message)"
-            }
-
-            return $null
-        }
-
-        function Set-ConfigMemberValue {
-            [CmdletBinding(SupportsShouldProcess = $true)]
-            param(
-                [Parameter()] [object]$Object,
-                [Parameter()] [string]$Name,
-                [Parameter()] [object]$Value
-            )
-            if ($null -eq $Object) {
-                return $false
-            }
-
-            $target = try { "{0}.{1}" -f $Object.GetType().Name, $Name } catch { $Name }
-
-            if ($Object -is [System.Collections.IDictionary]) {
-                try {
-                    if (-not $PSCmdlet.ShouldProcess($target, 'Set config member value')) {
-                        return $false
-                    }
-                    $Object[$Name] = $Value
-                    return $true
-                }
-                catch {
-                    return $false
-                }
-            }
-
-            try {
-                $prop = $Object.PSObject.Properties[$Name]
-                if ($null -ne $prop) {
-                    if (-not $PSCmdlet.ShouldProcess($target, 'Set config member value')) {
-                        return $false
-                    }
-                    $prop.Value = $Value
-                    return $true
-                }
-            }
-            catch {
-                Write-Verbose "Set-ConfigMemberValue: PSObject.Properties['$Name'] lookup failed: $($_.Exception.Message)"
-            }
-
-            try {
-                if (-not $PSCmdlet.ShouldProcess($target, 'Add config member value')) {
-                    return $false
-                }
-                $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
-                return $true
-            }
-            catch {
-                return $false
+        if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
+            $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath 'ConfigMemberAccessHelpers.ps1'
+            if (Test-Path -Path $configHelpersPath) {
+                . $configHelpersPath
             }
         }
 
         # Validate required plugin configuration
-        $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
+        $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
         if ($null -eq $pluginConfig) {
             throw [PluginRequirementException]::new("Plugin missing required 'Config' member", "Plugin")
         }
 
-        $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
-        $repo = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Repo')
-        $assetPattern = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'AssetPattern')
+        $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
+        $repo = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Repo')
+        $assetPattern = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'AssetPattern')
 
         if ([string]::IsNullOrWhiteSpace($repo)) {
             throw [PluginRequirementException]::new("Plugin.Config missing required 'Repo' member", $pluginName)
@@ -433,12 +349,12 @@ function Get-LatestUrlFromGitHub {
 
         # Store latest version
         $latestVersion = $release.tag_name
-        $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+        $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
         if ($null -eq $state) {
-            $null = Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value @{}
-            $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+            Set-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State' -Value @{}
+            $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
         }
-        $null = Set-ConfigMemberValue -Object $state -Name 'LatestVersion' -Value $latestVersion
+        Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestVersion' -Value $latestVersion
         Write-Verbose "Latest version: $latestVersion"
 
         # Find matching asset
@@ -451,7 +367,7 @@ function Get-LatestUrlFromGitHub {
         }
 
         # Store installer information and return URL
-        $null = Set-ConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $matchingAsset.name
+        Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $matchingAsset.name
         $downloadUrl = $matchingAsset.browser_download_url
 
         Write-Verbose "Found matching asset: $($matchingAsset.name)"

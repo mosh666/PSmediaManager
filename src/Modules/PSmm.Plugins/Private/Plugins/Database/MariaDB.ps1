@@ -5,113 +5,14 @@
 
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
+    }
+}
+
 #region ########## PRIVATE ##########
-
-function Get-ConfigMemberValue {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name
-    )
-
-    if ($null -eq $Object) {
-        return $null
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        try {
-            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey failed: $($_.Exception.Message)"
-        }
-
-        try {
-            if ($Object.Contains($Name)) { return $Object[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains failed: $($_.Exception.Message)"
-        }
-
-        try {
-            foreach ($k in $Object.Keys) {
-                if ($k -eq $Name) { return $Object[$k] }
-            }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
-        }
-
-        return $null
-    }
-
-    try {
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) { return $p.Value }
-    }
-    catch {
-        Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
-    }
-
-    return $null
-}
-
-function Set-ConfigMemberValue {
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name,
-
-        [Parameter()]
-        [AllowNull()]
-        [object]$Value
-    )
-
-    if ($null -eq $Object) {
-        return
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
-            $Object[$Name] = $Value
-        }
-        return
-    }
-
-    try {
-        if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
-            $Object.$Name = $Value
-        }
-        return
-    }
-    catch {
-        Write-Verbose "Set-ConfigMemberValue: direct property assignment failed: $($_.Exception.Message)"
-    }
-
-    try {
-        if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
-            if ($null -eq $Object.PSObject.Properties[$Name]) {
-                $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
-            }
-            else {
-                $Object.PSObject.Properties[$Name].Value = $Value
-            }
-        }
-    }
-    catch {
-        Write-Verbose "Set-ConfigMemberValue: PSObject NoteProperty add/set failed: $($_.Exception.Message)"
-    }
-}
 
 function Get-CurrentVersion-MariaDB {
     param(
@@ -122,7 +23,7 @@ function Get-CurrentVersion-MariaDB {
 
     # Resolve FileSystem from ServiceContainer if available
     $FileSystem = $null
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try {
             $FileSystem = $ServiceContainer.Resolve('FileSystem')
         }
@@ -131,8 +32,8 @@ function Get-CurrentVersion-MariaDB {
         }
     }
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'MariaDB' }
 
     if ($FileSystem) {
@@ -158,8 +59,8 @@ function Get-LatestUrlFromUrl-MariaDB {
     )
     $null = $Paths, $ServiceContainer
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $versionUrl = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $versionUrl = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
     if ([string]::IsNullOrWhiteSpace($versionUrl)) {
         throw [System.InvalidOperationException]::new('Plugin config is missing VersionUrl')
     }
@@ -169,17 +70,17 @@ function Get-LatestUrlFromUrl-MariaDB {
     $PointReleases = Invoke-RestMethod -Uri ("$versionUrl$LatestMajorReleaseId/")
     $LatestPointReleaseId = ($PointReleases.releases | Get-Member -MemberType NoteProperty | Sort-Object -Descending | Select-Object -First 1).Name
 
-    $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+    $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
     if ($null -eq $state) {
         $state = @{}
-        Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
+        Set-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
     }
 
-    Set-ConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestPointReleaseId
+    Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestPointReleaseId
 
     $Files = Invoke-RestMethod -Uri "$versionUrl$latestPointReleaseId/"
     $File = $Files.release_data.$LatestPointReleaseId.files | Where-Object { $_.file_name -like '*winx64.zip' } | Select-Object -First 1
-    Set-ConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $File.file_name
+    Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $File.file_name
     $Url = $File.file_download_url
     return $Url
 }
@@ -202,7 +103,7 @@ function Invoke-Installer-MariaDB {
     # Resolve optional services for IO and process execution
     $FileSystem = $null
     $Process = $null
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try {
             $FileSystem = $ServiceContainer.Resolve('FileSystem')
         }
@@ -220,8 +121,8 @@ function Invoke-Installer-MariaDB {
 
     $destinationRoot = $Paths.Root
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'MariaDB' }
 
     try {
@@ -234,10 +135,10 @@ function Invoke-Installer-MariaDB {
             New-Item -Path $destinationRoot -ItemType Directory -Force | Out-Null
         }
 
-        $targetVersion = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Version')
+        $targetVersion = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Version')
         if ([string]::IsNullOrWhiteSpace($targetVersion)) {
-            $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
-            $targetVersion = [string](Get-ConfigMemberValue -Object $state -Name 'LatestVersion')
+            $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
+            $targetVersion = [string](Get-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestVersion')
         }
 
         if ([string]::IsNullOrWhiteSpace($targetVersion)) {

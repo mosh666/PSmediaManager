@@ -32,52 +32,35 @@ function Get-PSmmHealth {
         [Parameter()] [switch] $Format
     )
     try {
-        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-            if ($null -eq $Object) {
-                return $null
+        if (-not (Get-Command -Name Get-PSmmAppConfigurationSafe -ErrorAction SilentlyContinue)) {
+            $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\Private\\Get-PSmmAppConfigurationSafe.ps1'
+            if (Test-Path -LiteralPath $helperPath) {
+                . $helperPath
             }
+        }
 
-            if ($Object -is [System.Collections.IDictionary]) {
-                try {
-                    if ($Object.ContainsKey($Name)) {
-                        return $Object[$Name]
-                    }
-                } catch {
-                    Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    if ($Object.Contains($Name)) {
-                        return $Object[$Name]
-                    }
-                } catch {
-                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    foreach ($k in $Object.Keys) {
-                        if ($k -eq $Name) {
-                            return $Object[$k]
-                        }
-                    }
-                } catch {
-                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys enumeration failed: $($_.Exception.Message)"
-                }
-
-                return $null
+        if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+            $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\Private\\Get-PSmmConfigMemberValue.ps1'
+            if (Test-Path $helperPath) {
+                . $helperPath
             }
+        }
 
-            $p = $Object.PSObject.Properties[$Name]
-            if ($null -ne $p) {
-                return $p.Value
+        if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+            $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\Private\\Get-PSmmConfigNestedValue.ps1'
+            if (Test-Path $helperPath) {
+                . $helperPath
             }
-
-            return $null
         }
 
         # Resolve configuration if not provided
         if (-not $Config -and (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue)) {
-            try { $Config = Get-AppConfiguration } catch { $Config = $null }
+            if (Get-Command -Name Get-PSmmAppConfigurationSafe -ErrorAction SilentlyContinue) {
+                $Config = Get-PSmmAppConfigurationSafe
+            }
+            else {
+                $Config = $null
+            }
         }
         # Determine requirements file path
         if (-not $RequirementsPath) {
@@ -122,8 +105,7 @@ function Get-PSmmHealth {
             $pluginManifest = $Run.App.Plugins.Manifest
         }
         elseif ($Config) {
-            $pluginsSource = Get-ConfigMemberValue -Object $Config -Name 'Plugins'
-            $resolvedPlugins = Get-ConfigMemberValue -Object $pluginsSource -Name 'Resolved'
+            $resolvedPlugins = Get-PSmmConfigNestedValue -Object $Config -Path @('Plugins','Resolved') -Default $null
             if ($resolvedPlugins) {
                 $pluginManifest = $resolvedPlugins
             }
@@ -138,8 +120,14 @@ function Get-PSmmHealth {
                     if ($PreviousPlugins) {
                         $prevMatch = $PreviousPlugins | Where-Object { $_.Name -eq $pl.Value.Name } | Select-Object -First 1
                     }
-                    $latestVer = if ($state -and $state.PSObject.Properties.Name -contains 'LatestVersion') { $state.LatestVersion } else { $null }
-                    $currentVer = if ($state -and $state.PSObject.Properties.Name -contains 'CurrentVersion') { $state.CurrentVersion } else { $null }
+                    if ($state) {
+                        try { $latestVer = $state.LatestVersion } catch { $latestVer = $null }
+                        try { $currentVer = $state.CurrentVersion } catch { $currentVer = $null }
+                    }
+                    else {
+                        $latestVer = $null
+                        $currentVer = $null
+                    }
                     $plugins += [pscustomobject]@{
                         Name = $pl.Value.Name
                         Scope = $scope.Name
@@ -157,7 +145,7 @@ function Get-PSmmHealth {
         # Storage status (using Config when possible)
         $storage = @()
         if ($Config) {
-            $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+            $storageSource = Get-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Default $null
             if ($storageSource) {
                 $storageKeys = @()
                 try {
@@ -171,11 +159,11 @@ function Get-PSmmHealth {
                     $group = $null
                     try { $group = $storageSource[$sg] } catch { $group = $null }
 
-                    $master = Get-ConfigMemberValue -Object $group -Name 'Master'
+                    $master = Get-PSmmConfigMemberValue -Object $group -Name 'Master' -Default $null
 
-                    $backups = Get-ConfigMemberValue -Object $group -Name 'Backups'
+                    $backups = Get-PSmmConfigMemberValue -Object $group -Name 'Backups' -Default $null
                     if (-not $backups) {
-                        $backups = Get-ConfigMemberValue -Object $group -Name 'Backup'
+                        $backups = Get-PSmmConfigMemberValue -Object $group -Name 'Backup' -Default $null
                     }
 
                     $masterCount = if ($null -ne $master) { 1 } else { 0 }
@@ -202,9 +190,8 @@ function Get-PSmmHealth {
             }
         }
         # Secrets / Vault status
-        $secretsSource = if ($Config) { Get-ConfigMemberValue -Object $Config -Name 'Secrets' } else { $null }
-        $githubToken = Get-ConfigMemberValue -Object $secretsSource -Name 'GitHubToken'
-        $vaultPathValue = Get-ConfigMemberValue -Object $secretsSource -Name 'VaultPath'
+        $githubToken = if ($Config) { Get-PSmmConfigNestedValue -Object $Config -Path @('Secrets','GitHubToken') -Default $null } else { $null }
+        $vaultPathValue = if ($Config) { Get-PSmmConfigNestedValue -Object $Config -Path @('Secrets','VaultPath') -Default $null } else { $null }
         $vaultStatus = [pscustomobject]@{
             GitHubTokenPresent = [bool]$githubToken
             VaultPath = $vaultPathValue
@@ -226,15 +213,9 @@ function Get-PSmmHealth {
         $configPath = $null
         if ($Config) {
             try {
-                $pathsSource = Get-ConfigMemberValue -Object $Config -Name 'Paths'
-                if ($pathsSource) {
-                    $appPaths = Get-ConfigMemberValue -Object $pathsSource -Name 'App'
-                    $configPath = if ($appPaths) {
-                        Get-ConfigMemberValue -Object $appPaths -Name 'Config'
-                    }
-                    else {
-                        Get-ConfigMemberValue -Object $pathsSource -Name 'Config'
-                    }
+                $configPath = Get-PSmmConfigNestedValue -Object $Config -Path @('Paths','App','Config') -Default $null
+                if ($null -eq $configPath) {
+                    $configPath = Get-PSmmConfigNestedValue -Object $Config -Path @('Paths','Config') -Default $null
                 }
             } catch { $configPath = $null }
         }

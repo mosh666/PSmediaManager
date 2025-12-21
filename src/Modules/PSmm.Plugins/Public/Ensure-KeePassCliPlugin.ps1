@@ -1,6 +1,13 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name Get-PSmmPluginsConfigNestedValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\Private') -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
+    }
+}
+
 function Install-KeePassXC {
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -34,71 +41,16 @@ function Install-KeePassXC {
         $Process
     )
 
-    function Get-ConfigMemberValue {
-        [CmdletBinding()]
-        param(
-            [Parameter()][AllowNull()][object]$Object,
-            [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name
-        )
-
-        if ($null -eq $Object) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
-            }
-            try {
-                if ($Object.Contains($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: failed Contains('$Name'): $($_.Exception.Message)"
-            }
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) { return $Object[$k] }
-                }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
-            }
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
+    $pathProviderType = 'PathProvider' -as [type]
+    $iPathProviderType = 'IPathProvider' -as [type]
+    if ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+        $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
     }
 
-    function Get-ConfigNestedValue {
-        [CmdletBinding()]
-        param(
-            [Parameter()][AllowNull()][object]$Object,
-            [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Path
-        )
-
-        $current = $Object
-        foreach ($segment in $Path) {
-            $current = Get-ConfigMemberValue -Object $current -Name $segment
-            if ($null -eq $current) {
-                return $null
-            }
-        }
-
-        return $current
-    }
-
-    $pluginsRoot = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Root')
-    $pluginsDownloads = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Downloads')
-    $pluginsTemp = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Temp')
-    $vaultPath = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Vault')
+    $pluginsRoot = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Root')
+    $pluginsDownloads = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Downloads')
+    $pluginsTemp = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths','App','Plugins','Temp')
+    $vaultPath = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths','App','Vault')
 
     if ([string]::IsNullOrWhiteSpace($pluginsRoot)) {
         throw 'Unable to resolve plugin root path (Config.Paths.App.Plugins.Root).'

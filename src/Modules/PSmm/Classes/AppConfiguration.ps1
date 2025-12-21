@@ -380,13 +380,17 @@ class AppSecrets {
     AppSecrets([string]$vaultPath) {
         if ($vaultPath) { $this.VaultPath = $vaultPath }
         elseif ($env:PSMM_VAULT_PATH) { $this.VaultPath = $env:PSMM_VAULT_PATH }
+        elseif ((Get-Command -Name Get-PSmmAppConfigurationSafe -ErrorAction SilentlyContinue) -and (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+            $config = Get-PSmmAppConfigurationSafe
+            $this.VaultPath = Get-PSmmConfigNestedValue -Object $config -Path @('Paths', 'App', 'Vault') -Default $null
+        }
         elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
-                try {
-                    $this.VaultPath = (Get-AppConfiguration).Paths.App.Vault
-                }
-                catch {
-                    Write-Verbose "Could not retrieve vault path from app configuration: $_"
-                }
+            try {
+                $this.VaultPath = (Get-AppConfiguration).Paths.App.Vault
+            }
+            catch {
+                Write-Verbose "Could not retrieve vault path from app configuration: $_"
+            }
         }
     }
 
@@ -509,10 +513,7 @@ class LoggingConfiguration {
                 return $null
             }
 
-            $p = $source.PSObject.Properties[$name]
-            if ($null -ne $p) { return $p.Value }
-
-            return $null
+            try { return $source.$name } catch { return $null }
         }
 
         $v = & $getValue $obj 'Path'
@@ -642,10 +643,7 @@ class RuntimeParameters {
                 return $null
             }
 
-            $p = $source.PSObject.Properties[$name]
-            if ($null -ne $p) { return $p.Value }
-
-            return $null
+            try { return $source.$name } catch { return $null }
         }
 
         $v = & $getValue $obj 'Debug'
@@ -729,17 +727,10 @@ class StorageDriveConfig {
             $pathObj = $obj['Path']
         }
         else {
-            $p = $obj.PSObject.Properties['Label']
-            if ($null -ne $p) { $labelObj = $p.Value }
-
-            $p = $obj.PSObject.Properties['SerialNumber']
-            if ($null -ne $p) { $serialObj = $p.Value }
-
-            $p = $obj.PSObject.Properties['DriveLetter']
-            if ($null -ne $p) { $driveLetterObj = $p.Value }
-
-            $p = $obj.PSObject.Properties['Path']
-            if ($null -ne $p) { $pathObj = $p.Value }
+            try { $labelObj = $obj.Label } catch { $labelObj = $null }
+            try { $serialObj = $obj.SerialNumber } catch { $serialObj = $null }
+            try { $driveLetterObj = $obj.DriveLetter } catch { $driveLetterObj = $null }
+            try { $pathObj = $obj.Path } catch { $pathObj = $null }
         }
 
         if ($null -ne $labelObj) { $cfg.Label = [string]$labelObj }
@@ -846,20 +837,11 @@ class StorageGroupConfig {
             $pathsObj = $obj['Paths']
         }
         else {
-            $p = $obj.PSObject.Properties['DisplayName']
-            if ($null -ne $p) { $displayNameObj = $p.Value }
-
-            $p = $obj.PSObject.Properties['Master']
-            if ($null -ne $p) { $masterObj = $p.Value }
-
-            $p = $obj.PSObject.Properties['Backup']
-            if ($null -ne $p) { $backupObj = $p.Value }
-
-            $p = $obj.PSObject.Properties['Backups']
-            if ($null -ne $p) { $backupsObj = $p.Value }
-
-            $p = $obj.PSObject.Properties['Paths']
-            if ($null -ne $p) { $pathsObj = $p.Value }
+            try { $displayNameObj = $obj.DisplayName } catch { $displayNameObj = $null }
+            try { $masterObj = $obj.Master } catch { $masterObj = $null }
+            try { $backupObj = $obj.Backup } catch { $backupObj = $null }
+            try { $backupsObj = $obj.Backups } catch { $backupsObj = $null }
+            try { $pathsObj = $obj.Paths } catch { $pathsObj = $null }
         }
 
         if ($null -ne $displayNameObj) {
@@ -874,8 +856,8 @@ class StorageGroupConfig {
             if ($masterObj -is [System.Collections.IDictionary] -and (_PSmm_DictionaryHasKey -Dictionary $masterObj -Key 'Drive')) {
                 $masterDriveObj = $masterObj['Drive']
             }
-            elseif ($null -ne $masterObj.PSObject.Properties['Drive']) {
-                $masterDriveObj = $masterObj.Drive
+            else {
+                try { $masterDriveObj = $masterObj.Drive } catch { $masterDriveObj = $null }
             }
 
             $cfg.Master = if ($null -ne $masterDriveObj) {
@@ -890,8 +872,8 @@ class StorageGroupConfig {
                 if ($masterObj -is [System.Collections.IDictionary] -and (_PSmm_DictionaryHasKey -Dictionary $masterObj -Key 'Backups')) {
                     $backupsObj = $masterObj['Backups']
                 }
-                elseif ($null -ne $masterObj.PSObject.Properties['Backups']) {
-                    $backupsObj = $masterObj.Backups
+                else {
+                    try { $backupsObj = $masterObj.Backups } catch { $backupsObj = $null }
                 }
             }
         }
@@ -906,9 +888,16 @@ class StorageGroupConfig {
                 }
             }
             else {
-                foreach ($p in $srcBackups.PSObject.Properties) {
-                    $key = [string]$p.Name
-                    $cfg.Backups[$key] = [StorageDriveConfig]::FromObject($p.Value)
+                $props = @(
+                    $srcBackups |
+                        Get-Member -MemberType Properties,NoteProperty -ErrorAction SilentlyContinue |
+                        Select-Object -ExpandProperty Name
+                )
+                foreach ($p in $props) {
+                    $key = [string]$p
+                    $value = $null
+                    try { $value = $srcBackups.$p } catch { $value = $null }
+                    $cfg.Backups[$key] = [StorageDriveConfig]::FromObject($value)
                 }
             }
         }
@@ -920,8 +909,15 @@ class StorageGroupConfig {
                 }
             }
             else {
-                foreach ($p in $pathsObj.PSObject.Properties) {
-                    $cfg.Paths[[string]$p.Name] = [string]$p.Value
+                $props = @(
+                    $pathsObj |
+                        Get-Member -MemberType Properties,NoteProperty -ErrorAction SilentlyContinue |
+                        Select-Object -ExpandProperty Name
+                )
+                foreach ($p in $props) {
+                    $value = $null
+                    try { $value = $pathsObj.$p } catch { $value = $null }
+                    $cfg.Paths[[string]$p] = [string]$value
                 }
             }
         }
@@ -1090,12 +1086,7 @@ class AppConfiguration {
             return $null
         }
 
-        $p = $obj.PSObject.Properties[$name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
+        try { return $obj.$name } catch { return $null }
     }
 
     hidden static [void] _SetMemberValue([object]$obj, [string]$name, [object]$value) {
@@ -1227,9 +1218,16 @@ class AppConfiguration {
                 }
             }
             else {
-                foreach ($p in $storageSource.PSObject.Properties) {
-                    $key = [string]$p.Name
-                    $normalizedStorage[$key] = [StorageGroupConfig]::FromObject($key, $p.Value)
+                $props = @(
+                    $storageSource |
+                        Get-Member -MemberType Properties,NoteProperty -ErrorAction SilentlyContinue |
+                        Select-Object -ExpandProperty Name
+                )
+                foreach ($p in $props) {
+                    $key = [string]$p
+                    $value = $null
+                    try { $value = $storageSource.$p } catch { $value = $null }
+                    $normalizedStorage[$key] = [StorageGroupConfig]::FromObject($key, $value)
                 }
             }
             $cfg.Storage = $normalizedStorage

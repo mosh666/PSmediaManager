@@ -1,6 +1,13 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name 'Get-PSmmProjectsConfigMemberValue' -ErrorAction SilentlyContinue)) {
+    $helpersPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\Private\\ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $helpersPath) {
+        . $helpersPath
+    }
+}
+
 function New-PSmmProject {
     <#
     .SYNOPSIS
@@ -55,6 +62,75 @@ function New-PSmmProject {
         }
     }
 
+    function Get-RootConfigPath([object]$RootConfig) {
+        if ($null -eq $RootConfig) {
+            return $null
+        }
+
+        if ($RootConfig -is [System.Collections.IDictionary]) {
+            try { if ($RootConfig.ContainsKey('Paths')) { return $RootConfig['Paths'] } } catch { $null = $_ }
+            try { if ($RootConfig.Contains('Paths')) { return $RootConfig['Paths'] } } catch { $null = $_ }
+            try {
+                foreach ($k in $RootConfig.Keys) {
+                    if ($k -eq 'Paths') { return $RootConfig[$k] }
+                }
+            }
+            catch { $null = $_ }
+
+            return $null
+        }
+
+        if (Get-Command -Name Test-PSmmProjectsConfigMember -ErrorAction SilentlyContinue) {
+            if (Test-PSmmProjectsConfigMember -Object $RootConfig -Name 'Paths') {
+                return Get-PSmmProjectsConfigMemberValue -Object $RootConfig -Name 'Paths'
+            }
+        }
+        else {
+            return Get-PSmmProjectsConfigMemberValue -Object $RootConfig -Name 'Paths'
+        }
+
+        return $null
+    }
+
+    # Ensure PathProvider is available, preferring DI/global instance, otherwise wrap Config.Paths when possible.
+    $pathProviderType = 'PathProvider' -as [type]
+    $iPathProviderType = 'IPathProvider' -as [type]
+    if ($null -eq $PathProvider) {
+        $resolved = $null
+
+        try {
+            $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+            if ($null -ne $globalServiceContainer) {
+                try {
+                    $resolved = $globalServiceContainer.Resolve('PathProvider')
+                }
+                catch {
+                    $resolved = $null
+                }
+            }
+        }
+        catch {
+            $resolved = $null
+        }
+
+        if ($null -ne $resolved) {
+            $PathProvider = $resolved
+        }
+        elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType) {
+            $configPaths = Get-RootConfigPath -RootConfig $Config
+            if ($null -ne $configPaths -and $configPaths -is $iPathProviderType) {
+                $PathProvider = $pathProviderType::new([IPathProvider]$configPaths)
+            }
+        }
+
+        if ($null -eq $PathProvider -and $null -ne $pathProviderType) {
+            $PathProvider = $pathProviderType::new()
+        }
+    }
+    elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+        $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
+    }
+
     # Support legacy dictionary-shaped configs by using a PSCustomObject view for property access.
     # NOTE: This function mutates the referenced objects (e.g., Projects registry) but does not rely
     # on reassigning the root Config instance.
@@ -84,105 +160,9 @@ function New-PSmmProject {
         Show-Header -Config $Config
         Format-Text -Text1 'Create a new project' -Width '80' -Alignment 'c' -ForegroundColor 'DarkGreen' -Border 'Box'
 
-        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-            if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-                return $null
-            }
-
-            if ($Object -is [System.Collections.IDictionary]) {
-                try {
-                    if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-                }
-                catch {
-                    Write-Verbose "[New-PSmmProject] Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    if ($Object.Contains($Name)) { return $Object[$Name] }
-                }
-                catch {
-                    Write-Verbose "[New-PSmmProject] Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    foreach ($k in $Object.Keys) {
-                        if ($k -eq $Name) { return $Object[$k] }
-                    }
-                }
-                catch {
-                    Write-Verbose "[New-PSmmProject] Get-ConfigMemberValue: IDictionary.Keys enumeration failed (Name='$Name'): $($_.Exception.Message)"
-                }
-                return $null
-            }
-
-            $p = $Object.PSObject.Properties[$Name]
-            if ($null -ne $p) {
-                return $p.Value
-            }
-
-            return $null
-        }
-
-        function Get-MapValue([object]$Map, [string]$Key) {
-            if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Key)) {
-                return $null
-            }
-
-            if ($Map -is [System.Collections.IDictionary]) {
-                try {
-                    if ($Map.ContainsKey($Key)) { return $Map[$Key] }
-                }
-                catch {
-                    Write-Verbose "[New-PSmmProject] Get-MapValue: IDictionary.ContainsKey('$Key') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    if ($Map.Contains($Key)) { return $Map[$Key] }
-                }
-                catch {
-                    Write-Verbose "[New-PSmmProject] Get-MapValue: IDictionary.Contains('$Key') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    foreach ($k in $Map.Keys) {
-                        if ($k -eq $Key) { return $Map[$k] }
-                    }
-                }
-                catch {
-                    Write-Verbose "[New-PSmmProject] Get-MapValue: IDictionary.Keys enumeration failed (Key='$Key'): $($_.Exception.Message)"
-                }
-                return $null
-            }
-
-            try {
-                return $Map[$Key]
-            }
-            catch {
-                Write-Verbose "[New-PSmmProject] Get-MapValue: indexer access failed (Key='$Key'): $($_.Exception.Message)"
-            }
-
-            $p = $Map.PSObject.Properties[$Key]
-            if ($null -ne $p) {
-                return $p.Value
-            }
-
-            return $null
-        }
-
-        function Get-NestedValue([object]$Root, [string[]]$PathParts) {
-            $cur = $Root
-            foreach ($part in $PathParts) {
-                if ($null -eq $cur) {
-                    return $null
-                }
-                $cur = Get-ConfigMemberValue -Object $cur -Name $part
-            }
-            return $cur
-        }
-
         # Normalize Storage Group 1 to avoid StrictMode failures on legacy hashtables.
-        $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage'
-        $group1Raw = Get-MapValue -Map $storageMap -Key '1'
+        $storageMap = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Storage'
+        $group1Raw = Get-PSmmProjectsConfigMemberValue -Object $storageMap -Name '1'
 
         $sgType = 'StorageGroupConfig' -as [type]
         $group1 = $null
@@ -202,7 +182,7 @@ function New-PSmmProject {
         $masterLabel = $null
         try { $masterLabel = $group1.Master.Label } catch { Write-Verbose "[New-PSmmProject] Reading group1.Master.Label failed: $($_.Exception.Message)"; $masterLabel = $null }
         if ($null -eq $masterLabel) {
-            $masterLabel = Get-NestedValue -Root $group1 -PathParts @('Master', 'Label')
+            $masterLabel = Get-PSmmProjectsConfigNestedValue -Object $group1 -Path @('Master', 'Label')
         }
         $masterLabel = if ($null -eq $masterLabel) { '' } else { [string]$masterLabel }
 
@@ -275,7 +255,7 @@ function New-PSmmProject {
         Write-Verbose "Copying digiKam configuration..."
         try {
             $digiKamConfigSource = $null
-            $digiKamConfigSource = Get-NestedValue -Root $Config -PathParts @('Paths', 'App', 'ConfigDigiKam')
+            $digiKamConfigSource = Get-PSmmProjectsConfigNestedValue -Object $Config -Path @('Paths', 'App', 'ConfigDigiKam')
 
             if ($FileSystem.TestPath($digiKamConfigSource)) {
                 $FileSystem.CopyItem($digiKamConfigSource, $projectConfigPath, $true)

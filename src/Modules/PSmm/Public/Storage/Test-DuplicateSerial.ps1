@@ -85,54 +85,20 @@ function Test-DuplicateSerial {
         return Read-Host -Prompt $Prompt
     }
 
-    function Get-ConfigMemberValue {
-        param(
-            [Parameter(Mandatory)]
-            [AllowNull()]
-            $Object,
-
-            [Parameter(Mandatory)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name,
-
-            [Parameter()]
-            $Default = $null
-        )
-
-        if ($null -eq $Object) { return $Default }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: ContainsKey('$Name') failed: $($_.Exception.Message)"
-            }
-
-            try {
-                if ($Object.Contains($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: Contains('$Name') failed: $($_.Exception.Message)"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) { return $Object[$k] }
-                }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)"
-            }
+    if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+        $moduleRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $helperPath = Join-Path -Path $moduleRoot -ChildPath 'Private\\Get-PSmmConfigMemberValue.ps1'
+        if (Test-Path $helperPath) {
+            . $helperPath
         }
-
-        $prop = $Object.PSObject.Properties[$Name]
-        if ($null -ne $prop) { return $prop.Value }
-
-        return $Default
     }
 
-    $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage' -Default $null
+    if (-not (Get-Command Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+        $nestedAccessPath = Join-Path $PSScriptRoot '..\\..\\Private\\Get-PSmmConfigNestedValue.ps1'
+        if (Test-Path $nestedAccessPath) { . $nestedAccessPath }
+    }
+
+    $storageMap = Get-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Default $null
     if ($null -eq $storageMap -and $Config -is [System.Collections.IDictionary]) {
         # Allow passing a Storage-map directly in legacy/test scenarios
         $storageMap = $Config
@@ -153,32 +119,31 @@ function Test-DuplicateSerial {
             $group = $storageMap[$groupKey]
 
             # Check Master
-            $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master' -Default $null
-            $masterSerial = [string](Get-ConfigMemberValue -Object $masterCfg -Name 'SerialNumber' -Default '')
+            $masterSerial = [string](Get-PSmmConfigNestedValue -Object $group -Path @('Master', 'SerialNumber') -Default '')
             if (-not [string]::IsNullOrWhiteSpace($masterSerial) -and $masterSerial -eq $serial) {
                 $duplicates += [PSCustomObject]@{
                     Serial = $serial
                     GroupId = $groupKey
                     DriveType = 'Master'
-                    Label = [string](Get-ConfigMemberValue -Object $masterCfg -Name 'Label' -Default '')
+                    Label = [string](Get-PSmmConfigNestedValue -Object $group -Path @('Master', 'Label') -Default '')
                 }
             }
 
             # Check Backups
-            $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backups' -Default $null
+            $backupsCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Backups' -Default $null
             if ($null -eq $backupsCfg) {
-                $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backup' -Default $null
+                $backupsCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Backup' -Default $null
             }
             if ($backupsCfg -is [System.Collections.IDictionary]) {
                 foreach ($bKey in $backupsCfg.Keys) {
                     $backup = $backupsCfg[$bKey]
-                    $backupSerial = [string](Get-ConfigMemberValue -Object $backup -Name 'SerialNumber' -Default '')
+                    $backupSerial = [string](Get-PSmmConfigMemberValue -Object $backup -Name 'SerialNumber' -Default '')
                     if (-not [string]::IsNullOrWhiteSpace($backupSerial) -and $backupSerial -eq $serial) {
                         $duplicates += [PSCustomObject]@{
                             Serial = $serial
                             GroupId = $groupKey
                             DriveType = "Backup $bKey"
-                            Label = [string](Get-ConfigMemberValue -Object $backup -Name 'Label' -Default '')
+                            Label = [string](Get-PSmmConfigMemberValue -Object $backup -Name 'Label' -Default '')
                         }
                     }
                 }

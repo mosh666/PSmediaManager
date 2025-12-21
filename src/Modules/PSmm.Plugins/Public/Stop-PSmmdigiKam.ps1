@@ -1,6 +1,13 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\Private') -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
+    }
+}
+
 <#
 .SYNOPSIS
     Stops the digiKam application and related processes for a specific project.
@@ -58,109 +65,49 @@ function Stop-PSmmdigiKam {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
-        function Get-ConfigMemberValue {
-            param(
-                [Parameter(Mandatory = $true)]
-                [AllowNull()]
-                [object]$Object,
-
-                [Parameter(Mandatory = $true)]
-                [ValidateNotNullOrEmpty()]
-                [string]$Name
-            )
-
-            if ($null -eq $Object) { return $null }
-
+        # Ensure PathProvider is available, preferring DI/global instance, otherwise wrap Config.Paths when possible.
+        $pathProviderType = 'PathProvider' -as [type]
+        $iPathProviderType = 'IPathProvider' -as [type]
+        if ($null -eq $PathProvider) {
+            $resolved = $null
             try {
-                if ($Object -is [System.Collections.IDictionary]) {
-                    $hasKey = $false
-                    try { $hasKey = $Object.ContainsKey($Name) } catch { $hasKey = $false }
-                    if (-not $hasKey) { try { $hasKey = $Object.Contains($Name) } catch { $hasKey = $false } }
-
-                    if (-not $hasKey) {
-                        try {
-                            foreach ($k in $Object.Keys) {
-                                if ($k -eq $Name) { $hasKey = $true; break }
-                            }
-                        }
-                        catch { $hasKey = $false }
+                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+                if ($null -ne $globalServiceContainer) {
+                    try {
+                        $resolved = $globalServiceContainer.Resolve('PathProvider')
                     }
-
-                    if ($hasKey) { return $Object[$Name] }
+                    catch {
+                        $resolved = $null
+                    }
                 }
             }
             catch {
-                Write-Verbose "Get-ConfigMemberValue: dictionary access failed: $($_.Exception.Message)"
+                $resolved = $null
             }
 
-            try {
-                $prop = $Object.PSObject.Properties[$Name]
-                if ($null -ne $prop) { return $prop.Value }
+            if ($null -ne $resolved) {
+                $PathProvider = $resolved
             }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
+            elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType) {
+                $configPaths = $null
+                try { $configPaths = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths' } catch { $configPaths = $null }
+                if ($null -ne $configPaths -and $configPaths -is $iPathProviderType) {
+                    $PathProvider = $pathProviderType::new([IPathProvider]$configPaths)
+                }
             }
 
-            return $null
+            if ($null -eq $PathProvider -and $null -ne $pathProviderType) {
+                $PathProvider = $pathProviderType::new()
+            }
         }
-
-        function Set-ConfigMemberValue {
-            [CmdletBinding(SupportsShouldProcess = $true)]
-            param(
-                [Parameter(Mandatory = $true)]
-                [AllowNull()]
-                [object]$Object,
-
-                [Parameter(Mandatory = $true)]
-                [ValidateNotNullOrEmpty()]
-                [string]$Name,
-
-                [Parameter(Mandatory = $false)]
-                [AllowNull()]
-                [object]$Value
-            )
-
-            if ($null -eq $Object) { return }
-
-            try {
-                if ($Object -is [System.Collections.IDictionary]) {
-                    if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
-                        $Object[$Name] = $Value
-                    }
-                    return
-                }
-            }
-            catch {
-                Write-Verbose "Set-ConfigMemberValue: IDictionary assignment failed: $($_.Exception.Message)"
-            }
-
-            try {
-                $prop = $Object.PSObject.Properties[$Name]
-                if ($null -ne $prop) {
-                    if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
-                        $prop.Value = $Value
-                    }
-                    return
-                }
-            }
-            catch {
-                Write-Verbose "Set-ConfigMemberValue: PSObject property assignment failed: $($_.Exception.Message)"
-            }
-
-            try {
-                if ($PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
-                    $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
-                }
-            }
-            catch {
-                Write-Verbose "Set-ConfigMemberValue: Add-Member failed: $($_.Exception.Message)"
-            }
+        elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+            $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
         }
 
         # Get current project name from Config
         $projectName = 'Unknown'
-        $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
-        $projectsCurrent = Get-ConfigMemberValue -Object $projects -Name 'Current'
+        $projects = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Projects'
+        $projectsCurrent = Get-PSmmPluginsConfigMemberValue -Object $projects -Name 'Current'
         if ($null -ne $projects -and $null -ne $projectsCurrent) {
             $currentProject = [ProjectCurrentConfig]::FromObject($projectsCurrent)
             if (-not [string]::IsNullOrWhiteSpace($currentProject.Name)) {
@@ -184,8 +131,8 @@ function Stop-PSmmdigiKam {
 
             # Get project-specific paths - check if this is the current project
             $projectPath = $null
-            $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
-            $projectsCurrent = Get-ConfigMemberValue -Object $projects -Name 'Current'
+            $projects = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Projects'
+            $projectsCurrent = Get-PSmmPluginsConfigMemberValue -Object $projects -Name 'Current'
             if ($null -ne $projects -and $null -ne $projectsCurrent) {
                 $currentProject = [ProjectCurrentConfig]::FromObject($projectsCurrent)
                 if ($currentProject.Name -eq $projectName -and -not [string]::IsNullOrWhiteSpace($currentProject.Path)) {
@@ -202,11 +149,11 @@ function Stop-PSmmdigiKam {
 
             # Get project's allocated database port
             $databasePort = $null
-            $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
-            $projectsPortRegistry = Get-ConfigMemberValue -Object $projects -Name 'PortRegistry'
+            $projects = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Projects'
+            $projectsPortRegistry = Get-PSmmPluginsConfigMemberValue -Object $projects -Name 'PortRegistry'
             if ($null -ne $projects -and $null -ne $projectsPortRegistry) {
                 $portRegistry = [ProjectsPortRegistry]::FromObject($projectsPortRegistry)
-                Set-ConfigMemberValue -Object $projects -Name 'PortRegistry' -Value $portRegistry
+                Set-PSmmPluginsConfigMemberValue -Object $projects -Name 'PortRegistry' -Value $portRegistry
                 if ($portRegistry.ContainsKey($projectName)) {
                     $databasePort = $portRegistry.GetPort($projectName)
                 }

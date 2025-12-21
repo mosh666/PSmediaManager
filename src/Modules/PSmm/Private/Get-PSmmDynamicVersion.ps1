@@ -142,27 +142,24 @@ function Get-PSmmDynamicVersion {
 
                     if ($IncludePrerelease) {
                         # Return full semantic version
-                        if ($gitVersionData.PSObject.Properties['InformationalVersion']) {
-                            return $gitVersionData.InformationalVersion
-                        }
-                        elseif ($gitVersionData.PSObject.Properties['FullSemVer']) {
-                            return $gitVersionData.FullSemVer
-                        }
-                        elseif ($gitVersionData.PSObject.Properties['SemVer']) {
-                            return $gitVersionData.SemVer
-                        }
+                        try { $v = $gitVersionData.InformationalVersion } catch { $v = $null }
+                        if ($null -ne $v) { return $v }
+
+                        try { $v = $gitVersionData.FullSemVer } catch { $v = $null }
+                        if ($null -ne $v) { return $v }
+
+                        try { $v = $gitVersionData.SemVer } catch { $v = $null }
+                        if ($null -ne $v) { return $v }
                     }
                     else {
                         # Return only Major.Minor.Patch for module manifests
-                        if ($gitVersionData.PSObject.Properties['MajorMinorPatch']) {
-                            return $gitVersionData.MajorMinorPatch
-                        }
-                        elseif ($gitVersionData.PSObject.Properties['SemVer']) {
-                            # Extract Major.Minor.Patch from SemVer
-                            $semVer = $gitVersionData.SemVer
-                            if ($semVer -match '^(\d+\.\d+\.\d+)') {
-                                return $matches[1]
-                            }
+                        try { $v = $gitVersionData.MajorMinorPatch } catch { $v = $null }
+                        if ($null -ne $v) { return $v }
+
+                        # Extract Major.Minor.Patch from SemVer
+                        try { $semVer = $gitVersionData.SemVer } catch { $semVer = $null }
+                        if ($semVer -and $semVer -match '^(\d+\.\d+\.\d+)') {
+                            return $matches[1]
                         }
                     }
 

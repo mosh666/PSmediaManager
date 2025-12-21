@@ -29,11 +29,13 @@
     # Scripts that are run in the caller's environment prior to importing this module
     ScriptsToProcess = @(
         'Classes\Interfaces.ps1'
+        'Classes\ConfigMemberAccess.ps1'
         'Classes\Exceptions.ps1'
         'Classes\UiModels.ps1'
         'Classes\ProjectModels.ps1'
         'Classes\Services\FileSystemService.ps1'
         'Classes\Services\EnvironmentService.ps1'
+        'Classes\Services\PathProvider.ps1'
         'Classes\Services\HttpService.ps1'
         'Classes\Services\CimService.ps1'
         'Classes\Services\GitService.ps1'

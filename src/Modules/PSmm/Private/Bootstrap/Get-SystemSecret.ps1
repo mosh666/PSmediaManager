@@ -46,6 +46,34 @@ Set-StrictMode -Version Latest
 # Note: $script:_VaultMasterPasswordCache is declared in Initialize-SystemVault.ps1
 # Both files are dot-sourced into PSmm module and share the same module scope.
 
+if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmConfigMemberValue.ps1'
+    if (Test-Path -LiteralPath $helperPath) {
+        . $helperPath
+    }
+}
+
+if (-not (Get-Command -Name Set-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Set-PSmmConfigMemberValue.ps1'
+    if (Test-Path -LiteralPath $helperPath) {
+        . $helperPath
+    }
+}
+
+if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+    $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmConfigNestedValue.ps1'
+    if (Test-Path -LiteralPath $helperPath) {
+        . $helperPath
+    }
+}
+
+if (-not (Get-Command -Name Get-PSmmAppConfigurationSafe -ErrorAction SilentlyContinue)) {
+    $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmAppConfigurationSafe.ps1'
+    if (Test-Path -LiteralPath $helperPath) {
+        . $helperPath
+    }
+}
+
 function Get-KeePassCliCandidatePaths {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Returns multiple candidate paths; plural noun is intentional')]
     [CmdletBinding()]
@@ -176,35 +204,44 @@ function Resolve-KeePassCliCommand {
             Write-Verbose 'Added KeePassXC directory to PATH for current session.'
 
             # Track in config if available (for centralized cleanup)
-            if (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
-                try {
-                    $config = Get-AppConfiguration
-                    if ($config -and $config.PSObject.Properties.Name -contains 'AddedPathEntries') {
-                        $existingEntries = $null
-                        try { $existingEntries = $config.PSObject.Properties['AddedPathEntries'].Value } catch { $existingEntries = $null }
+            try {
+                $config = if (Get-Command -Name Get-PSmmAppConfigurationSafe -ErrorAction SilentlyContinue) {
+                    Get-PSmmAppConfigurationSafe
+                }
+                else {
+                    $null
+                }
 
-                        $pathEntries = [System.Collections.ArrayList]::new()
-                        if ($null -ne $existingEntries) {
-                            if ($existingEntries -is [string]) {
-                                $null = $pathEntries.Add($existingEntries)
-                            }
-                            else {
-                                foreach ($entry in @($existingEntries)) {
-                                    if ($null -ne $entry) { $null = $pathEntries.Add($entry) }
-                                }
+                if ($config) {
+                    $existingEntries = Get-PSmmConfigMemberValue -Object $config -Name 'AddedPathEntries' -Default $null
+
+                    $pathEntries = [System.Collections.ArrayList]::new()
+                    if ($null -ne $existingEntries) {
+                        if ($existingEntries -is [string]) {
+                            $null = $pathEntries.Add($existingEntries)
+                        }
+                        else {
+                            foreach ($entry in @($existingEntries)) {
+                                if ($null -ne $entry) { $null = $pathEntries.Add($entry) }
                             }
                         }
+                    }
 
-                        if ($pathEntries -notcontains $resolvedDir) {
-                            $null = $pathEntries.Add($resolvedDir)
+                    if ($pathEntries -notcontains $resolvedDir) {
+                        $null = $pathEntries.Add($resolvedDir)
+                        try {
                             $config.AddedPathEntries = $pathEntries.ToArray()
                             Write-Verbose "Tracked KeePassXC PATH entry for cleanup: $resolvedDir"
                         }
+                        catch {
+                            $null = $_
+                            # Config may not support this member; ignore.
+                        }
                     }
                 }
-                catch {
-                    Write-Verbose "Could not track PATH entry in config: $_"
-                }
+            }
+            catch {
+                Write-Verbose "Could not track PATH entry in config: $_"
             }
         }
         $result.ResolvedExecutable = $resolvedCli
@@ -217,113 +254,28 @@ function Resolve-KeePassCliCommand {
 }
 
 function ConvertTo-SecretSecureString {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'Secret is retrieved as plaintext from keepassxc-cli; conversion to SecureString is required for downstream APIs.')]
     [CmdletBinding()]
     [OutputType([SecureString])]
     param(
         [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Value
-    )
-
-    $secure = [System.Security.SecureString]::new()
-    foreach ($char in $Value.ToCharArray()) {
-        $secure.AppendChar($char)
-    }
-    $secure.MakeReadOnly()
-    return $secure
-}
-
-function Get-ConfigMemberValue {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
         [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name,
-
-        [Parameter()]
-        $Default = $null
+        [object]$Value
     )
 
-    if ($null -eq $Object) {
-        return $Default
+    if ($null -eq $Value) {
+        return $null
     }
 
-    if ($Object -is [System.Collections.IDictionary]) {
-        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)" }
-        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)" }
-        try {
-            foreach ($k in $Object.Keys) {
-                if ($k -eq $Name) { return $Object[$k] }
-            }
-        }
-        catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys enumeration failed: $($_.Exception.Message)" }
-        return $Default
+    if ($Value -is [SecureString]) {
+        return $Value
     }
 
-    $p = $Object.PSObject.Properties[$Name]
-    if ($null -ne $p) {
-        return $p.Value
+    if ($Value -is [char[]]) {
+        return (ConvertTo-SecureString -String (-join $Value) -AsPlainText -Force)
     }
 
-    return $Default
-}
-
-function Set-ConfigMemberValue {
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param(
-        [Parameter(Mandatory)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name,
-
-        [Parameter()]
-        $Value
-    )
-
-    if ($null -eq $Object) {
-        return
-    }
-
-    $target = try { "{0}.{1}" -f $Object.GetType().Name, $Name } catch { $Name }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        if (-not $PSCmdlet.ShouldProcess($target, 'Set config member value')) {
-            return
-        }
-        $Object[$Name] = $Value
-        return
-    }
-
-    $existing = $null
-    try { $existing = $Object.PSObject.Properties[$Name] } catch { $existing = $null }
-    if ($null -ne $existing) {
-        try {
-            if (-not $PSCmdlet.ShouldProcess($target, 'Set config member value')) {
-                return
-            }
-            $Object.$Name = $Value
-        } catch {
-            Write-Verbose "Set-ConfigMemberValue: property set '$Name' failed: $($_.Exception.Message)"
-        }
-        return
-    }
-
-    try {
-        if (-not $PSCmdlet.ShouldProcess($target, 'Add config member value')) {
-            return
-        }
-        $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
-    }
-    catch {
-        Write-Verbose "Set-ConfigMemberValue: Add-Member '$Name' failed: $($_.Exception.Message)"
-    }
+    return (ConvertTo-SecureString -String ([string]$Value) -AsPlainText -Force)
 }
 
 function Get-SystemSecret {
@@ -367,13 +319,15 @@ function Get-SystemSecret {
             if ($env:PSMM_VAULT_PATH) {
                 $VaultPath = $env:PSMM_VAULT_PATH
             }
-            elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
-                try {
-                    $VaultPath = (Get-AppConfiguration).Paths.App.Vault
+            else {
+                $appConfig = if (Get-Command -Name Get-PSmmAppConfigurationSafe -ErrorAction SilentlyContinue) {
+                    Get-PSmmAppConfigurationSafe
                 }
-                catch {
-                    Write-Verbose "Could not retrieve vault path from app configuration: $_"
+                else {
+                    $null
                 }
+
+                $VaultPath = [string](Get-PSmmConfigNestedValue -Object $appConfig -Path @('Paths', 'App', 'Vault') -Default $null)
             }
         }
         Write-Verbose "Retrieving system secret: $SecretType"
@@ -627,7 +581,7 @@ function Get-SystemSecretMetadata {
                                 try {
                                     $config = Get-AppConfiguration
                                     if ($config) {
-                                        $existingEntries = Get-ConfigMemberValue -Object $config -Name 'AddedPathEntries' -Default $null
+                                        $existingEntries = Get-PSmmConfigMemberValue -Object $config -Name 'AddedPathEntries' -Default $null
                                         $pathEntries = [System.Collections.ArrayList]::new()
                                         foreach ($e in @($existingEntries)) {
                                             if ($null -ne $e -and -not [string]::IsNullOrWhiteSpace([string]$e)) {
@@ -636,7 +590,7 @@ function Get-SystemSecretMetadata {
                                         }
                                         if ($pathEntries -notcontains $dir) {
                                             $null = $pathEntries.Add($dir)
-                                            Set-ConfigMemberValue -Object $config -Name 'AddedPathEntries' -Value $pathEntries.ToArray()
+                                            Set-PSmmConfigMemberValue -Object $config -Name 'AddedPathEntries' -Value $pathEntries.ToArray()
                                         }
                                     }
                                 }

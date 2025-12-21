@@ -65,116 +65,6 @@ function Get-PSmmAvailablePort {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
-        function Get-ConfigMemberValue {
-            param(
-                [Parameter(Mandatory = $true)]
-                [AllowNull()]
-                [object]$Object,
-
-                [Parameter(Mandatory = $true)]
-                [ValidateNotNullOrEmpty()]
-                [string]$Name
-            )
-
-            if ($null -eq $Object) { return $null }
-
-            try {
-                if ($Object -is [System.Collections.IDictionary]) {
-                    $hasKey = $false
-                    try { $hasKey = $Object.ContainsKey($Name) }
-                    catch {
-                        $hasKey = $false
-                        Write-Verbose "Get-ConfigMemberValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
-                    }
-                    if (-not $hasKey) {
-                        try { $hasKey = $Object.Contains($Name) }
-                        catch {
-                            $hasKey = $false
-                            Write-Verbose "Get-ConfigMemberValue: failed Contains('$Name'): $($_.Exception.Message)"
-                        }
-                    }
-
-                    if (-not $hasKey) {
-                        try {
-                            foreach ($k in $Object.Keys) {
-                                if ($k -eq $Name) { $hasKey = $true; break }
-                            }
-                        }
-                        catch {
-                            $hasKey = $false
-                            Write-Verbose "Get-ConfigMemberValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
-                        }
-                    }
-
-                    if ($hasKey) { return $Object[$Name] }
-                }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: failed IDictionary lookup for '$Name': $($_.Exception.Message)"
-            }
-
-            try {
-                $prop = $Object.PSObject.Properties[$Name]
-                if ($null -ne $prop) { return $prop.Value }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: failed PSObject lookup for '$Name': $($_.Exception.Message)"
-            }
-
-            return $null
-        }
-
-        function Set-ConfigMemberValue {
-            [CmdletBinding(SupportsShouldProcess = $true)]
-            param(
-                [Parameter(Mandatory = $true)]
-                [AllowNull()]
-                [object]$Object,
-
-                [Parameter(Mandatory = $true)]
-                [ValidateNotNullOrEmpty()]
-                [string]$Name,
-
-                [Parameter(Mandatory = $false)]
-                [AllowNull()]
-                [object]$Value
-            )
-
-            if ($null -eq $Object) { return }
-
-            if (-not $PSCmdlet.ShouldProcess("Config member '$Name'", 'Set value')) {
-                return
-            }
-
-            try {
-                if ($Object -is [System.Collections.IDictionary]) {
-                    $Object[$Name] = $Value
-                    return
-                }
-            }
-            catch {
-                Write-Verbose "Set-ConfigMemberValue: failed IDictionary set for '$Name': $($_.Exception.Message)"
-            }
-
-            try {
-                $prop = $Object.PSObject.Properties[$Name]
-                if ($null -ne $prop) {
-                    $prop.Value = $Value
-                    return
-                }
-            }
-            catch {
-                Write-Verbose "Set-ConfigMemberValue: failed PSObject set for '$Name': $($_.Exception.Message)"
-            }
-
-            try {
-                $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
-            }
-            catch {
-                Write-Verbose "Set-ConfigMemberValue: failed Add-Member for '$Name': $($_.Exception.Message)"
-            }
-        }
-
         # Port allocation settings
         $BasePort = 3310
         $MaxPort = 3399
@@ -185,8 +75,8 @@ function Get-PSmmAvailablePort {
 
     process {
         try {
-            $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
-            $projectsPortRegistry = Get-ConfigMemberValue -Object $projects -Name 'PortRegistry'
+            $projects = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Projects'
+            $projectsPortRegistry = Get-PSmmPluginsConfigMemberValue -Object $projects -Name 'PortRegistry'
 
             $portRegistry = if ($null -ne $projects -and $null -ne $projectsPortRegistry) {
                 [ProjectsPortRegistry]::FromObject($projectsPortRegistry)
@@ -196,7 +86,7 @@ function Get-PSmmAvailablePort {
             }
 
             if ($null -ne $projects) {
-                Set-ConfigMemberValue -Object $projects -Name 'PortRegistry' -Value $portRegistry
+                Set-PSmmPluginsConfigMemberValue -Object $projects -Name 'PortRegistry' -Value $portRegistry
             }
 
             # Return existing port if available and not forced

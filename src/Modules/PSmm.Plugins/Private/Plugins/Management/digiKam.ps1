@@ -5,116 +5,14 @@
 
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
+    }
+}
+
 #region ########## PRIVATE ##########
-
-function Get-ConfigMemberValue {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name
-    )
-
-    if ($null -eq $Object) {
-        return $null
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        try {
-            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey failed: $($_.Exception.Message)"
-        }
-
-        try {
-            if ($Object.Contains($Name)) { return $Object[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains failed: $($_.Exception.Message)"
-        }
-
-        try {
-            foreach ($k in $Object.Keys) {
-                if ($k -eq $Name) { return $Object[$k] }
-            }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
-        }
-
-        return $null
-    }
-
-    try {
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) { return $p.Value }
-    }
-    catch {
-        Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
-    }
-
-    return $null
-}
-
-function Set-ConfigMemberValue {
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name,
-
-        [Parameter()]
-        [AllowNull()]
-        [object]$Value
-    )
-
-    if ($null -eq $Object) {
-        return
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        if (-not $PSCmdlet.ShouldProcess("$Name", 'Set config value')) {
-            return
-        }
-        $Object[$Name] = $Value
-        return
-    }
-
-    try {
-        if (-not $PSCmdlet.ShouldProcess("$Name", 'Set config value')) {
-            return
-        }
-        $Object.$Name = $Value
-        return
-    }
-    catch {
-        Write-Verbose "Set-ConfigMemberValue: direct assignment failed: $($_.Exception.Message)"
-    }
-
-    try {
-        if (-not $PSCmdlet.ShouldProcess("$Name", 'Set config value')) {
-            return
-        }
-        if ($null -eq $Object.PSObject.Properties[$Name]) {
-            $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
-        }
-        else {
-            $Object.PSObject.Properties[$Name].Value = $Value
-        }
-    }
-    catch {
-        Write-Verbose "Set-ConfigMemberValue: PSObject property set failed: $($_.Exception.Message)"
-    }
-}
 
 function Get-CurrentVersion-digiKam {
     param(
@@ -125,7 +23,7 @@ function Get-CurrentVersion-digiKam {
 
     # Resolve FileSystem from ServiceContainer if available, otherwise create fallback
     $FileSystem = $null
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try {
             $FileSystem = $ServiceContainer.Resolve('FileSystem')
         }
@@ -134,8 +32,8 @@ function Get-CurrentVersion-digiKam {
         }
     }
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'digiKam' }
 
     if ($FileSystem) {
@@ -161,8 +59,8 @@ function Get-LatestUrlFromUrl-digiKam {
     )
     $null = $Paths, $ServiceContainer
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $versionUrl = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $versionUrl = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
     if ([string]::IsNullOrWhiteSpace($versionUrl)) {
         throw [System.InvalidOperationException]::new('Plugin config is missing VersionUrl')
     }
@@ -176,14 +74,14 @@ function Get-LatestUrlFromUrl-digiKam {
     $Response = Invoke-WebRequest -Uri "$($DownloadPageUrl)"
     $LatestInstaller = [regex]::Match($Response.Content, '(digiKam-\d+\.\d+\.\d+-Qt6-Win64.exe)').Groups[1].Value
 
-    $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+    $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
     if ($null -eq $state) {
         $state = @{}
-        Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
+        Set-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
     }
 
-    Set-ConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestVersion
-    Set-ConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $LatestInstaller
+    Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestVersion
+    Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $LatestInstaller
     $Url = $DownloadPageUrl + $LatestInstaller
     return $Url
 }
@@ -206,7 +104,7 @@ function Invoke-Installer-digiKam {
     # Resolve optional services
     $FileSystem = $null
     $Process = $null
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try {
             $FileSystem = $ServiceContainer.Resolve('FileSystem')
         }
@@ -222,8 +120,8 @@ function Invoke-Installer-digiKam {
         }
     }
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'digiKam' }
 
     try {

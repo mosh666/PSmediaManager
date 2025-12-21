@@ -59,40 +59,18 @@ function Invoke-FirstRunSetup {
     )
 
     try {
-        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-            if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-                return $null
+        if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+            $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmConfigMemberValue.ps1'
+            if (Test-Path -LiteralPath $helperPath) {
+                . $helperPath
             }
-
-            if ($Object -is [System.Collections.IDictionary]) {
-                try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: ContainsKey('$Name') failed: $($_.Exception.Message)" }
-                try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: Contains('$Name') failed: $($_.Exception.Message)" }
-                try {
-                    foreach ($k in $Object.Keys) {
-                        if ($k -eq $Name) { return $Object[$k] }
-                    }
-                }
-                catch { Write-Verbose "Get-ConfigMemberValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)" }
-                return $null
-            }
-
-            $p = $Object.PSObject.Properties[$Name]
-            if ($null -ne $p) {
-                return $p.Value
-            }
-
-            return $null
         }
 
-        function Get-NestedValue([object]$Root, [string[]]$PathParts) {
-            $cur = $Root
-            foreach ($part in $PathParts) {
-                if ($null -eq $cur) {
-                    return $null
-                }
-                $cur = Get-ConfigMemberValue -Object $cur -Name $part
+        if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+            $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmConfigNestedValue.ps1'
+            if (Test-Path -LiteralPath $helperPath) {
+                . $helperPath
             }
-            return $cur
         }
 
         # Normalize legacy config shapes to typed AppConfiguration when the class is available
@@ -101,13 +79,7 @@ function Invoke-FirstRunSetup {
             $Config = $appConfigType::FromObject($Config)
         }
 
-        $VaultPath = $null
-        if ($null -ne $appConfigType -and ($Config -is $appConfigType)) {
-            try { $VaultPath = [string]$Config.Paths.App.Vault } catch { $VaultPath = $null }
-        }
-        if ([string]::IsNullOrWhiteSpace($VaultPath)) {
-            $VaultPath = [string](Get-NestedValue -Root $Config -PathParts @('Paths', 'App', 'Vault'))
-        }
+        $VaultPath = [string](Get-PSmmConfigNestedValue -Object $Config -Path @('Paths','App','Vault') -Default $null)
         if ([string]::IsNullOrWhiteSpace($VaultPath)) {
             throw 'Unable to resolve vault path from configuration (Config.Paths.App.Vault).'
         }

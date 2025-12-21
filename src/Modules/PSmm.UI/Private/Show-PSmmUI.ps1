@@ -21,51 +21,11 @@ Set-StrictMode -Version Latest
 
 # Note: Build-UIRuntimeFromConfig has been removed. UI functions now work directly with AppConfiguration.
 
-function _TryGetConfigValue {
-    [CmdletBinding()]
-    param(
-        [Parameter()][AllowNull()]$Object,
-        [Parameter(Mandatory)][string]$Name
-    )
-
-    if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-        return $null
+if (-not (Get-Command -Name Get-PSmmUiConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
     }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "_TryGetConfigValue: IDictionary.ContainsKey failed: $($_.Exception.Message)" }
-        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "_TryGetConfigValue: IDictionary.Contains failed: $($_.Exception.Message)" }
-        try {
-            foreach ($k in $Object.Keys) {
-                if ($k -eq $Name) {
-                    return $Object[$k]
-                }
-            }
-        }
-        catch {
-            Write-Verbose "_TryGetConfigValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
-        }
-        return $null
-    }
-
-    $p = $Object.PSObject.Properties[$Name]
-    if ($null -ne $p) { return $p.Value }
-    return $null
-}
-
-function _TryGetNestedValue {
-    [CmdletBinding()]
-    param(
-        [Parameter()][AllowNull()]$Root,
-        [Parameter(Mandatory)][string[]]$PathParts
-    )
-
-    $cur = $Root
-    foreach ($part in $PathParts) {
-        if ($null -eq $cur) { return $null }
-        $cur = _TryGetConfigValue -Object $cur -Name $part
-    }
-    return $cur
 }
 
 #endregion ########## Helpers ##########
@@ -119,12 +79,12 @@ function Show-Header {
         [string]$StorageGroupFilter = $null
     )
 
-    $displayName = [string](_TryGetConfigValue -Object $Config -Name 'DisplayName')
+    $displayName = [string](Get-PSmmUiConfigMemberValue -Object $Config -Name 'DisplayName')
     if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = 'PSmediaManager' }
 
-    $appVersion = [string](_TryGetConfigValue -Object $Config -Name 'AppVersion')
+    $appVersion = [string](Get-PSmmUiConfigMemberValue -Object $Config -Name 'AppVersion')
 
-    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidthSource = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'Width')
     $uiWidth = 80
     if ($null -ne $uiWidthSource) {
         try {
@@ -136,13 +96,13 @@ function Show-Header {
         }
     }
 
-    $fgPrimary     = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Primary')
-    $fgAccent      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
-    $fgError       = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Error')
-    $fgWarning     = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Warning')
-    $fgNeutral4    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral4')
-    $fgBackupDrive = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'BackupDrive')
-    $fgMasterDrive = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'MasterDrive')
+    $fgPrimary     = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Primary')
+    $fgAccent      = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Accent')
+    $fgError       = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Error')
+    $fgWarning     = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Warning')
+    $fgNeutral4    = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Neutral4')
+    $fgBackupDrive = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'BackupDrive')
+    $fgMasterDrive = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'MasterDrive')
 
     $Columns = @(
         New-UiColumn -Text $displayName -Width '50%' -Alignment 'l' -TextColor $fgPrimary -Bold -Italic
@@ -157,7 +117,7 @@ function Show-Header {
 
     # Display error messages if enabled
     if ($ShowStorageErrors) {
-        $internalErrorsSource = _TryGetConfigValue -Object $Config -Name 'InternalErrorMessages'
+        $internalErrorsSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'InternalErrorMessages'
         $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
         if (-not $uiErrorCatalogType) {
             $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
@@ -194,8 +154,8 @@ function Show-Header {
     }
 
     # Display current project information if available and ShowProject is enabled
-    $projects = _TryGetConfigValue -Object $Config -Name 'Projects'
-    $currentProjectSource = _TryGetConfigValue -Object $projects -Name 'Current'
+    $projects = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Projects'
+    $currentProjectSource = Get-PSmmUiConfigMemberValue -Object $projects -Name 'Current'
     if ($ShowProject -and $null -ne $currentProjectSource) {
         $currentProject = [ProjectCurrentConfig]::FromObject($currentProjectSource)
         if ([string]::IsNullOrWhiteSpace($currentProject.Name)) {
@@ -282,7 +242,7 @@ function Show-Footer {
         [object]$Config
     )
 
-    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidthSource = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'Width')
     $uiWidth = 80
     if ($null -ne $uiWidthSource) {
         try {
@@ -294,8 +254,8 @@ function Show-Footer {
         }
     }
 
-    $fgAccent = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
-    $fgInfo   = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
+    $fgAccent = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Accent')
+    $fgInfo   = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Info')
 
     $FooterColumns = @(
         New-UiColumn -Text '[K] Start KeePassXC' -Width '50%' -Alignment 'l' -TextColor $fgAccent
@@ -341,59 +301,7 @@ function Show-MenuMain {
         [object]$Projects = $null
     )
 
-    function _TryGetConfigValue {
-        [CmdletBinding()]
-        param(
-            [Parameter()][AllowNull()][object]$Object,
-            [Parameter()][string]$Name
-        )
-
-        if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Show-MenuMain._TryGetConfigValue: IDictionary.ContainsKey failed: $($_.Exception.Message)"
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Show-MenuMain._TryGetConfigValue: IDictionary.Contains failed: $($_.Exception.Message)"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "Show-MenuMain._TryGetConfigValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
-    $storageMap = _TryGetConfigValue -Object $Config -Name 'Storage'
+    $storageMap = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Storage'
     $storageKeys = @()
     if ($storageMap -is [System.Collections.IDictionary]) {
         $storageKeys = @($storageMap.Keys)
@@ -408,10 +316,10 @@ function Show-MenuMain {
         }
     }
 
-    $parameters = _TryGetConfigValue -Object $Config -Name 'Parameters'
-    $isDebugOrDev = [bool](_TryGetConfigValue -Object $parameters -Name 'Debug') -or [bool](_TryGetConfigValue -Object $parameters -Name 'Dev')
+    $parameters = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Parameters'
+    $isDebugOrDev = [bool](Get-PSmmUiConfigMemberValue -Object $parameters -Name 'Debug') -or [bool](Get-PSmmUiConfigMemberValue -Object $parameters -Name 'Dev')
 
-    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidthSource = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'Width')
     $uiWidth = 80
     if ($null -ne $uiWidthSource) {
         try {
@@ -423,21 +331,21 @@ function Show-MenuMain {
         }
     }
 
-    $fgAccent       = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
-    $fgWarning      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Warning')
-    $fgSuccess      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Success')
-    $fgSuccessLight = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'SuccessLight')
-    $fgError        = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Error')
+    $fgAccent       = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Accent')
+    $fgWarning      = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Warning')
+    $fgSuccess      = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Success')
+    $fgSuccessLight = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'SuccessLight')
+    $fgError        = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Error')
 
     if ($isDebugOrDev) {
         Write-Verbose '[UI] Show-MenuMain starting diagnostics...'
         Write-Verbose ("[UI] Storage groups present: {0}" -f ($storageKeys -join ', '))
 
-        $projectsObj = _TryGetConfigValue -Object $Config -Name 'Projects'
-        $registry = _TryGetConfigValue -Object $projectsObj -Name 'Registry'
+        $projectsObj = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Projects'
+        $registry = Get-PSmmUiConfigMemberValue -Object $projectsObj -Name 'Registry'
 
         if ($null -ne $registry) {
-            $master = _TryGetConfigValue -Object $registry -Name 'Master'
+            $master = Get-PSmmUiConfigMemberValue -Object $registry -Name 'Master'
 
             if ($master -is [System.Collections.IDictionary]) {
                 Write-Verbose ("[UI] Registry Master keys: {0}" -f (($master.Keys | Sort-Object) -join ', '))
@@ -621,20 +529,20 @@ function Show-MenuMain {
             elseif ($null -ne $storageMap) {
                 try { $storageConfig = $storageMap[$storageGroupKey] } catch { $storageConfig = $null }
                 if ($null -eq $storageConfig) {
-                    $storageConfig = _TryGetConfigValue -Object $storageMap -Name ([string]$storageGroupKey)
+                    $storageConfig = Get-PSmmUiConfigMemberValue -Object $storageMap -Name ([string]$storageGroupKey)
                 }
             }
             if ($storageConfig) {
                 # Display Master drive status
-                $master = _TryGetConfigValue -Object $storageConfig -Name 'Master'
+                $master = Get-PSmmUiConfigMemberValue -Object $storageConfig -Name 'Master'
                 if ($null -ne $master) {
-                    $labelObj = _TryGetConfigValue -Object $master -Name 'Label'
+                    $labelObj = Get-PSmmUiConfigMemberValue -Object $master -Name 'Label'
                     $label = if ($null -ne $labelObj) { [string]$labelObj } else { '' }
                     if (-not [string]::IsNullOrWhiteSpace($label)) {
-                        $isAvailableObj = _TryGetConfigValue -Object $master -Name 'IsAvailable'
+                        $isAvailableObj = Get-PSmmUiConfigMemberValue -Object $master -Name 'IsAvailable'
                         $isAvailable = if ($null -ne $isAvailableObj) { [bool]$isAvailableObj } else { $false }
 
-                        $driveLetterObj = _TryGetConfigValue -Object $master -Name 'DriveLetter'
+                        $driveLetterObj = Get-PSmmUiConfigMemberValue -Object $master -Name 'DriveLetter'
                         $driveLetter = if ($null -ne $driveLetterObj) { [string]$driveLetterObj } else { $null }
                         $statusText = if ($isAvailable -and -not [string]::IsNullOrWhiteSpace($driveLetter)) {
                             "Available ($driveLetter)"
@@ -653,20 +561,20 @@ function Show-MenuMain {
                 }
 
                 # Display Backup drive(s) status using typed Backups dictionary (defensive against legacy or partial config without Backups)
-                $backups = _TryGetConfigValue -Object $storageConfig -Name 'Backups'
+                $backups = Get-PSmmUiConfigMemberValue -Object $storageConfig -Name 'Backups'
                 if ($null -ne $backups -and ($backups -is [hashtable] -or $backups -is [System.Collections.IDictionary]) -and $backups.Count -gt 0) {
                     foreach ($backupId in ($backups.Keys | Sort-Object)) {
                         $backup = $backups[$backupId]
                         if ($null -eq $backup) { continue }
 
                         # Determine availability & label
-                        $labelObj = _TryGetConfigValue -Object $backup -Name 'Label'
+                        $labelObj = Get-PSmmUiConfigMemberValue -Object $backup -Name 'Label'
                         $label = if ($null -ne $labelObj) { [string]$labelObj } else { '' }
                         if ([string]::IsNullOrWhiteSpace($label)) { continue }
 
-                        $isAvailableObj = _TryGetConfigValue -Object $backup -Name 'IsAvailable'
+                        $isAvailableObj = Get-PSmmUiConfigMemberValue -Object $backup -Name 'IsAvailable'
                         $isAvailable = if ($null -ne $isAvailableObj) { [bool]$isAvailableObj } else { $false }
-                        $driveLetterObj = _TryGetConfigValue -Object $backup -Name 'DriveLetter'
+                        $driveLetterObj = Get-PSmmUiConfigMemberValue -Object $backup -Name 'DriveLetter'
                         $driveLetter = if ($null -ne $driveLetterObj) { [string]$driveLetterObj } else { $null }
                         $statusText = if ($isAvailable -and -not [string]::IsNullOrWhiteSpace($driveLetter)) {
                             "Available ($driveLetter)"
@@ -768,7 +676,7 @@ function Show-UnifiedDrive {
 
     $DriveInfo = $DriveProjects[0]
 
-    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidthSource = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'Width')
     $uiWidth = 80
     if ($null -ne $uiWidthSource) {
         try {
@@ -780,22 +688,22 @@ function Show-UnifiedDrive {
         }
     }
 
-    $fgMasterDrive      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'MasterDrive')
-    $fgMasterDriveLight = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'MasterDriveLight')
-    $fgBackupDrive      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'BackupDrive')
-    $fgBackupDriveLight = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'BackupDriveLight')
-    $fgBackupDriveDark  = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'BackupDriveDark')
+    $fgMasterDrive      = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'MasterDrive')
+    $fgMasterDriveLight = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'MasterDriveLight')
+    $fgBackupDrive      = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'BackupDrive')
+    $fgBackupDriveLight = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'BackupDriveLight')
+    $fgBackupDriveDark  = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'BackupDriveDark')
 
-    $fgAccent      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
-    $fgSecondary   = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Secondary')
-    $fgInfo        = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
-    $fgSuccess     = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Success')
-    $fgWarning     = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Warning')
-    $fgError       = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Error')
-    $fgNeutral1    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral1')
-    $fgNeutral2    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral2')
-    $fgNeutral3    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral3')
-    $fgNeutral4    = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Neutral4')
+    $fgAccent      = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Accent')
+    $fgSecondary   = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Secondary')
+    $fgInfo        = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Info')
+    $fgSuccess     = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Success')
+    $fgWarning     = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Warning')
+    $fgError       = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Error')
+    $fgNeutral1    = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Neutral1')
+    $fgNeutral2    = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Neutral2')
+    $fgNeutral3    = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Neutral3')
+    $fgNeutral4    = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Neutral4')
 
     # Determine colors and styling based on drive type
     $IsMaster = $DriveType -eq 'Master Drive'
@@ -948,7 +856,7 @@ function Show-Menu_Project {
         $Process
     )
 
-    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidthSource = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'Width')
     $uiWidth = 80
     if ($null -ne $uiWidthSource) {
         try {
@@ -960,14 +868,14 @@ function Show-Menu_Project {
         }
     }
 
-    $fgInfo = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
+    $fgInfo = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Info')
 
     # Check for running processes
     $ProcMariaDB = $null
     $ProcDigiKam = $null
 
-    $projects = _TryGetConfigValue -Object $Config -Name 'Projects'
-    $currentProjectSource = _TryGetConfigValue -Object $projects -Name 'Current'
+    $projects = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Projects'
+    $currentProjectSource = Get-PSmmUiConfigMemberValue -Object $projects -Name 'Current'
 
     if ($null -ne $currentProjectSource) {
         $currentProject = [ProjectCurrentConfig]::FromObject($currentProjectSource)
@@ -1038,7 +946,7 @@ function Show-ProjectMenuOption_NoProcess {
         [object]$Config
     )
 
-    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidthSource = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'Width')
     $uiWidth = 80
     if ($null -ne $uiWidthSource) {
         try {
@@ -1050,7 +958,7 @@ function Show-ProjectMenuOption_NoProcess {
         }
     }
 
-    $fgPrimary = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Primary')
+    $fgPrimary = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Primary')
 
     # Note: Backup operations removed - not yet implemented
 
@@ -1076,7 +984,7 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         [object]$Config
     )
 
-    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidthSource = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'Width')
     $uiWidth = 80
     if ($null -ne $uiWidthSource) {
         try {
@@ -1088,11 +996,11 @@ function Show-ProjectMenuOptions_ProcessesRunning {
         }
     }
 
-    $fgInfo        = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
-    $fgAccent      = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Accent')
-    $fgAccentLight = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'AccentLight')
-    $fgSecondary   = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Secondary')
-    $fgError       = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Error')
+    $fgInfo        = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Info')
+    $fgAccent      = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Accent')
+    $fgAccentLight = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'AccentLight')
+    $fgSecondary   = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Secondary')
+    $fgError       = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Error')
 
     Write-PSmmHost ''
 
@@ -1166,7 +1074,7 @@ function Show-Menu_SysInfo {
         [object]$Config
     )
 
-    $uiWidthSource = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+    $uiWidthSource = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'Width')
     $uiWidth = 80
     if ($null -ne $uiWidthSource) {
         try {
@@ -1178,7 +1086,7 @@ function Show-Menu_SysInfo {
         }
     }
 
-    $fgInfo = _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'FG', 'Info')
+    $fgInfo = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'FG', 'Info')
 
     $StorageColumns = @(
         New-UiColumn -Text '[1] Show Storage Information' -Width $uiWidth -Alignment 'l' -TextColor $fgInfo

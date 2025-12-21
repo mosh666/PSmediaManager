@@ -10,86 +10,28 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmConfigMemberValue.ps1'
+    if (Test-Path -LiteralPath $helperPath) {
+        . $helperPath
+    }
+}
+
+if (-not (Get-Command -Name Set-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Set-PSmmConfigMemberValue.ps1'
+    if (Test-Path -LiteralPath $helperPath) {
+        . $helperPath
+    }
+}
+
+if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+    $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmConfigNestedValue.ps1'
+    if (Test-Path -LiteralPath $helperPath) {
+        . $helperPath
+    }
+}
+
 #region ########## PRIVATE ##########
-
-function _GetConfigMemberValue {
-    [CmdletBinding()]
-    param(
-        [Parameter()][AllowNull()][object]$Object,
-        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name
-    )
-
-    if ($null -eq $Object) {
-        return $null
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } }
-        catch { Write-Verbose "Dictionary ContainsKey failed for '$Name'. $($_.Exception.Message)" }
-
-        try { if ($Object.Contains($Name)) { return $Object[$Name] } }
-        catch { Write-Verbose "Dictionary Contains failed for '$Name'. $($_.Exception.Message)" }
-
-        try {
-            foreach ($k in $Object.Keys) {
-                if ($k -eq $Name) { return $Object[$k] }
-            }
-        }
-        catch { Write-Verbose "Dictionary key enumeration failed for '$Name'. $($_.Exception.Message)" }
-        return $null
-    }
-
-    $p = $Object.PSObject.Properties[$Name]
-    if ($null -ne $p) {
-        return $p.Value
-    }
-
-    return $null
-}
-
-function _SetConfigMemberValue {
-    [CmdletBinding()]
-    param(
-        [Parameter()][AllowNull()][object]$Object,
-        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name,
-        [Parameter()][AllowNull()]$Value
-    )
-
-    if ($null -eq $Object) {
-        return
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        $Object[$Name] = $Value
-        return
-    }
-
-    try {
-        $Object.$Name = $Value
-    }
-    catch {
-        $typeName = $Object.GetType().FullName
-        Write-Verbose "Failed to set member '$Name' on object type '$typeName'. $($_.Exception.Message)"
-    }
-}
-
-function _GetConfigNestedValue {
-    [CmdletBinding()]
-    param(
-        [Parameter()][AllowNull()][object]$Object,
-        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Path
-    )
-
-    $current = $Object
-    foreach ($segment in $Path) {
-        $current = _GetConfigMemberValue -Object $current -Name $segment
-        if ($null -eq $current) {
-            return $null
-        }
-    }
-
-    return $current
-}
 
 <#
 .SYNOPSIS
@@ -170,9 +112,9 @@ function Confirm-PowerShellVersion {
         -Message 'Validating PowerShell version against minimum requirement' -Console -File
 
     try {
-        $requirementsSource = _GetConfigMemberValue -Object $Config -Name 'Requirements'
+        $requirementsSource = Get-PSmmConfigMemberValue -Object $Config -Name 'Requirements' -Default $null
         $requirements = [RequirementsConfig]::FromObject($requirementsSource)
-        _SetConfigMemberValue -Object $Config -Name 'Requirements' -Value $requirements
+        Set-PSmmConfigMemberValue -Object $Config -Name 'Requirements' -Value $requirements
 
         $minimumVersion = $requirements.PowerShell.VersionMinimum
         $currentVersion = $PSVersionTable.PSVersion
@@ -221,13 +163,13 @@ function Confirm-PowerShellModules {
     Write-PSmmLog -Level INFO -Context 'Confirm PS Modules' `
         -Message 'Checking for required PowerShell modules' -Console -File
 
-    $requirementsSource = _GetConfigMemberValue -Object $Config -Name 'Requirements'
+    $requirementsSource = Get-PSmmConfigMemberValue -Object $Config -Name 'Requirements' -Default $null
     $requirements = [RequirementsConfig]::FromObject($requirementsSource)
-    _SetConfigMemberValue -Object $Config -Name 'Requirements' -Value $requirements
+    Set-PSmmConfigMemberValue -Object $Config -Name 'Requirements' -Value $requirements
 
-    $parametersSource = _GetConfigMemberValue -Object $Config -Name 'Parameters'
+    $parametersSource = Get-PSmmConfigMemberValue -Object $Config -Name 'Parameters' -Default $null
     $parameters = [RuntimeParameters]::FromObject($parametersSource)
-    _SetConfigMemberValue -Object $Config -Name 'Parameters' -Value $parameters
+    Set-PSmmConfigMemberValue -Object $Config -Name 'Parameters' -Value $parameters
 
     # Install and import required modules
     foreach ($module in $requirements.PowerShell.Modules) {

@@ -347,8 +347,7 @@ class AppConfigurationBuilder {
                 }
 
                 try {
-                    $p = $Object.PSObject.Properties[$Name]
-                    if ($null -ne $p) { return $p.Value }
+                    return $Object.$Name
                 }
                 catch {
                     Write-Verbose "Failed to read property '$Name' from object in config data. $($_.Exception.Message)"
@@ -450,8 +449,7 @@ class AppConfigurationBuilder {
         }
         elseif ($null -ne $pluginsContent) {
             try {
-                $p = $pluginsContent.PSObject.Properties['Plugins']
-                if ($null -ne $p) { $pluginsRoot = $p.Value }
+                $pluginsRoot = $pluginsContent.Plugins
             }
             catch {
                 Write-Verbose "Failed to read 'Plugins' property from plugins content. $($_.Exception.Message)"
@@ -520,20 +518,22 @@ class AppConfigurationBuilder {
             }
         }
         else {
-            $prop = $storageContent.PSObject.Properties['Storage']
-            if ($null -ne $prop) {
-                $storageRoot = $prop.Value
-            }
+            try { $storageRoot = $storageContent.Storage } catch { $storageRoot = $null }
         }
 
         $storageMap = $null
         if ($storageRoot -is [System.Collections.IDictionary]) {
             $storageMap = $storageRoot
         }
-        elseif ($null -ne $storageRoot -and $null -ne $storageRoot.PSObject -and $storageRoot.PSObject.Properties.Count -gt 0) {
+        elseif ($null -ne $storageRoot) {
             $storageMap = @{}
-            foreach ($p in $storageRoot.PSObject.Properties) {
-                $storageMap[$p.Name] = $p.Value
+            $props = @(
+                $storageRoot |
+                    Get-Member -MemberType Properties,NoteProperty -ErrorAction SilentlyContinue |
+                    Select-Object -ExpandProperty Name
+            )
+            foreach ($p in $props) {
+                try { $storageMap[$p] = $storageRoot.$p } catch { $storageMap[$p] = $null }
             }
         }
 
@@ -742,8 +742,7 @@ class AppConfigurationBuilder {
             }
             elseif ($null -ne $storageData) {
                 try {
-                    $p = $storageData.PSObject.Properties['Storage']
-                    if ($null -ne $p) { $storageRoot = $p.Value }
+                    $storageRoot = $storageData.Storage
                 }
                 catch {
                     Write-Verbose "Failed to read 'Storage' property from storage data. $($_.Exception.Message)"
@@ -862,8 +861,7 @@ class AppConfigurationBuilder {
             }
 
             try {
-                $p = $Object.PSObject.Properties[$Name]
-                if ($null -ne $p) { return $p.Value }
+                return $Object.$Name
             }
             catch {
                 Write-Verbose "Failed to read property '$Name' while writing storage file. $($_.Exception.Message)"
@@ -900,10 +898,15 @@ class AppConfigurationBuilder {
                 if ($backup -is [System.Collections.IDictionary]) {
                     $backupMap = $backup
                 }
-                elseif ($null -ne $backup -and $null -ne $backup.PSObject -and $backup.PSObject.Properties.Count -gt 0) {
+                elseif ($null -ne $backup) {
                     $backupMap = @{}
-                    foreach ($p in $backup.PSObject.Properties) {
-                        $backupMap[$p.Name] = $p.Value
+                    $props = @(
+                        $backup |
+                            Get-Member -MemberType Properties,NoteProperty -ErrorAction SilentlyContinue |
+                            Select-Object -ExpandProperty Name
+                    )
+                    foreach ($p in $props) {
+                        try { $backupMap[$p] = $backup.$p } catch { $backupMap[$p] = $null }
                     }
                 }
 

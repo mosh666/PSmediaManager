@@ -227,12 +227,12 @@ class ConfigValidator {
                 $current = $current[$part]
             }
             else {
-                $prop = $current.PSObject.Properties[$part]
-                if ($null -eq $prop) {
+                $next = $null
+                if (-not [ConfigMemberAccess]::TryGetMemberValue($current, $part, [ref]$next)) {
                     $found = $false
                     break
                 }
-                $current = $prop.Value
+                $current = $next
             }
         }
 
@@ -340,12 +340,10 @@ class ConfigValidator {
     #>
     hidden [void] ValidatePaths([object]$config) {
         # Safely check if Paths property exists
-        $pathsProperty = $config.PSObject.Properties['Paths']
-        if ($null -eq $pathsProperty -or $null -eq $pathsProperty.Value) {
+        $paths = $null
+        if (-not [ConfigMemberAccess]::TryGetMemberValue($config, 'Paths', [ref]$paths) -or $null -eq $paths) {
             return
         }
-
-        $paths = $pathsProperty.Value
 
         $rootValue = $null
         $repoValue = $null
@@ -374,14 +372,12 @@ class ConfigValidator {
             }
         }
         else {
-            $rootProp = $paths.PSObject.Properties['Root']
-            if ($null -ne $rootProp) { $rootValue = $rootProp.Value }
-
-            $repoProp = $paths.PSObject.Properties['RepositoryRoot']
-            if ($null -ne $repoProp) { $repoValue = $repoProp.Value }
-
-            $logProp = $paths.PSObject.Properties['Log']
-            if ($null -ne $logProp) { $logValue = $logProp.Value }
+            $tmp = $null
+            if ([ConfigMemberAccess]::TryGetMemberValue($paths, 'Root', [ref]$tmp)) { $rootValue = $tmp }
+            $tmp = $null
+            if ([ConfigMemberAccess]::TryGetMemberValue($paths, 'RepositoryRoot', [ref]$tmp)) { $repoValue = $tmp }
+            $tmp = $null
+            if ([ConfigMemberAccess]::TryGetMemberValue($paths, 'Log', [ref]$tmp)) { $logValue = $tmp }
         }
 
         $pathsToCheck = @(
@@ -436,11 +432,11 @@ class ConfigValidator {
     #>
     hidden [void] ValidateSecuritySettings([object]$config) {
         # Check for sensitive data exposure - safely access Secrets property
-        $secretsProperty = $config.PSObject.Properties['Secrets']
-        if ($null -ne $secretsProperty -and $null -ne $secretsProperty.Value) {
-            if ($secretsProperty.Value -is [System.Collections.IDictionary]) {
-                foreach ($key in $secretsProperty.Value.Keys) {
-                    $value = $secretsProperty.Value[$key]
+        $secrets = $null
+        if ([ConfigMemberAccess]::TryGetMemberValue($config, 'Secrets', [ref]$secrets) -and $null -ne $secrets) {
+            if ($secrets -is [System.Collections.IDictionary]) {
+                foreach ($key in $secrets.Keys) {
+                    $value = $secrets[$key]
                     if ($value -is [string] -and $value.Length -gt 0 -and $value -notmatch '^\*+$') {
                         $issue = [ValidationIssue]::new('Warning', 'Security', "Secrets.$key", "Plaintext secret detected (should be SecureString or masked)")
                         $this._issues.Add($issue)
@@ -450,9 +446,8 @@ class ConfigValidator {
         }
 
         # Validate KeePassXC vault configuration - safely access Vault property
-        $vaultProperty = $config.PSObject.Properties['Vault']
-        if ($null -ne $vaultProperty -and $null -ne $vaultProperty.Value) {
-            $vault = $vaultProperty.Value
+        $vault = $null
+        if ([ConfigMemberAccess]::TryGetMemberValue($config, 'Vault', [ref]$vault) -and $null -ne $vault) {
 
             # Get Database value from hashtable or PSObject
             $vaultPath = $null
@@ -471,8 +466,8 @@ class ConfigValidator {
                 if ($hasDb) { $vaultPath = $vault['Database'] }
             }
             else {
-                $vaultDbProperty = $vault.PSObject.Properties['Database']
-                $vaultPath = if ($null -ne $vaultDbProperty) { $vaultDbProperty.Value } else { $null }
+                $tmp = $null
+                $vaultPath = if ([ConfigMemberAccess]::TryGetMemberValue($vault, 'Database', [ref]$tmp)) { $tmp } else { $null }
             }
 
             if (-not [string]::IsNullOrWhiteSpace($vaultPath)) {
@@ -492,13 +487,19 @@ class ConfigValidator {
     #>
     hidden [void] ValidateStorageConfiguration([object]$config) {
         # Safely access Storage property
-        $storageProperty = $config.PSObject.Properties['Storage']
-        if ($null -eq $storageProperty -or $null -eq $storageProperty.Value -or $storageProperty.Value.Count -eq 0) {
+        $storage = $null
+        if (-not [ConfigMemberAccess]::TryGetMemberValue($config, 'Storage', [ref]$storage) -or $null -eq $storage) {
             return
         }
 
-        foreach ($groupKey in $storageProperty.Value.Keys) {
-            $group = $storageProperty.Value[$groupKey]
+        $storageCount = 0
+        try { $storageCount = [int]$storage.Count } catch { $storageCount = 0 }
+        if ($storageCount -eq 0) {
+            return
+        }
+
+        foreach ($groupKey in $storage.Keys) {
+            $group = $storage[$groupKey]
 
             if ($null -eq $group) {
                 continue
@@ -521,8 +522,8 @@ class ConfigValidator {
                 if ($hasMaster) { $master = $group['Master'] }
             }
             else {
-                $masterProperty = $group.PSObject.Properties['Master']
-                if ($null -ne $masterProperty) { $master = $masterProperty.Value }
+                $tmp = $null
+                if ([ConfigMemberAccess]::TryGetMemberValue($group, 'Master', [ref]$tmp)) { $master = $tmp }
             }
 
             if ($null -ne $master) {
@@ -543,8 +544,8 @@ class ConfigValidator {
                     if ($hasDrive) { $masterDrive = $master['Drive'] }
                 }
                 else {
-                    $driveProperty = $master.PSObject.Properties['Drive']
-                    if ($null -ne $driveProperty) { $masterDrive = $driveProperty.Value }
+                    $tmp = $null
+                    if ([ConfigMemberAccess]::TryGetMemberValue($master, 'Drive', [ref]$tmp)) { $masterDrive = $tmp }
                 }
 
                 if ($masterDrive -is [System.Collections.IDictionary]) {
@@ -578,11 +579,11 @@ class ConfigValidator {
                     }
                 }
                 else {
-                    $serialProperty = $masterDrive.PSObject.Properties['Serial']
-                    if ($null -ne $serialProperty) { $serialValue = $serialProperty.Value }
+                    $tmp = $null
+                    if ([ConfigMemberAccess]::TryGetMemberValue($masterDrive, 'Serial', [ref]$tmp)) { $serialValue = $tmp }
                     if ($null -eq $serialValue) {
-                        $serialNumberProperty = $masterDrive.PSObject.Properties['SerialNumber']
-                        if ($null -ne $serialNumberProperty) { $serialValue = $serialNumberProperty.Value }
+                        $tmp = $null
+                        if ([ConfigMemberAccess]::TryGetMemberValue($masterDrive, 'SerialNumber', [ref]$tmp)) { $serialValue = $tmp }
                     }
                 }
 
@@ -609,8 +610,8 @@ class ConfigValidator {
                 if ($hasBackup) { $backup = $group['Backup'] }
             }
             else {
-                $backupProperty = $group.PSObject.Properties['Backup']
-                if ($null -ne $backupProperty) { $backup = $backupProperty.Value }
+                $tmp = $null
+                if ([ConfigMemberAccess]::TryGetMemberValue($group, 'Backup', [ref]$tmp)) { $backup = $tmp }
             }
 
             if ($null -ne $backup) {
@@ -642,8 +643,8 @@ class ConfigValidator {
                                 if ($hasDrive) { $driveObj = $backupDrive['Drive'] }
                             }
                             else {
-                                $driveProperty = $backupDrive.PSObject.Properties['Drive']
-                                if ($null -ne $driveProperty) { $driveObj = $driveProperty.Value }
+                                $tmp = $null
+                                if ([ConfigMemberAccess]::TryGetMemberValue($backupDrive, 'Drive', [ref]$tmp)) { $driveObj = $tmp }
                             }
 
                             $serialValue = $null
@@ -662,11 +663,11 @@ class ConfigValidator {
                                 }
                             }
                             else {
-                                $serialProperty = $driveObj.PSObject.Properties['Serial']
-                                if ($null -ne $serialProperty) { $serialValue = $serialProperty.Value }
+                                $tmp = $null
+                                if ([ConfigMemberAccess]::TryGetMemberValue($driveObj, 'Serial', [ref]$tmp)) { $serialValue = $tmp }
                                 if ($null -eq $serialValue) {
-                                    $serialNumberProperty = $driveObj.PSObject.Properties['SerialNumber']
-                                    if ($null -ne $serialNumberProperty) { $serialValue = $serialNumberProperty.Value }
+                                    $tmp = $null
+                                    if ([ConfigMemberAccess]::TryGetMemberValue($driveObj, 'SerialNumber', [ref]$tmp)) { $serialValue = $tmp }
                                 }
                             }
 
@@ -679,11 +680,11 @@ class ConfigValidator {
                 }
                 else {
                     $serialValue = $null
-                    $serialProperty = $backup.PSObject.Properties['Serial']
-                    if ($null -ne $serialProperty) { $serialValue = $serialProperty.Value }
+                    $tmp = $null
+                    if ([ConfigMemberAccess]::TryGetMemberValue($backup, 'Serial', [ref]$tmp)) { $serialValue = $tmp }
                     if ($null -eq $serialValue) {
-                        $serialNumberProperty = $backup.PSObject.Properties['SerialNumber']
-                        if ($null -ne $serialNumberProperty) { $serialValue = $serialNumberProperty.Value }
+                        $tmp = $null
+                        if ([ConfigMemberAccess]::TryGetMemberValue($backup, 'SerialNumber', [ref]$tmp)) { $serialValue = $tmp }
                     }
 
                     if ([string]::IsNullOrWhiteSpace([string]$serialValue)) {
@@ -750,6 +751,9 @@ class ConfigValidator {
             return
         }
 
+        $runtimeTypeName = $null
+        try { $runtimeTypeName = $runtime.GetType().Name } catch { $runtimeTypeName = $null }
+
         if ($null -eq $disk) {
             $drift = [ConfigDrift]::new($path, $runtime, $null, $true, 'Added')
             $drifts.Add($drift)
@@ -766,12 +770,12 @@ class ConfigValidator {
                 $this.CompareObjects($runtimeValue, $diskValue, $newPath, $drifts)
             }
         }
-        elseif ($runtime -is [AppConfiguration] -and $disk -is [hashtable]) {
+        elseif ($disk -is [hashtable] -and $runtimeTypeName -eq 'AppConfiguration') {
             # Compare AppConfiguration properties with hashtable
-            foreach ($prop in $runtime.PSObject.Properties) {
-                $key = $prop.Name
+            $props = @($runtime | Get-Member -MemberType Properties,NoteProperty -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+            foreach ($key in $props) {
                 $newPath = if ([string]::IsNullOrWhiteSpace($path)) { $key } else { "$path.$key" }
-                $runtimeValue = $prop.Value
+                $runtimeValue = [ConfigMemberAccess]::GetMemberValue($runtime, $key)
                 $diskValue = if ($disk.ContainsKey($key)) { $disk[$key] } else { $null }
                 $this.CompareObjects($runtimeValue, $diskValue, $newPath, $drifts)
             }

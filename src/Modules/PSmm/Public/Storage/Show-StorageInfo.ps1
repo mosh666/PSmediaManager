@@ -25,49 +25,6 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
-function Get-ConfigValue {
-    param(
-        [Parameter(Mandatory)]
-        [object]$InputObject,
-
-        [Parameter(Mandatory)]
-        [string]$Name
-    )
-
-    if ($null -eq $InputObject) {
-        return $null
-    }
-
-    if ($InputObject -is [System.Collections.IDictionary]) {
-        try {
-            if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
-        }
-        try {
-            if ($InputObject.Contains($Name)) { return $InputObject[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigValue: failed Contains('$Name'): $($_.Exception.Message)"
-        }
-        try {
-            foreach ($k in $InputObject.Keys) {
-                if ($k -eq $Name) { return $InputObject[$k] }
-            }
-        }
-        catch {
-            Write-Verbose "Get-ConfigValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
-        }
-        return $null
-    }
-
-    $p = $InputObject.PSObject.Properties[$Name]
-    if ($null -ne $p) { return $p.Value }
-
-    return $null
-}
-
 #region ########## PUBLIC ##########
 
 function Show-StorageInfo {
@@ -81,13 +38,21 @@ function Show-StorageInfo {
         [switch]$ShowDetails
     )
 
+    if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
+        $moduleRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $helperPath = Join-Path -Path $moduleRoot -ChildPath 'Private\\Get-PSmmConfigMemberValue.ps1'
+        if (Test-Path $helperPath) {
+            . $helperPath
+        }
+    }
+
     try {
         Write-PSmmHost "`n==================== Storage Configuration ====================" -ForegroundColor Cyan
 
         # Get available drives if showing details
         $availableDrives = if ($ShowDetails) { Get-StorageDrive } else { $null }
 
-        $storageRoot = Get-ConfigValue -InputObject $Config -Name 'Storage'
+        $storageRoot = Get-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Default $null
         if ($null -eq $storageRoot -or -not ($storageRoot -is [System.Collections.IDictionary]) -or $storageRoot.Count -eq 0) {
             Write-PSmmHost "`n(No storage groups configured)" -ForegroundColor Yellow
             Write-PSmmHost "`n===============================================================`n" -ForegroundColor Cyan
@@ -101,8 +66,7 @@ function Show-StorageInfo {
             $group = $storageRoot[$storageGroup]
 
             # Display Master storage
-            $master = $null
-            try { $master = $group.Master } catch { $master = (Get-ConfigValue -InputObject $group -Name 'Master') }
+            $master = Get-PSmmConfigMemberValue -Object $group -Name 'Master' -Default $null
             if ($null -ne $master) {
                 Write-PSmmHost '  Master:' -ForegroundColor Green
                 Show-StorageDevice -Config $master `
@@ -111,11 +75,10 @@ function Show-StorageInfo {
             }
 
             # Display Backup storage(s)
-            $backupStorage = $null
-            try { $backupStorage = $group.Backups } catch { $backupStorage = $null }
+            $backupStorage = Get-PSmmConfigMemberValue -Object $group -Name 'Backups' -Default $null
             if ($null -eq $backupStorage) {
                 # Legacy compatibility (old schema used 'Backup')
-                $backupStorage = (Get-ConfigValue -InputObject $group -Name 'Backup')
+                $backupStorage = Get-PSmmConfigMemberValue -Object $group -Name 'Backup' -Default $null
             }
 
             if ($null -ne $backupStorage) {
@@ -127,10 +90,7 @@ function Show-StorageInfo {
                     Write-PSmmHost '  Backup:' -ForegroundColor Green
                     foreach ($backupId in $backupStorage.Keys | Sort-Object) {
                         Write-PSmmHost "    Backup $backupId" -ForegroundColor Magenta
-                        $backupCfg = $null
-                        try { $backupCfg = $backupStorage[$backupId] } catch {
-                            try { $backupCfg = $backupStorage.$backupId } catch { $backupCfg = $null }
-                        }
+                        $backupCfg = Get-PSmmConfigMemberValue -Object $backupStorage -Name ([string]$backupId) -Default $null
                         if ($null -eq $backupCfg) {
                             continue
                         }
@@ -178,10 +138,10 @@ function Show-StorageDevice {
     $label = $null
     $availableFlag = $null
 
-    $driveLetter = Get-ConfigValue -InputObject $Config -Name 'DriveLetter'
-    $serialNumber = Get-ConfigValue -InputObject $Config -Name 'SerialNumber'
-    $label = Get-ConfigValue -InputObject $Config -Name 'Label'
-    $availableFlag = Get-ConfigValue -InputObject $Config -Name 'IsAvailable'
+    $driveLetter = Get-PSmmConfigMemberValue -Object $Config -Name 'DriveLetter' -Default $null
+    $serialNumber = Get-PSmmConfigMemberValue -Object $Config -Name 'SerialNumber' -Default $null
+    $label = Get-PSmmConfigMemberValue -Object $Config -Name 'Label' -Default $null
+    $availableFlag = Get-PSmmConfigMemberValue -Object $Config -Name 'IsAvailable' -Default $null
 
     $driveLetter = if ($null -eq $driveLetter) { '' } else { [string]$driveLetter }
     $serialNumber = if ($null -eq $serialNumber) { '' } else { [string]$serialNumber }

@@ -90,49 +90,11 @@ Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
 
-function _TryGetConfigValue {
-    [CmdletBinding()]
-    param(
-        [Parameter()][AllowNull()]$Object,
-        [Parameter(Mandatory)][string]$Name
-    )
-
-    if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-        return $null
+if (-not (Get-Command -Name Get-PSmmUiConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
     }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "_TryGetConfigValue: IDictionary.ContainsKey failed: $($_.Exception.Message)" }
-        try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "_TryGetConfigValue: IDictionary.Contains failed: $($_.Exception.Message)" }
-        try {
-            foreach ($k in $Object.Keys) {
-                if ($k -eq $Name) { return $Object[$k] }
-            }
-        }
-        catch {
-            Write-Verbose "_TryGetConfigValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
-        }
-        return $null
-    }
-
-    $p = $Object.PSObject.Properties[$Name]
-    if ($null -ne $p) { return $p.Value }
-    return $null
-}
-
-function _TryGetNestedValue {
-    [CmdletBinding()]
-    param(
-        [Parameter()][AllowNull()]$Root,
-        [Parameter(Mandatory)][string[]]$PathParts
-    )
-
-    $cur = $Root
-    foreach ($part in $PathParts) {
-        if ($null -eq $cur) { return $null }
-        $cur = _TryGetConfigValue -Object $cur -Name $part
-    }
-    return $cur
 }
 
 function New-UiColumn {
@@ -288,7 +250,7 @@ function Format-UI {
     begin {
         # Safely derive column count; support single hashtable or null
         $colCount = if ($null -eq $Columns) { 0 } elseif ($Columns -is [array]) { $Columns.Count } else { 1 }
-        $uiWidth = _TryGetNestedValue -Root $Config -PathParts @('UI', 'Width')
+        $uiWidth = Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'Width')
         $configWidth = if ($null -ne $uiWidth) { $uiWidth } else { 'N/A' }
         Write-Verbose ("[Format-UI] BEGIN (WidthParam={0}, ConfigWidth={1}, Columns={2})" -f ($PSBoundParameters['Width']), $configWidth, $colCount)
         # Define constants
@@ -609,31 +571,31 @@ function Format-ColumnText {
     # Build ANSI color and formatting codes
     $ansiCodes = @()
 
-    $ansiBasic = if ($Config) { _TryGetNestedValue -Root $Config -PathParts @('UI', 'ANSI', 'Basic') } else { $null }
+    $ansiBasic = if ($Config) { Get-PSmmUiConfigNestedValue -Object $Config -Path @('UI', 'ANSI', 'Basic') } else { $null }
 
     # Add basic formatting codes
     if ($Bold -and $null -ne $ansiBasic) {
-        $boldCode = _TryGetConfigValue -Object $ansiBasic -Name 'Bold'
+        $boldCode = Get-PSmmUiConfigMemberValue -Object $ansiBasic -Name 'Bold'
         if (-not [string]::IsNullOrEmpty($boldCode)) { $ansiCodes += ([string]$boldCode).TrimStart('[').TrimEnd('m') }
     }
     if ($Italic -and $null -ne $ansiBasic) {
-        $italicCode = _TryGetConfigValue -Object $ansiBasic -Name 'Italic'
+        $italicCode = Get-PSmmUiConfigMemberValue -Object $ansiBasic -Name 'Italic'
         if (-not [string]::IsNullOrEmpty($italicCode)) { $ansiCodes += ([string]$italicCode).TrimStart('[').TrimEnd('m') }
     }
     if ($Underline -and $null -ne $ansiBasic) {
-        $underlineCode = _TryGetConfigValue -Object $ansiBasic -Name 'Underline'
+        $underlineCode = Get-PSmmUiConfigMemberValue -Object $ansiBasic -Name 'Underline'
         if (-not [string]::IsNullOrEmpty($underlineCode)) { $ansiCodes += ([string]$underlineCode).TrimStart('[').TrimEnd('m') }
     }
     if ($Dim -and $null -ne $ansiBasic) {
-        $dimCode = _TryGetConfigValue -Object $ansiBasic -Name 'Dim'
+        $dimCode = Get-PSmmUiConfigMemberValue -Object $ansiBasic -Name 'Dim'
         if (-not [string]::IsNullOrEmpty($dimCode)) { $ansiCodes += ([string]$dimCode).TrimStart('[').TrimEnd('m') }
     }
     if ($Blink -and $null -ne $ansiBasic) {
-        $blinkCode = _TryGetConfigValue -Object $ansiBasic -Name 'Blink'
+        $blinkCode = Get-PSmmUiConfigMemberValue -Object $ansiBasic -Name 'Blink'
         if (-not [string]::IsNullOrEmpty($blinkCode)) { $ansiCodes += ([string]$blinkCode).TrimStart('[').TrimEnd('m') }
     }
     if ($Strikethrough -and $null -ne $ansiBasic) {
-        $strikeCode = _TryGetConfigValue -Object $ansiBasic -Name 'Strikethrough'
+        $strikeCode = Get-PSmmUiConfigMemberValue -Object $ansiBasic -Name 'Strikethrough'
         if (-not [string]::IsNullOrEmpty($strikeCode)) { $ansiCodes += ([string]$strikeCode).TrimStart('[').TrimEnd('m') }
     }
 

@@ -250,6 +250,28 @@ function Export-SafeConfiguration {
 
                 if ($null -eq $InputObject) { return $null }
 
+                $value = $null
+                $hasConfigMemberAccess = $false
+                try {
+                    $hasConfigMemberAccess = ($null -ne ('ConfigMemberAccess' -as [type]))
+                }
+                catch {
+                    $hasConfigMemberAccess = $false
+                }
+
+                if ($hasConfigMemberAccess) {
+                    try {
+                        if ([ConfigMemberAccess]::TryGetMemberValue($InputObject, $Name, [ref]$value)) {
+                            return $value
+                        }
+                        return $null
+                    }
+                    catch {
+                        Write-Verbose "[SafeExport] _GetMemberValue ConfigMemberAccess lookup failed: $($_.Exception.Message)"
+                        return $null
+                    }
+                }
+
                 if ($InputObject -is [System.Collections.IDictionary]) {
                     try {
                         if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
@@ -276,28 +298,60 @@ function Export-SafeConfiguration {
                 }
 
                 # Prefer property access for typed objects/PSCustomObjects
-                $propInfo = $InputObject.PSObject.Properties[$Name]
-                if ($propInfo) { return $propInfo.Value }
+                try {
+                    return $InputObject.$Name
+                }
+                catch {
+                    $null = $_
+                    # Ignore
+                }
 
-                # Only attempt ContainsKey/indexer access if methods exist on the object
-                $hasContainsKey = ($InputObject.PSObject.Methods.Match('ContainsKey').Count -gt 0)
-                $hasIndexer = ($InputObject.PSObject.Methods.Match('get_Item').Count -gt 0)
-                if ($hasContainsKey -and $hasIndexer) {
-                    try {
-                        if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
-                    }
-                    catch {
-                        Write-Verbose "[SafeExport] _GetMemberValue ContainsKey lookup failed: $($_.Exception.Message)"
-                    }
-                    try {
-                        return $InputObject[$Name]
-                    }
-                    catch {
-                        Write-Verbose "[SafeExport] _GetMemberValue indexer lookup failed: $($_.Exception.Message)"
-                    }
+                try {
+                    if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
+                }
+                catch {
+                    Write-Verbose "[SafeExport] _GetMemberValue ContainsKey lookup failed: $($_.Exception.Message)"
+                }
+                try {
+                    return $InputObject[$Name]
+                }
+                catch {
+                    Write-Verbose "[SafeExport] _GetMemberValue indexer lookup failed: $($_.Exception.Message)"
                 }
 
                 return $null
+            }
+
+            function _HasMember {
+                param(
+                    [Parameter()][AllowNull()]$InputObject,
+                    [Parameter()][ValidateNotNullOrEmpty()][string]$Name
+                )
+
+                if ($null -eq $InputObject) { return $false }
+
+                $value = $null
+                $hasConfigMemberAccess = $false
+                try {
+                    $hasConfigMemberAccess = ($null -ne ('ConfigMemberAccess' -as [type]))
+                }
+                catch {
+                    $hasConfigMemberAccess = $false
+                }
+
+                if ($hasConfigMemberAccess) {
+                    try {
+                        return [ConfigMemberAccess]::TryGetMemberValue($InputObject, $Name, [ref]$value)
+                    }
+                    catch {
+                        Write-Verbose "[SafeExport] _HasMember ConfigMemberAccess lookup failed: $($_.Exception.Message)"
+                        return $false
+                    }
+                }
+
+                try { $null = $InputObject.$Name; return $true } catch { $null = $_ }
+                try { $null = $InputObject[$Name]; return $true } catch { $null = $_ }
+                return $false
             }
 
             function _GetDictionaryKeys {
@@ -308,9 +362,6 @@ function Export-SafeConfiguration {
                 if ($Dictionary -is [System.Collections.IDictionary]) {
                     return @($Dictionary.Keys)
                 }
-
-                $keysProp = $Dictionary.PSObject.Properties['Keys']
-                if ($keysProp) { return @($keysProp.Value) }
 
                 try { return @($Dictionary.Keys) } catch { return @() }
             }
@@ -331,8 +382,8 @@ function Export-SafeConfiguration {
             elseif ($typeNames -contains 'AppConfiguration') {
                 $isAppConfiguration = $true
             }
-            $hasPathsProperty = $Configuration.PSObject.Properties.Match('Paths').Count -gt 0
-            $hasStorageProperty = $Configuration.PSObject.Properties.Match('Storage').Count -gt 0
+            $hasPathsProperty = _HasMember -InputObject $Configuration -Name 'Paths'
+            $hasStorageProperty = _HasMember -InputObject $Configuration -Name 'Storage'
             $looksTyped = $isAppConfiguration -or ($hasPathsProperty -and $hasStorageProperty)
 
             if (-not $looksTyped) {
@@ -437,7 +488,7 @@ function Export-SafeConfiguration {
 
                     # Ensure nested backups directly on the Master object (runtime augmentation, idempotent)
                     try {
-                        if ($masterObj -and $backupsObj -and ($masterObj.PSObject.Properties.Name -notcontains 'Backups')) {
+                        if ($masterObj -and $backupsObj -and (-not (_HasMember -InputObject $masterObj -Name 'Backups'))) {
                             $masterObj | Add-Member -MemberType NoteProperty -Name Backups -Value $backupsObj -Force
                         }
                     }
@@ -599,10 +650,7 @@ function Export-SafeConfiguration {
             if ($null -ne $projectsSource) {
                 $projectsToClone = $projectsSource
                 try {
-                    $toHashtableMethod = $projectsSource.GetType().GetMethod('ToHashtable')
-                    if ($null -ne $toHashtableMethod) {
-                        $projectsToClone = $projectsSource.ToHashtable()
-                    }
+                    $projectsToClone = $projectsSource.ToHashtable()
                 }
                 catch {
                     $projectsToClone = $projectsSource
@@ -738,10 +786,7 @@ function Export-SafeConfiguration {
             if ($null -ne $uiSource) {
                 $uiToClone = $uiSource
                 try {
-                    $toHashtableMethod = $uiSource.GetType().GetMethod('ToHashtable')
-                    if ($null -ne $toHashtableMethod) {
-                        $uiToClone = $uiSource.ToHashtable()
-                    }
+                    $uiToClone = $uiSource.ToHashtable()
                 }
                 catch {
                     $uiToClone = $uiSource
@@ -1329,8 +1374,7 @@ function Export-SafeConfiguration {
                 if ($hasRequirements) { $reqSourceOriginal = $Configuration['Requirements'] }
             }
             else {
-                $reqProp = $Configuration.PSObject.Properties['Requirements']
-                if ($reqProp) { $reqSourceOriginal = $reqProp.Value }
+                $reqSourceOriginal = _GetMemberValue -InputObject $Configuration -Name 'Requirements'
             }
 
             if ($null -ne $reqSourceOriginal) {
@@ -1355,8 +1399,7 @@ function Export-SafeConfiguration {
                     if ($hasPSModules) { $modulesCandidate = $reqSourceOriginal['PSModules'] }
                 }
                 else {
-                    $reqModulesProp = $reqSourceOriginal.PSObject.Properties['PSModules']
-                    if ($reqModulesProp) { $modulesCandidate = $reqModulesProp.Value }
+                    $modulesCandidate = _GetMemberValue -InputObject $reqSourceOriginal -Name 'PSModules'
                 }
 
                 if ($null -ne $modulesCandidate) {
@@ -1393,8 +1436,7 @@ function Export-SafeConfiguration {
                     if ($hasPowerShell) { $powerShellCandidate = $reqSourceOriginal['PowerShell'] }
                 }
                 else {
-                    $reqPowerShellProp = $reqSourceOriginal.PSObject.Properties['PowerShell']
-                    if ($reqPowerShellProp) { $powerShellCandidate = $reqPowerShellProp.Value }
+                    $powerShellCandidate = _GetMemberValue -InputObject $reqSourceOriginal -Name 'PowerShell'
                 }
 
                 if ($null -ne $powerShellCandidate) {
@@ -1419,8 +1461,7 @@ function Export-SafeConfiguration {
                         if ($hasModules) { $powerShellModulesCandidate = $powerShellCandidate['Modules'] }
                     }
                     else {
-                        $psModulesProp = $powerShellCandidate.PSObject.Properties['Modules']
-                        if ($psModulesProp) { $powerShellModulesCandidate = $psModulesProp.Value }
+                        $powerShellModulesCandidate = _GetMemberValue -InputObject $powerShellCandidate -Name 'Modules'
                     }
 
                     if ($null -ne $powerShellModulesCandidate) {
@@ -1654,7 +1695,7 @@ function Export-SafeConfiguration {
 
         # Resolve FileSystem service from container if available
         $fileSystem = $null
-        if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Match('Resolve').Count -gt 0)) {
+        if ($null -ne $ServiceContainer) {
             try {
                 $fileSystem = $ServiceContainer.Resolve('FileSystem')
             }
@@ -1666,10 +1707,18 @@ function Export-SafeConfiguration {
         # Ensure directory exists (use FileSystem service or fallback to native cmdlets)
         $parent = Split-Path -Parent $Path
         if (-not [string]::IsNullOrWhiteSpace($parent)) {
-            if ($null -ne $fileSystem -and ($fileSystem.PSObject.Methods.Match('TestPath').Count -gt 0) -and ($fileSystem.PSObject.Methods.Match('NewItem').Count -gt 0)) {
-                if (-not $fileSystem.TestPath($parent)) { $null = $fileSystem.NewItem($parent, 'Directory') }
+            $handled = $false
+            if ($null -ne $fileSystem) {
+                try {
+                    if (-not $fileSystem.TestPath($parent)) { $null = $fileSystem.NewItem($parent, 'Directory') }
+                    $handled = $true
+                }
+                catch {
+                    $handled = $false
+                }
             }
-            else {
+
+            if (-not $handled) {
                 # Fallback to native PowerShell cmdlets
                 if (-not (Test-Path -Path $parent)) {
                     $null = New-Item -Path $parent -ItemType Directory -Force -ErrorAction Stop
@@ -1678,15 +1727,25 @@ function Export-SafeConfiguration {
         }
 
         # Write using file system service or fallback to native Set-Content
-        if ($null -ne $fileSystem -and ($fileSystem.PSObject.Methods.Match('SetContent').Count -gt 0)) {
+        $wroteWithService = $false
+        if ($null -ne $fileSystem) {
             try {
                 $fileSystem.SetContent($Path, $content)
+                $wroteWithService = $true
             }
             catch {
-                throw "[SafeExport] FileSystem.SetContent failed: $_"
+                $msg = $null
+                try { $msg = $_.Exception.Message } catch { $msg = $null }
+                if ($msg -and ($msg -match "method named 'SetContent'")) {
+                    $wroteWithService = $false
+                }
+                else {
+                    throw "[SafeExport] FileSystem.SetContent failed: $_"
+                }
             }
         }
-        else {
+
+        if (-not $wroteWithService) {
             # Fallback to native PowerShell Set-Content
             try {
                 Set-Content -Path $Path -Value $content -Encoding UTF8 -Force -ErrorAction Stop

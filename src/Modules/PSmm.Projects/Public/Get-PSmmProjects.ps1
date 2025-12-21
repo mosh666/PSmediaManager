@@ -1,6 +1,13 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name 'Get-PSmmProjectsConfigMemberValue' -ErrorAction SilentlyContinue)) {
+    $helpersPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Private\ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $helpersPath) {
+        . $helpersPath
+    }
+}
+
 function Get-PSmmProjects {
     <#
     .SYNOPSIS
@@ -59,82 +66,6 @@ function Get-PSmmProjects {
         $ServiceContainer = $null
     )
 
-    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-        if ($null -eq $Object) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Get-ConfigMemberValue: Contains('$Name') failed: $_"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
-    function Set-ConfigMemberValue {
-        [CmdletBinding(SupportsShouldProcess = $true)]
-        param(
-            [Parameter()][AllowNull()][object]$Object,
-            [Parameter(Mandatory)][string]$Name,
-            [Parameter()][AllowNull()][object]$Value
-        )
-
-        if ($null -eq $Object) {
-            return
-        }
-
-        if (-not $PSCmdlet.ShouldProcess($Name, 'Set config member value')) {
-            return
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            $Object[$Name] = $Value
-            return
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            $Object.$Name = $Value
-            return
-        }
-
-        $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
-    }
-
     function ConvertTo-PSmmLegacyView([object]$value) {
         if ($null -eq $value) {
             return $null
@@ -187,9 +118,16 @@ function Get-PSmmProjects {
             Write-Verbose "[Get-PSmmProjects] Get-PSmmMapValue: indexer access for '$key' failed: $_"
         }
 
-        $p = $map.PSObject.Properties[$key]
-        if ($null -ne $p) {
-            return $p.Value
+        if (Get-Command -Name Test-PSmmProjectsConfigMember -ErrorAction SilentlyContinue) {
+            if (Test-PSmmProjectsConfigMember -Object $map -Name $key) {
+                return Get-PSmmProjectsConfigMemberValue -Object $map -Name $key
+            }
+        }
+        else {
+            $fallback = Get-PSmmProjectsConfigMemberValue -Object $map -Name $key
+            if ($null -ne $fallback) {
+                return $fallback
+            }
         }
 
         return $null
@@ -213,8 +151,26 @@ function Get-PSmmProjects {
         }
 
         $ht2 = @{}
-        foreach ($p in $value.PSObject.Properties) {
-            $ht2[[string]$p.Name] = $p.Value
+        $memberNames = @(
+            $value |
+                Get-Member -MemberType NoteProperty, Property -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty Name
+        )
+
+        foreach ($memberName in $memberNames) {
+            if ([string]::IsNullOrWhiteSpace([string]$memberName)) {
+                continue
+            }
+
+            $memberValue = $null
+            try {
+                $memberValue = $value.$memberName
+            }
+            catch {
+                $memberValue = $null
+            }
+
+            $ht2[[string]$memberName] = $memberValue
         }
         return $ht2
     }
@@ -231,7 +187,11 @@ function Get-PSmmProjects {
         }
         catch {
             if ($storage -isnot [System.Collections.IDictionary]) {
-                $keys = @($storage.PSObject.Properties | ForEach-Object { $_.Name })
+                $keys = @(
+                    $storage |
+                        Get-Member -MemberType NoteProperty, Property -ErrorAction SilentlyContinue |
+                        Select-Object -ExpandProperty Name
+                )
             }
         }
 
@@ -257,8 +217,11 @@ function Get-PSmmProjects {
             if ($null -eq $sg) { continue }
 
             # Normalize Backup -> Backups for legacy shapes
-            if ($null -eq $sg.PSObject.Properties['Backups'] -and $null -ne $sg.PSObject.Properties['Backup']) {
-                $sg | Add-Member -NotePropertyName 'Backups' -NotePropertyValue $sg.Backup -Force
+            $hasBackups = Test-PSmmProjectsConfigMember -Object $sg -Name 'Backups'
+            $hasBackup = Test-PSmmProjectsConfigMember -Object $sg -Name 'Backup'
+            if (-not $hasBackups -and $hasBackup) {
+                $backupValue = Get-PSmmProjectsConfigMemberValue -Object $sg -Name 'Backup'
+                $sg | Add-Member -NotePropertyName 'Backups' -NotePropertyValue $backupValue -Force
             }
 
             # Ensure Backups is a dictionary-like value and that child drive configs are PSCustomObject views
@@ -339,9 +302,7 @@ function Get-PSmmProjects {
     $FileSystem = $null
     if ($null -ne $ServiceContainer) {
         try {
-            if ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve') {
-                $FileSystem = $ServiceContainer.Resolve('FileSystem')
-            }
+            $FileSystem = $ServiceContainer.Resolve('FileSystem')
         }
         catch {
             Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
@@ -360,32 +321,32 @@ function Get-PSmmProjects {
     }
 
     # Ensure Projects.Registry exists on Config
-    $projectsConfig = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+    $projectsConfig = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects'
     if ($null -eq $projectsConfig) {
         $projectsConfig = [ProjectsConfig]::FromObject($null)
-        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
     }
     elseif ($projectsConfig -isnot [ProjectsConfig]) {
         $projectsConfig = [ProjectsConfig]::FromObject($projectsConfig)
-        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
     }
 
-    $registry = Get-ConfigMemberValue -Object $projectsConfig -Name 'Registry'
+    $registry = Get-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry'
     if ($null -eq $registry) {
         $registry = [ProjectsRegistryCache]::new()
-        Set-ConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $registry
+        Set-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $registry
     }
     else {
         # Normalize legacy hashtable/object shapes into the typed cache model
         $registry = [ProjectsRegistryCache]::FromObject($registry)
-        Set-ConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $registry
+        Set-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $registry
     }
 
     try {
         $isTestMode = [string]::Equals($env:MEDIA_MANAGER_TEST_MODE, '1', [System.StringComparison]::OrdinalIgnoreCase)
 
         # Local reference to registry
-        $registry = Get-ConfigMemberValue -Object $projectsConfig -Name 'Registry'
+        $registry = Get-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry'
 
         # Disk-based cache has been removed; rely on in-memory registry and full scan
 
@@ -404,7 +365,7 @@ function Get-PSmmProjects {
                     -Message 'FileSystem service not available, cannot validate cache' -File
                 Write-Verbose 'FileSystem service not available, bypassing cache validation'
             } else {
-                $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                $storageSource = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Storage'
                 $Storage = ConvertTo-StorageMap -storage $storageSource
 
                 # Only validate cache against storage if storage is configured
@@ -533,7 +494,7 @@ function Get-PSmmProjects {
         $ProjectDirs = @{}
 
         # Get all storage groups (1, 2, etc.)
-        $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+        $storageSource = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Storage'
         $Storage = ConvertTo-StorageMap -storage $storageSource
 
         # Process each storage group
@@ -609,6 +570,26 @@ function Get-PSmmProjects {
         }
 
         # Decide whether registry actually changed before updating/logging
+        function Get-StringMemberValue {
+            param(
+                [Parameter(Mandatory)][AllowNull()][object]$Object,
+                [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name,
+                [Parameter()][AllowNull()][string]$Default = ''
+            )
+
+            $val = Get-PSmmProjectsConfigMemberValue -Object $Object -Name $Name
+            if ($null -eq $val) {
+                return $Default
+            }
+
+            try {
+                return [string]$val
+            }
+            catch {
+                return $Default
+            }
+        }
+
         function Get-FlattenedProjectsFromByLabel {
             param([Parameter(Mandatory)][hashtable]$ByLabel)
             $result = @()
@@ -617,12 +598,12 @@ function Get-PSmmProjects {
                 if ($null -eq $items) { continue }
                 foreach ($item in $items) {
                     # Use a stable identity key capturing moves/renames/drives
-                    $driveType = if ($item.PSObject.Properties.Match('DriveType').Count) { $item.DriveType } else { '' }
-                    $backupId = if ($item.PSObject.Properties.Match('BackupId').Count) { $item.BackupId } else { '' }
-                    $serial = if ($item.PSObject.Properties.Match('SerialNumber').Count) { $item.SerialNumber } else { '' }
-                    $name = if ($item.PSObject.Properties.Match('Name').Count) { $item.Name } else { '' }
-                    $path = if ($item.PSObject.Properties.Match('Path').Count) { $item.Path } else { '' }
-                    $labelVal = if ($item.PSObject.Properties.Match('Label').Count) { $item.Label } else { $label }
+                    $driveType = Get-StringMemberValue -Object $item -Name 'DriveType' -Default ''
+                    $backupId = Get-StringMemberValue -Object $item -Name 'BackupId' -Default ''
+                    $serial = Get-StringMemberValue -Object $item -Name 'SerialNumber' -Default ''
+                    $name = Get-StringMemberValue -Object $item -Name 'Name' -Default ''
+                    $path = Get-StringMemberValue -Object $item -Name 'Path' -Default ''
+                    $labelVal = Get-StringMemberValue -Object $item -Name 'Label' -Default ([string]$label)
                     $result += "${driveType}|${labelVal}|${backupId}|${serial}|${name}|${path}"
                 }
             }
@@ -646,8 +627,8 @@ function Get-PSmmProjects {
             if ($Object -is [hashtable] -and $Object.ContainsKey($Name)) {
                 return $Object[$Name]
             }
-            elseif ($null -ne $Object -and $Object.PSObject.Properties.Match($Name).Count -gt 0) {
-                return $Object.$Name
+            elseif ($null -ne $Object -and (Test-PSmmProjectsConfigMember -Object $Object -Name $Name)) {
+                return Get-PSmmProjectsConfigMemberValue -Object $Object -Name $Name
             }
             else {
                 return $Default
@@ -662,12 +643,12 @@ function Get-PSmmProjects {
                 if ($null -eq $entry) { continue }
                 $projArr = Get-FromKeyOrProperty -Object $entry -Name 'Projects' -Default @()
                 foreach ($item in $projArr) {
-                    $driveType = if ($item.PSObject.Properties.Match('DriveType').Count) { $item.DriveType } else { '' }
-                    $backupId = if ($item.PSObject.Properties.Match('BackupId').Count) { $item.BackupId } else { '' }
-                    $serial = if ($item.PSObject.Properties.Match('SerialNumber').Count) { $item.SerialNumber } else { '' }
-                    $name = if ($item.PSObject.Properties.Match('Name').Count) { $item.Name } else { '' }
-                    $path = if ($item.PSObject.Properties.Match('Path').Count) { $item.Path } else { '' }
-                    $labelVal = if ($item.PSObject.Properties.Match('Label').Count) { $item.Label } else { $label }
+                    $driveType = Get-StringMemberValue -Object $item -Name 'DriveType' -Default ''
+                    $backupId = Get-StringMemberValue -Object $item -Name 'BackupId' -Default ''
+                    $serial = Get-StringMemberValue -Object $item -Name 'SerialNumber' -Default ''
+                    $name = Get-StringMemberValue -Object $item -Name 'Name' -Default ''
+                    $path = Get-StringMemberValue -Object $item -Name 'Path' -Default ''
+                    $labelVal = Get-StringMemberValue -Object $item -Name 'Label' -Default ([string]$label)
                     $result += "${driveType}|${labelVal}|${backupId}|${serial}|${name}|${path}"
                 }
             }
@@ -701,8 +682,8 @@ function Get-PSmmProjects {
             $registry.Backup = Convert-ProjectsToDriveRegistry -ProjectsByLabel $BackupProjects
 
             # Sync registry back to Config
-            Set-ConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $registry
-            Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+            Set-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $registry
+            Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
 
             $masterCount = ($MasterProjects.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
             $backupCount = ($BackupProjects.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
@@ -780,52 +761,6 @@ function Get-ProjectsFromDrive {
         [Parameter(Mandatory)] $FileSystem
     )
 
-    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-        if ($null -eq $Object) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Get-ProjectsFromDrive.Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Get-ProjectsFromDrive.Get-ConfigMemberValue: Contains('$Name') failed: $_"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Get-ProjectsFromDrive.Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
     function Test-MapHasKey([object]$Map, [string]$Key) {
         if ($null -eq $Map -or [string]::IsNullOrWhiteSpace($Key)) {
             return $false
@@ -848,15 +783,18 @@ function Get-ProjectsFromDrive {
             return $hasKey
         }
 
-        $p = $Map.PSObject.Properties[$Key]
-        return ($null -ne $p)
+        if (Get-Command -Name Test-PSmmProjectsConfigMember -ErrorAction SilentlyContinue) {
+            return (Test-PSmmProjectsConfigMember -Object $Map -Name $Key)
+        }
+
+        return ($null -ne (Get-PSmmProjectsConfigMemberValue -Object $Map -Name $Key))
     }
 
     # Derive an error key to optionally skip scanning if prior errors recorded
     $errorKey = if ($DriveType -eq 'Master') { "Master_${StorageGroup}" } else { "Backup_${StorageGroup}_${BackupId}" }
 
     # Safely honor internal storage error flags when present
-    $internalErrorMessages = Get-ConfigMemberValue -Object $Config -Name 'InternalErrorMessages'
+    $internalErrorMessages = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'InternalErrorMessages'
     $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
     if (-not $uiErrorCatalogType) {
         $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
@@ -897,8 +835,10 @@ function Get-ProjectsFromDrive {
     # Verify the drive actually exists before trying to access it unless test mode overrides
     if (-not $skipDriveGuard -and -not (Test-DriveRootPath -DriveLetter $Disk.DriveLetter -FileSystem $FileSystem)) {
         Write-Verbose "Skipping $DriveType drive '$($Disk.Label)' ($($Disk.DriveLetter)) - drive not accessible or not mounted"
-        Write-PSmmLog -Level WARNING -Context 'Get-ProjectsFromDrive' `
-            -Message "Drive $($Disk.DriveLetter) ($($Disk.Label)) is not accessible or not mounted" -File
+        if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
+            Write-PSmmLog -Level WARNING -Context 'Get-ProjectsFromDrive' `
+                -Message "Drive $($Disk.DriveLetter) ($($Disk.Label)) is not accessible or not mounted" -File
+        }
         return @{
             Projects = $Projects
             ProjectDirs = $ProjectDirs
@@ -913,27 +853,33 @@ function Get-ProjectsFromDrive {
     # Check if Projects folder exists on this drive
     $projectsPath = Join-Path -Path $Disk.DriveLetter -ChildPath 'Projects'
 
-    # Fallback capability detection for FileSystem abstraction
-    $canTestPath = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'TestPath')
-    $canGetItemProp = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'GetItemProperty')
-    $canGetChildItem = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'GetChildItem')
-    $canNewItem = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'NewItem')
-
-    $projectsPathExists = if ($canTestPath) {
-        try { $FileSystem.TestPath($projectsPath) } catch { $false }
+    $projectsPathExists = $false
+    if ($null -ne $FileSystem) {
+        try {
+            $projectsPathExists = [bool]$FileSystem.TestPath($projectsPath)
+        }
+        catch {
+            $projectsPathExists = Test-Path -Path $projectsPath -ErrorAction SilentlyContinue
+        }
     }
     else {
-        Test-Path -Path $projectsPath -ErrorAction SilentlyContinue
+        $projectsPathExists = Test-Path -Path $projectsPath -ErrorAction SilentlyContinue
     }
 
     if ($projectsPathExists) {
         try {
             # Track the Projects directory's last write time for cache invalidation
-            $projectsDirInfo = if ($canGetItemProp) {
-                $FileSystem.GetItemProperty($projectsPath)
+            $projectsDirInfo = $null
+            if ($null -ne $FileSystem) {
+                try {
+                    $projectsDirInfo = $FileSystem.GetItemProperty($projectsPath)
+                }
+                catch {
+                    $projectsDirInfo = Get-Item -Path $projectsPath
+                }
             }
             else {
-                Get-Item -Path $projectsPath
+                $projectsDirInfo = Get-Item -Path $projectsPath
             }
 
             $cacheKey = "$($Disk.SerialNumber)_Projects"
@@ -943,11 +889,17 @@ function Get-ProjectsFromDrive {
             # Ensure _GLOBAL_ project exists with Assets folder
             Initialize-GlobalProject -ProjectsPath $projectsPath -Config $Config -FileSystem $FileSystem
 
-            $projectFolders = if ($canGetChildItem) {
-                $FileSystem.GetChildItem($projectsPath, $null, 'Directory')
+            $projectFolders = $null
+            if ($null -ne $FileSystem) {
+                try {
+                    $projectFolders = $FileSystem.GetChildItem($projectsPath, $null, 'Directory')
+                }
+                catch {
+                    $projectFolders = Get-ChildItem -Path $projectsPath -Directory
+                }
             }
             else {
-                Get-ChildItem -Path $projectsPath -Directory
+                $projectFolders = Get-ChildItem -Path $projectsPath -Directory
             }
 
             # Initialize array for this drive label if it doesn't exist
@@ -1011,14 +963,18 @@ function Get-ProjectsFromDrive {
         }
         catch {
             $errorMsg = "Could not access projects on $DriveType drive $($Disk.DriveLetter) ($($Disk.Label))"
-            Write-PSmmLog -Level WARNING -Context 'Get-ProjectsFromDrive' `
-                -Message $errorMsg -ErrorRecord $_ -File
+            if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
+                Write-PSmmLog -Level WARNING -Context 'Get-ProjectsFromDrive' `
+                    -Message $errorMsg -ErrorRecord $_ -File
+            }
         }
     }
     else {
         Write-Verbose "Projects folder not found on $DriveType drive $($Disk.DriveLetter) ($($Disk.Label))"
-        Write-PSmmLog -Level WARNING -Context 'Get-ProjectsFromDrive' `
-            -Message "Projects folder not found on $DriveType drive $($Disk.DriveLetter) ($($Disk.Label))" -File
+        if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
+            Write-PSmmLog -Level WARNING -Context 'Get-ProjectsFromDrive' `
+                -Message "Projects folder not found on $DriveType drive $($Disk.DriveLetter) ($($Disk.Label))" -File
+        }
 
         # Attempt to create Projects folder with confirmation
         try {
@@ -1029,8 +985,10 @@ function Get-ProjectsFromDrive {
                 throw [ValidationException]::new("FileSystem service is required to create Projects folder", "FileSystem service", $projectsPath)
             }
 
-            Write-PSmmLog -Level SUCCESS -Context 'Get-ProjectsFromDrive' `
-                -Message "Created Projects folder on $DriveType drive $($Disk.DriveLetter) ($($Disk.Label))" -File
+            if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
+                Write-PSmmLog -Level SUCCESS -Context 'Get-ProjectsFromDrive' `
+                    -Message "Created Projects folder on $DriveType drive $($Disk.DriveLetter) ($($Disk.Label))" -File
+            }
 
             # Track the newly created Projects directory
             $projectsDirInfo = if ($canGetItemProp) {
@@ -1070,8 +1028,10 @@ function Get-ProjectsFromDrive {
             }
         }
         catch {
-            Write-PSmmLog -Level DEBUG -Context 'Get-ProjectsFromDrive' `
-                -Message "Projects folder creation declined or failed on $DriveType drive $($Disk.DriveLetter) ($($Disk.Label))" -File
+            if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
+                Write-PSmmLog -Level DEBUG -Context 'Get-ProjectsFromDrive' `
+                    -Message "Projects folder creation declined or failed on $DriveType drive $($Disk.DriveLetter) ($($Disk.Label))" -File
+            }
 
             # Add placeholder entry for drive without projects folder
             if (-not $Projects.ContainsKey($Disk.Label)) {
@@ -1124,8 +1084,8 @@ function Test-DriveRootPath {
         $candidates.Add($DriveLetter.TrimEnd('\'))
     }
 
-    $supportsTestPath = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'TestPath')
-    if ($supportsTestPath) {
+    if ($null -ne $FileSystem) {
+        $fileSystemWorks = $true
         foreach ($candidate in $candidates) {
             try {
                 if ($FileSystem.TestPath($candidate)) {
@@ -1133,10 +1093,14 @@ function Test-DriveRootPath {
                 }
             }
             catch {
-                continue
+                $fileSystemWorks = $false
+                break
             }
         }
-        return $false
+
+        if ($fileSystemWorks) {
+            return $false
+        }
     }
 
     foreach ($candidate in $candidates) {
@@ -1178,67 +1142,31 @@ function Initialize-GlobalProject {
         $FileSystem
     )
 
-    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-        if ($null -eq $Object) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Initialize-GlobalProject.Get-ConfigMemberValue: ContainsKey('$Name') failed: $_"
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Initialize-GlobalProject.Get-ConfigMemberValue: Contains('$Name') failed: $_"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Initialize-GlobalProject.Get-ConfigMemberValue: enumerating keys for '$Name' failed: $_"
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
     try {
         # Define _GLOBAL_ project path
         $GlobalProjectPath = Join-Path -Path $ProjectsPath -ChildPath '_GLOBAL_'
 
         # Create _GLOBAL_ project folder if it doesn't exist
-        if (-not $FileSystem.TestPath($GlobalProjectPath)) {
+        $globalProjectExists = $false
+        try {
+            $globalProjectExists = [bool]$FileSystem.TestPath($GlobalProjectPath)
+        }
+        catch {
+            $globalProjectExists = Test-Path -Path $GlobalProjectPath -ErrorAction SilentlyContinue
+        }
+
+        if (-not $globalProjectExists) {
             Write-Verbose "Creating _GLOBAL_ project folder: $GlobalProjectPath"
             $null = $FileSystem.NewItem($GlobalProjectPath, 'Directory')
-            Write-PSmmLog -Level INFO -Context 'Initialize-GlobalProject' `
-                -Message "Created _GLOBAL_ project folder: $GlobalProjectPath" -File
+            if (Get-Command -Name Write-PSmmLog -ErrorAction SilentlyContinue) {
+                Write-PSmmLog -Level INFO -Context 'Initialize-GlobalProject' `
+                    -Message "Created _GLOBAL_ project folder: $GlobalProjectPath" -File
+            }
         }
 
         # Define Assets folder path using AppConfiguration (or legacy shapes)
-        $projectsConfig = Get-ConfigMemberValue -Object $Config -Name 'Projects'
-        $pathsSource = if ($null -ne $projectsConfig) { Get-ConfigMemberValue -Object $projectsConfig -Name 'Paths' } else { $null }
+        $projectsConfig = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects'
+        $pathsSource = if ($null -ne $projectsConfig) { Get-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Paths' } else { $null }
         $projectsPaths = if ($null -ne $pathsSource) {
             [ProjectsPathsConfig]::FromObject($pathsSource)
         }
@@ -1258,27 +1186,41 @@ function Initialize-GlobalProject {
         $AssetsFullPath = Join-Path -Path $GlobalProjectPath -ChildPath $AssetsRelativePath
 
         # Create Assets folder if it doesn't exist
-        if (-not $FileSystem.TestPath($AssetsFullPath)) {
+        $assetsExists = $false
+        try {
+            $assetsExists = [bool]$FileSystem.TestPath($AssetsFullPath)
+        }
+        catch {
+            $assetsExists = Test-Path -Path $AssetsFullPath -ErrorAction SilentlyContinue
+        }
+
+        if (-not $assetsExists) {
             Write-Verbose "Creating Assets folder: $AssetsFullPath"
 
-            $canNewItem = $FileSystem -and ($FileSystem.PSObject.Methods.Name -contains 'NewItem')
-            if ($canNewItem) {
+            try {
                 $null = $FileSystem.NewItem($AssetsFullPath, 'Directory')
             }
-            else {
+            catch {
                 throw [ValidationException]::new("FileSystem service is required to create Assets folder", "FileSystem service", $AssetsFullPath)
             }
 
-            Write-PSmmLog -Level INFO -Context 'Initialize-GlobalProject' `
-                -Message "Created Assets folder: $AssetsFullPath" -File
+            if (Get-Command -Name Write-PSmmLog -ErrorAction SilentlyContinue) {
+                Write-PSmmLog -Level INFO -Context 'Initialize-GlobalProject' `
+                    -Message "Created Assets folder: $AssetsFullPath" -File
+            }
         }
         else {
             Write-Verbose "_GLOBAL_ project and Assets folder already exist"
         }
     }
     catch {
-        Write-PSmmLog -Level ERROR -Context 'Initialize-GlobalProject' `
-            -Message "Failed to initialize _GLOBAL_ project: $_" -ErrorRecord $_ -File
+        if (Get-Command -Name Write-PSmmLog -ErrorAction SilentlyContinue) {
+            Write-PSmmLog -Level ERROR -Context 'Initialize-GlobalProject' `
+                -Message "Failed to initialize _GLOBAL_ project: $_" -ErrorRecord $_ -File
+        }
+        else {
+            Write-Verbose "[Initialize-GlobalProject] Failed to initialize _GLOBAL_ project: $_"
+        }
         # Don't throw - this shouldn't block project discovery
     }
 }

@@ -93,11 +93,10 @@ function Resolve-ToolCommandCandidate {
         $cmd = Get-Command -Name $Candidate -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($cmd) {
             foreach ($property in 'Source','Path','Definition') {
-                if ($cmd.PSObject.Properties.Match($property).Count -gt 0) {
-                    $value = $cmd.$property
-                    if (-not [string]::IsNullOrWhiteSpace($value)) {
-                        return $value
-                    }
+                $value = $null
+                try { $value = $cmd.$property } catch { $value = $null }
+                if (-not [string]::IsNullOrWhiteSpace([string]$value)) {
+                    return [string]$value
                 }
             }
         }
@@ -116,17 +115,13 @@ function Test-ToolProcessCommand {
         return $true
     }
 
-    $testMethod = $Process.PSObject.Methods | Where-Object { $_.Name -eq 'TestCommand' }
-    if (-not $testMethod) {
+    $testCommand = $null
+    try { $testCommand = $Process.TestCommand } catch { $testCommand = $null }
+    if (-not $testCommand) {
         return $true
     }
 
-    try {
-        return [bool]$Process.TestCommand.Invoke($CommandName)
-    }
-    catch {
-        return $false
-    }
+    try { return [bool]$testCommand.Invoke($CommandName) } catch { return $false }
 }
 
 function Find-ToolCommandInRoot {

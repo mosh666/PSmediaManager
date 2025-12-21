@@ -26,6 +26,50 @@ function _PSmm_DictionaryHasKey {
     return $hasKey
 }
 
+function _PSmm_TryGetMemberValue {
+    param(
+        [Parameter(Mandatory)][AllowNull()][object]$Object,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][ref]$Value
+    )
+
+    $Value.Value = $null
+    if ($null -eq $Object) {
+        return $false
+    }
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        if (_PSmm_DictionaryHasKey -Dictionary $Object -Key $Name) {
+            $Value.Value = $Object[$Name]
+            return $true
+        }
+        return $false
+    }
+
+    $accessType = 'ConfigMemberAccess' -as [type]
+    if ($null -ne $accessType) {
+        try {
+            $tmp = $null
+            if ($accessType::TryGetMemberValue($Object, $Name, [ref]$tmp)) {
+                $Value.Value = $tmp
+                return $true
+            }
+            return $false
+        }
+        catch {
+            return $false
+        }
+    }
+
+    try {
+        $Value.Value = $Object.$Name
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
 class ProjectStorageDriveRef {
     [string]$Label = ''
     [string]$DriveLetter = ''
@@ -66,10 +110,11 @@ class ProjectStorageDriveRef {
             return $drive
         }
 
-        if ($obj.PSObject.Properties.Match('Label').Count -gt 0) { $drive.Label = [string]$obj.Label }
-        if ($obj.PSObject.Properties.Match('DriveLetter').Count -gt 0) { $drive.DriveLetter = [string]$obj.DriveLetter }
-        if ($obj.PSObject.Properties.Match('SerialNumber').Count -gt 0) { $drive.SerialNumber = [string]$obj.SerialNumber }
-        if ($obj.PSObject.Properties.Match('DriveLabel').Count -gt 0) { $drive.DriveLabel = [string]$obj.DriveLabel }
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Label' -Value ([ref]$memberValue)) { $drive.Label = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'DriveLetter' -Value ([ref]$memberValue)) { $drive.DriveLetter = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'SerialNumber' -Value ([ref]$memberValue)) { $drive.SerialNumber = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'DriveLabel' -Value ([ref]$memberValue)) { $drive.DriveLabel = [string]$memberValue }
 
         return $drive
     }
@@ -125,16 +170,17 @@ class ProjectCurrentConfig {
             return $current
         }
 
-        if ($obj.PSObject.Properties.Match('Name').Count -gt 0) { $current.Name = [string]$obj.Name }
-        if ($obj.PSObject.Properties.Match('Path').Count -gt 0) { $current.Path = [string]$obj.Path }
-        if ($obj.PSObject.Properties.Match('Config').Count -gt 0) { $current.Config = [string]$obj.Config }
-        if ($obj.PSObject.Properties.Match('Backup').Count -gt 0) { $current.Backup = [string]$obj.Backup }
-        if ($obj.PSObject.Properties.Match('Databases').Count -gt 0) { $current.Databases = [string]$obj.Databases }
-        if ($obj.PSObject.Properties.Match('Documents').Count -gt 0) { $current.Documents = [string]$obj.Documents }
-        if ($obj.PSObject.Properties.Match('Libraries').Count -gt 0) { $current.Libraries = [string]$obj.Libraries }
-        if ($obj.PSObject.Properties.Match('Vault').Count -gt 0) { $current.Vault = [string]$obj.Vault }
-        if ($obj.PSObject.Properties.Match('Log').Count -gt 0) { $current.Log = [string]$obj.Log }
-        if ($obj.PSObject.Properties.Match('StorageDrive').Count -gt 0) { $current.StorageDrive = [ProjectStorageDriveRef]::FromObject($obj.StorageDrive) }
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Name' -Value ([ref]$memberValue)) { $current.Name = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Path' -Value ([ref]$memberValue)) { $current.Path = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Config' -Value ([ref]$memberValue)) { $current.Config = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Backup' -Value ([ref]$memberValue)) { $current.Backup = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Databases' -Value ([ref]$memberValue)) { $current.Databases = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Documents' -Value ([ref]$memberValue)) { $current.Documents = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Libraries' -Value ([ref]$memberValue)) { $current.Libraries = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Vault' -Value ([ref]$memberValue)) { $current.Vault = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Log' -Value ([ref]$memberValue)) { $current.Log = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'StorageDrive' -Value ([ref]$memberValue)) { $current.StorageDrive = [ProjectStorageDriveRef]::FromObject($memberValue) }
 
         return $current
     }
@@ -172,8 +218,9 @@ class ProjectsPortRegistry {
         }
 
         # If the object wraps a ByProject property, unwrap it
-        if ($obj.PSObject.Properties.Match('ByProject').Count -gt 0) {
-            return [ProjectsPortRegistry]::FromObject($obj.ByProject)
+        $byProjectValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'ByProject' -Value ([ref]$byProjectValue)) {
+            return [ProjectsPortRegistry]::FromObject($byProjectValue)
         }
 
         $registry = [ProjectsPortRegistry]::new()
@@ -289,8 +336,9 @@ class ProjectsPathsConfig {
             return $paths
         }
 
-        if ($obj.PSObject.Properties.Match('Assets').Count -gt 0) {
-            $paths.Assets = [string]$obj.Assets
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Assets' -Value ([ref]$memberValue)) {
+            $paths.Assets = [string]$memberValue
         }
 
         return $paths
@@ -332,8 +380,9 @@ class PluginsPathsConfig {
             return $paths
         }
 
-        if ($obj.PSObject.Properties.Match('Global').Count -gt 0) { $paths.Global = [string]$obj.Global }
-        if ($obj.PSObject.Properties.Match('Project').Count -gt 0) { $paths.Project = [string]$obj.Project }
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Global' -Value ([ref]$memberValue)) { $paths.Global = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Project' -Value ([ref]$memberValue)) { $paths.Project = [string]$memberValue }
 
         return $paths
     }
@@ -368,8 +417,9 @@ class PluginsConfig {
             return $value['Plugins']
         }
 
-        if ($value.PSObject.Properties.Match('Plugins').Count -gt 0) {
-            try { return $value.Plugins } catch { Write-Verbose "PluginsConfig.UnwrapManifest: Failed to read Plugins property: $($_.Exception.Message)" }
+        $pluginsValue = $null
+        if (_PSmm_TryGetMemberValue -Object $value -Name 'Plugins' -Value ([ref]$pluginsValue)) {
+            return $pluginsValue
         }
 
         return $value
@@ -409,11 +459,12 @@ class PluginsConfig {
             return $cfg
         }
 
-        if ($obj.PSObject.Properties.Match('Paths').Count -gt 0) { $cfg.Paths = [PluginsPathsConfig]::FromObject($obj.Paths) }
-        if ($obj.PSObject.Properties.Match('Global').Count -gt 0) { $cfg.Global = [PluginsConfig]::UnwrapManifest($obj.Global) }
-        if ($obj.PSObject.Properties.Match('Project').Count -gt 0) { $cfg.Project = [PluginsConfig]::UnwrapManifest($obj.Project) }
-        if ($obj.PSObject.Properties.Match('Resolved').Count -gt 0) {
-            $resolvedValue = $obj.Resolved
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Paths' -Value ([ref]$memberValue)) { $cfg.Paths = [PluginsPathsConfig]::FromObject($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Global' -Value ([ref]$memberValue)) { $cfg.Global = [PluginsConfig]::UnwrapManifest($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Project' -Value ([ref]$memberValue)) { $cfg.Project = [PluginsConfig]::UnwrapManifest($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Resolved' -Value ([ref]$memberValue)) {
+            $resolvedValue = $memberValue
             if ($resolvedValue -is [hashtable]) {
                 $cfg.Resolved = $resolvedValue
             }
@@ -473,8 +524,9 @@ class PowerShellModuleRequirement {
             return $m
         }
 
-        if ($obj.PSObject.Properties.Match('Name').Count -gt 0) { $m.Name = [string]$obj.Name }
-        if ($obj.PSObject.Properties.Match('Repository').Count -gt 0) { $m.Repository = [string]$obj.Repository }
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Name' -Value ([ref]$memberValue)) { $m.Name = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Repository' -Value ([ref]$memberValue)) { $m.Repository = [string]$memberValue }
 
         return $m
     }
@@ -538,11 +590,12 @@ class PowerShellRequirementsConfig {
             return $cfg
         }
 
-        if ($obj.PSObject.Properties.Match('VersionMinimum').Count -gt 0) { $cfg.VersionMinimum = [PowerShellRequirementsConfig]::ParseVersion($obj.VersionMinimum) }
-        if ($obj.PSObject.Properties.Match('VersionCurrent').Count -gt 0) { $cfg.VersionCurrent = [PowerShellRequirementsConfig]::ParseVersion($obj.VersionCurrent) }
-        if ($obj.PSObject.Properties.Match('Modules').Count -gt 0 -and $null -ne $obj.Modules) {
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'VersionMinimum' -Value ([ref]$memberValue)) { $cfg.VersionMinimum = [PowerShellRequirementsConfig]::ParseVersion($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'VersionCurrent' -Value ([ref]$memberValue)) { $cfg.VersionCurrent = [PowerShellRequirementsConfig]::ParseVersion($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Modules' -Value ([ref]$memberValue) -and $null -ne $memberValue) {
             $mods = @()
-            foreach ($m in @($obj.Modules)) {
+            foreach ($m in @($memberValue)) {
                 $mods += [PowerShellModuleRequirement]::FromObject($m)
             }
             $cfg.Modules = $mods
@@ -591,8 +644,9 @@ class RequirementsConfig {
             return $cfg
         }
 
-        if ($obj.PSObject.Properties.Match('PowerShell').Count -gt 0) {
-            $cfg.PowerShell = [PowerShellRequirementsConfig]::FromObject($obj.PowerShell)
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'PowerShell' -Value ([ref]$memberValue)) {
+            $cfg.PowerShell = [PowerShellRequirementsConfig]::FromObject($memberValue)
         }
 
         if ($null -eq $cfg.PowerShell) {
@@ -639,12 +693,13 @@ class AnsiBasicConfig {
             return $cfg
         }
 
-        if ($obj.PSObject.Properties.Match('Bold').Count -gt 0) { $cfg.Bold = [string]$obj.Bold }
-        if ($obj.PSObject.Properties.Match('Dim').Count -gt 0) { $cfg.Dim = [string]$obj.Dim }
-        if ($obj.PSObject.Properties.Match('Italic').Count -gt 0) { $cfg.Italic = [string]$obj.Italic }
-        if ($obj.PSObject.Properties.Match('Underline').Count -gt 0) { $cfg.Underline = [string]$obj.Underline }
-        if ($obj.PSObject.Properties.Match('Blink').Count -gt 0) { $cfg.Blink = [string]$obj.Blink }
-        if ($obj.PSObject.Properties.Match('Strikethrough').Count -gt 0) { $cfg.Strikethrough = [string]$obj.Strikethrough }
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Bold' -Value ([ref]$memberValue)) { $cfg.Bold = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Dim' -Value ([ref]$memberValue)) { $cfg.Dim = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Italic' -Value ([ref]$memberValue)) { $cfg.Italic = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Underline' -Value ([ref]$memberValue)) { $cfg.Underline = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Blink' -Value ([ref]$memberValue)) { $cfg.Blink = [string]$memberValue }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Strikethrough' -Value ([ref]$memberValue)) { $cfg.Strikethrough = [string]$memberValue }
 
         return $cfg
     }
@@ -690,9 +745,14 @@ class AnsiConfig {
         }
 
         $ht2 = @{}
-        foreach ($p in $value.PSObject.Properties) {
+        foreach ($p in @(Get-Member -InputObject $value -MemberType NoteProperty,Property -ErrorAction SilentlyContinue)) {
             if ($null -eq $p) { continue }
-            $ht2[[string]$p.Name] = $p.Value
+            $name = [string]$p.Name
+            if ([string]::IsNullOrWhiteSpace($name)) { continue }
+            $memberValue = $null
+            if (_PSmm_TryGetMemberValue -Object $value -Name $name -Value ([ref]$memberValue)) {
+                $ht2[$name] = $memberValue
+            }
         }
         return $ht2
     }
@@ -715,9 +775,10 @@ class AnsiConfig {
             return $cfg
         }
 
-        if ($obj.PSObject.Properties.Match('Basic').Count -gt 0) { $cfg.Basic = [AnsiBasicConfig]::FromObject($obj.Basic) }
-        if ($obj.PSObject.Properties.Match('FG').Count -gt 0) { $cfg.FG = [AnsiConfig]::ToHashtableShallow($obj.FG) }
-        if ($obj.PSObject.Properties.Match('BG').Count -gt 0) { $cfg.BG = [AnsiConfig]::ToHashtableShallow($obj.BG) }
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Basic' -Value ([ref]$memberValue)) { $cfg.Basic = [AnsiBasicConfig]::FromObject($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'FG' -Value ([ref]$memberValue)) { $cfg.FG = [AnsiConfig]::ToHashtableShallow($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'BG' -Value ([ref]$memberValue)) { $cfg.BG = [AnsiConfig]::ToHashtableShallow($memberValue) }
 
         if ($null -eq $cfg.Basic) { $cfg.Basic = [AnsiBasicConfig]::new() }
         if ($null -eq $cfg.FG) { $cfg.FG = @{} }
@@ -767,11 +828,12 @@ class UIConfig {
             return $cfg
         }
 
-        if ($obj.PSObject.Properties.Match('Width').Count -gt 0 -and $null -ne $obj.Width) {
-            try { $cfg.Width = [int]$obj.Width } catch { Write-Verbose "UIConfig.FromObject: Invalid Width property value: $($_.Exception.Message)" }
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Width' -Value ([ref]$memberValue) -and $null -ne $memberValue) {
+            try { $cfg.Width = [int]$memberValue } catch { Write-Verbose "UIConfig.FromObject: Invalid Width property value: $($_.Exception.Message)" }
         }
-        if ($obj.PSObject.Properties.Match('ANSI').Count -gt 0) {
-            $cfg.ANSI = [AnsiConfig]::FromObject($obj.ANSI)
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'ANSI' -Value ([ref]$memberValue)) {
+            $cfg.ANSI = [AnsiConfig]::FromObject($memberValue)
         }
 
         if ($null -eq $cfg.ANSI) { $cfg.ANSI = [AnsiConfig]::new() }
@@ -841,10 +903,11 @@ class ProjectsConfig {
             return $cfg
         }
 
-        if ($obj.PSObject.Properties.Match('Current').Count -gt 0) { $cfg.Current = [ProjectCurrentConfig]::FromObject($obj.Current) }
-        if ($obj.PSObject.Properties.Match('Paths').Count -gt 0) { $cfg.Paths = [ProjectsPathsConfig]::FromObject($obj.Paths) }
-        if ($obj.PSObject.Properties.Match('PortRegistry').Count -gt 0) { $cfg.PortRegistry = [ProjectsPortRegistry]::FromObject($obj.PortRegistry) }
-        if ($obj.PSObject.Properties.Match('Registry').Count -gt 0) { $cfg.Registry = [ProjectsConfig]::NormalizeRegistry($obj.Registry) }
+        $memberValue = $null
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Current' -Value ([ref]$memberValue)) { $cfg.Current = [ProjectCurrentConfig]::FromObject($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Paths' -Value ([ref]$memberValue)) { $cfg.Paths = [ProjectsPathsConfig]::FromObject($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'PortRegistry' -Value ([ref]$memberValue)) { $cfg.PortRegistry = [ProjectsPortRegistry]::FromObject($memberValue) }
+        if (_PSmm_TryGetMemberValue -Object $obj -Name 'Registry' -Value ([ref]$memberValue)) { $cfg.Registry = [ProjectsConfig]::NormalizeRegistry($memberValue) }
 
         if ($null -eq $cfg.Current) { $cfg.Current = [ProjectCurrentConfig]::new() }
         if ($null -eq $cfg.Paths) { $cfg.Paths = [ProjectsPathsConfig]::new() }
@@ -859,16 +922,12 @@ class ProjectsConfig {
         }
 
         try {
-            $m = $value.GetType().GetMethod('ToHashtable')
-            if ($null -ne $m) {
-                return $value.ToHashtable()
-            }
+            return $value.ToHashtable()
         }
         catch {
-            Write-Verbose "ProjectsConfig.ToHashtableMaybe: ToHashtable() reflection/invocation failed: $($_.Exception.Message)"
+            Write-Verbose "ProjectsConfig.ToHashtableMaybe: ToHashtable() invocation failed: $($_.Exception.Message)"
+            return $value
         }
-
-        return $value
     }
 
     [hashtable] ToHashtable() {

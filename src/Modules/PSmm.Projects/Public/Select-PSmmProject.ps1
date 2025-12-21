@@ -1,6 +1,20 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name 'Get-PSmmProjectsConfigMemberValue' -ErrorAction SilentlyContinue)) {
+    $helpersPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\Private\\ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $helpersPath) {
+        . $helpersPath
+    }
+}
+
+if (-not (Get-Command -Name 'Set-PSmmProjectsConfigMemberValue' -ErrorAction SilentlyContinue)) {
+    $helpersPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\Private\\ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $helpersPath) {
+        . $helpersPath
+    }
+}
+
 function Select-PSmmProject {
     <#
     .SYNOPSIS
@@ -66,6 +80,45 @@ function Select-PSmmProject {
         catch {
             Write-Verbose "[Select-PSmmProject] AppConfiguration::FromObject() failed; falling back to legacy config handling: $($_.Exception.Message)"
         }
+    }
+
+    # Ensure PathProvider is available, preferring DI/global instance, otherwise wrap Config.Paths when possible.
+    $pathProviderType = 'PathProvider' -as [type]
+    $iPathProviderType = 'IPathProvider' -as [type]
+    if ($null -eq $PathProvider) {
+        $resolved = $null
+
+        try {
+            $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+            if ($null -ne $globalServiceContainer) {
+                try {
+                    $resolved = $globalServiceContainer.Resolve('PathProvider')
+                }
+                catch {
+                    $resolved = $null
+                }
+            }
+        }
+        catch {
+            $resolved = $null
+        }
+
+        if ($null -ne $resolved) {
+            $PathProvider = $resolved
+        }
+        elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType) {
+            $configPaths = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Paths'
+            if ($null -ne $configPaths -and $configPaths -is $iPathProviderType) {
+                $PathProvider = $pathProviderType::new([IPathProvider]$configPaths)
+            }
+        }
+
+        if ($null -eq $PathProvider -and $null -ne $pathProviderType) {
+            $PathProvider = $pathProviderType::new()
+        }
+    }
+    elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+        $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
     }
 
     # Support legacy dictionary-shaped configs by normalizing key members into typed models
@@ -137,115 +190,38 @@ function Select-PSmmProject {
         $Config = [pscustomobject]$configMap
     }
 
-    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-        if ($null -eq $Object) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Select-PSmmProject] Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "[Select-PSmmProject] Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "[Select-PSmmProject] Get-ConfigMemberValue: IDictionary.Keys enumeration failed (Name='$Name'): $($_.Exception.Message)"
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
-    function Set-ConfigMemberValue {
-        [CmdletBinding(SupportsShouldProcess = $true)]
-        param(
-            [Parameter(Mandatory)][object]$Object,
-            [Parameter(Mandatory)][string]$Name,
-            [Parameter()][object]$Value
-        )
-        if ($null -eq $Object) {
-            return
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            if ($PSCmdlet.ShouldProcess("Config dictionary key '$Name'", 'Set value')) {
-                $Object[$Name] = $Value
-            }
-            return
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            if ($PSCmdlet.ShouldProcess("Config property '$Name'", 'Set value')) {
-                $Object.$Name = $Value
-            }
-            return
-        }
-
-        if ($PSCmdlet.ShouldProcess("Config property '$Name'", 'Add member')) {
-            $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
-        }
-    }
-
     # Ensure Projects and Plugins are typed models (or have compatible shapes) before any dot access
-    $projectsConfig = Get-ConfigMemberValue -Object $Config -Name 'Projects'
+    $projectsConfig = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects'
     if ($null -eq $projectsConfig) {
         $projectsConfig = [ProjectsConfig]::FromObject($null)
-        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
     }
     elseif ($projectsConfig -isnot [ProjectsConfig]) {
         $projectsConfig = [ProjectsConfig]::FromObject($projectsConfig)
-        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
     }
 
-    $projectsRegistry = Get-ConfigMemberValue -Object $projectsConfig -Name 'Registry'
+    $projectsRegistry = Get-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry'
     if ($null -eq $projectsRegistry) {
         $projectsRegistry = [ProjectsRegistryCache]::new()
-        Set-ConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $projectsRegistry
-        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        Set-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $projectsRegistry
+        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
     }
     else {
         $projectsRegistry = [ProjectsRegistryCache]::FromObject($projectsRegistry)
-        Set-ConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $projectsRegistry
-        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        Set-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry' -Value $projectsRegistry
+        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
     }
 
-    $pluginsConfig = Get-ConfigMemberValue -Object $Config -Name 'Plugins'
+    $pluginsConfig = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Plugins'
     $pluginsConfig = [PluginsConfig]::FromObject($pluginsConfig)
     if ($null -eq $pluginsConfig.Paths) {
         $pluginsConfig.Paths = [PluginsPathsConfig]::new()
     }
-    Set-ConfigMemberValue -Object $Config -Name 'Plugins' -Value $pluginsConfig
+    Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Plugins' -Value $pluginsConfig
 
     # Build internal runtime projection for helpers
-    $pathsSource = Get-ConfigMemberValue -Object $projectsConfig -Name 'Paths'
+    $pathsSource = Get-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Paths'
     $projectPaths = if ($null -ne $pathsSource) {
         [ProjectsPathsConfig]::FromObject($pathsSource).ToHashtable()
     }
@@ -384,8 +360,8 @@ function Select-PSmmProject {
         }
 
         # Sync Current project back to Config as a typed model (supports legacy consumers via FromObject/ToHashtable)
-        Set-ConfigMemberValue -Object $projectsConfig -Name 'Current' -Value ([ProjectCurrentConfig]::FromObject($Run.Projects.Current.ToHashtable()))
-        Set-ConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        Set-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Current' -Value ([ProjectCurrentConfig]::FromObject($Run.Projects.Current.ToHashtable()))
+        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
 
         # Load project-specific plugin manifest and install enabled optional plugins
         $pluginsConfig = [PluginsConfig]::FromObject($pluginsConfig)
@@ -415,8 +391,12 @@ function Select-PSmmProject {
                 $pluginsConfig.Project = if ($hasProjectPluginsKey) { $projectPlugins['Plugins'] } else { $projectPlugins }
             }
             else {
-                $p = $projectPlugins.PSObject.Properties['Plugins']
-                $pluginsConfig.Project = if ($null -ne $p) { $p.Value } else { $projectPlugins }
+                if (Test-PSmmProjectsConfigMember -Object $projectPlugins -Name 'Plugins') {
+                    $pluginsConfig.Project = Get-PSmmProjectsConfigMemberValue -Object $projectPlugins -Name 'Plugins'
+                }
+                else {
+                    $pluginsConfig.Project = $projectPlugins
+                }
             }
         }
         else {
@@ -425,7 +405,7 @@ function Select-PSmmProject {
 
         # Reset resolved cache to force re-merge on next confirmation
         $pluginsConfig.Resolved = $null
-        Set-ConfigMemberValue -Object $Config -Name 'Plugins' -Value $pluginsConfig
+        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Plugins' -Value $pluginsConfig
 
         try {
             # Use pre-instantiated services from global context when available,

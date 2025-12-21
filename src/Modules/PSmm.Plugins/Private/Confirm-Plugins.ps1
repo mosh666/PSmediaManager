@@ -68,119 +68,13 @@ function Test-PluginFunction {
     }
 }
 
-function Get-ConfigMemberValue {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name
-    )
-
-    if ($null -eq $Object) {
-        return $null
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        try {
-            if ($Object.ContainsKey($Name)) {
-                return $Object[$Name]
-            }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
-            # fall through
-        }
-
-        try {
-            if ($Object.Contains($Name)) {
-                return $Object[$Name]
-            }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: failed Contains('$Name'): $($_.Exception.Message)"
-            # fall through
-        }
-
-        try {
-            foreach ($k in $Object.Keys) {
-                if ($k -eq $Name) {
-                    return $Object[$k]
-                }
-            }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
-            # fall through
-        }
-
-        return $null
-    }
-
-    try {
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-    }
-    catch {
-        Write-Verbose "Get-ConfigMemberValue: failed PSObject lookup for '$Name': $($_.Exception.Message)"
-        # fall through
-    }
-
-    return $null
-}
-
-function Set-ConfigMemberValue {
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name,
-
-        [Parameter()]
-        [AllowNull()]
-        [object]$Value
-    )
-
-    if ($null -eq $Object) {
-        return
-    }
-
-    if (-not $PSCmdlet.ShouldProcess("Config member '$Name'", 'Set value')) {
-        return
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        try {
-            $Object[$Name] = $Value
-        }
-        catch {
-            Write-Verbose "Set-ConfigMemberValue: failed IDictionary set for '$Name': $($_.Exception.Message)"
-            # ignore
-        }
-        return
-    }
-
-    try {
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            $Object.$Name = $Value
-            return
-        }
-
-        $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
-    }
-    catch {
-        Write-Verbose "Set-ConfigMemberValue: failed setting '$Name': $($_.Exception.Message)"
-        # ignore
+if (
+    (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) -or
+    (-not (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue))
+) {
+    $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
     }
 }
 
@@ -193,12 +87,12 @@ function Resolve-PluginNameSafe {
         [object]$PluginOrConfig
     )
 
-    $cfg = Get-ConfigMemberValue -Object $PluginOrConfig -Name 'Config'
+    $cfg = Get-PSmmPluginsConfigMemberValue -Object $PluginOrConfig -Name 'Config'
     if ($null -eq $cfg) {
         $cfg = $PluginOrConfig
     }
 
-    $name = Get-ConfigMemberValue -Object $cfg -Name 'Name'
+    $name = Get-PSmmPluginsConfigMemberValue -Object $cfg -Name 'Name'
     $nameStr = [string]$name
     if ([string]::IsNullOrWhiteSpace($nameStr)) {
         return 'UNKNOWN'
@@ -353,70 +247,15 @@ function Register-PluginsToPATH {
     )
 
     try {
-        function _TryGetConfigValue {
-            [CmdletBinding()]
-            param(
-                [Parameter()][AllowNull()]$Object,
-                [Parameter()][string]$Name
-            )
-
-            if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-                return $null
-            }
-
-            if ($Object -is [System.Collections.IDictionary]) {
-                try {
-                    if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-                }
-                catch {
-                    Write-Verbose "_TryGetConfigValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
-                }
-                try {
-                    if ($Object.Contains($Name)) { return $Object[$Name] }
-                }
-                catch {
-                    Write-Verbose "_TryGetConfigValue: failed Contains('$Name'): $($_.Exception.Message)"
-                }
-                try {
-                    foreach ($k in $Object.Keys) {
-                        if ($k -eq $Name) { return $Object[$k] }
-                    }
-                }
-                catch {
-                    Write-Verbose "_TryGetConfigValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
-                }
-                return $null
-            }
-
-            $p = $Object.PSObject.Properties[$Name]
-            if ($null -ne $p) { return $p.Value }
-            return $null
-        }
-
-        function _TryGetNestedValue {
-            [CmdletBinding()]
-            param(
-                [Parameter()][AllowNull()]$Root,
-                [Parameter(Mandatory)][string[]]$PathParts
-            )
-
-            $cur = $Root
-            foreach ($part in $PathParts) {
-                if ($null -eq $cur) { return $null }
-                $cur = _TryGetConfigValue -Object $cur -Name $part
-            }
-            return $cur
-        }
-
         Write-Verbose 'Registering plugin executables to PATH (opt-in only)'
         Write-PSmmLog -Level INFO -Context 'Register-PluginsToPATH' `
             -Message 'Starting plugin PATH registration (opt-in only)' -Console -File
 
-        $pluginRoot = _TryGetNestedValue -Root $Config -PathParts @('Paths','App','Plugins','Root')
+        $pluginRoot = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths', 'App', 'Plugins', 'Root')
         $pluginRoot = if ($null -eq $pluginRoot) { '' } else { [string]$pluginRoot }
 
-        $pluginsConfig = Get-ConfigMemberValue -Object $Config -Name 'Plugins'
-        $resolvedPlugins = Get-ConfigMemberValue -Object $pluginsConfig -Name 'Resolved'
+        $pluginsConfig = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Plugins'
+        $resolvedPlugins = Get-PSmmPluginsConfigMemberValue -Object $pluginsConfig -Name 'Resolved'
 
         if ($null -eq $pluginsConfig -or $null -eq $resolvedPlugins) {
             Write-Verbose 'No plugin manifest found in configuration'
@@ -459,14 +298,14 @@ function Register-PluginsToPATH {
                             continue
                         }
 
-                        $isMandatory = [bool](Get-ConfigMemberValue -Object $resolvedPlugin -Name 'Mandatory')
-                        $isEnabled = [bool](Get-ConfigMemberValue -Object $resolvedPlugin -Name 'Enabled')
+                        $isMandatory = [bool](Get-PSmmPluginsConfigMemberValue -Object $resolvedPlugin -Name 'Mandatory')
+                        $isEnabled = [bool](Get-PSmmPluginsConfigMemberValue -Object $resolvedPlugin -Name 'Enabled')
                         if (-not ($isMandatory -or $isEnabled)) {
                             Write-Verbose "Plugin $pluginName is not enabled for current scope - skipping PATH registration"
                             continue
                         }
 
-                        $registerToPath = Get-ConfigMemberValue -Object $resolvedPlugin -Name 'RegisterToPath'
+                        $registerToPath = Get-PSmmPluginsConfigMemberValue -Object $resolvedPlugin -Name 'RegisterToPath'
                         if ($registerToPath -ne $true) {
                             Write-Verbose "Plugin $pluginName has RegisterToPath=$registerToPath - skipping"
                             continue
@@ -475,7 +314,7 @@ function Register-PluginsToPATH {
                         Write-Verbose "Plugin $pluginName is marked for PATH registration"
 
                         # Skip if plugin doesn't have State (not installed)
-                        $state = Get-ConfigMemberValue -Object $resolvedPlugin -Name 'State'
+                        $state = Get-PSmmPluginsConfigMemberValue -Object $resolvedPlugin -Name 'State'
                         if ($null -eq $state) {
                             Write-Verbose "Plugin $pluginName marked for PATH but not installed (no State) - skipping"
                             continue
@@ -498,7 +337,7 @@ function Register-PluginsToPATH {
                             Write-Verbose "Plugin ${pluginName} directory selection returned null under ${pluginRoot} - skipping PATH registration"
                             continue
                         }
-                        $commandPath = Get-ConfigMemberValue -Object $resolvedPlugin -Name 'CommandPath'
+                        $commandPath = Get-PSmmPluginsConfigMemberValue -Object $resolvedPlugin -Name 'CommandPath'
                         $commandPath = if ($commandPath) { [string]$commandPath } else { '' }
                         $executableDir = if ($commandPath) {
                             $PathProvider.CombinePath(@($pluginDir.FullName, $commandPath))
@@ -540,7 +379,7 @@ function Register-PluginsToPATH {
 
                         # Track for cleanup regardless of whether we add it now (store in config for access during shutdown)
                         # Avoid method calls on values with uncertain runtime types (StrictMode-safe)
-                        $existingAdded = Get-ConfigMemberValue -Object $Config -Name 'AddedPathEntries'
+                        $existingAdded = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'AddedPathEntries'
 
                         $existingList = @()
                         if ($null -ne $existingAdded) {
@@ -556,7 +395,7 @@ function Register-PluginsToPATH {
                         }
 
                         if ($existingList -notcontains $resolvedDir) {
-                            Set-ConfigMemberValue -Object $Config -Name 'AddedPathEntries' -Value @($existingList + @($resolvedDir))
+                            Set-PSmmPluginsConfigMemberValue -Object $Config -Name 'AddedPathEntries' -Value @($existingList + @($resolvedDir))
                         }
 
                         if ($pathSet.Contains($resolvedDir)) {
@@ -573,7 +412,7 @@ function Register-PluginsToPATH {
                             -Message "Queued $pluginName for PATH registration: $resolvedDir" -Console -File
                     }
                     catch {
-                        $pn = [string](Get-ConfigMemberValue -Object $resolvedPlugin -Name 'Name')
+                        $pn = [string](Get-PSmmPluginsConfigMemberValue -Object $resolvedPlugin -Name 'Name')
                         $errMessage = if ($null -ne $_.Exception -and -not [string]::IsNullOrWhiteSpace($_.Exception.Message)) { $_.Exception.Message } else { [string]$_ }
                         $where = if ($null -ne $_.InvocationInfo -and $_.InvocationInfo.ScriptLineNumber -gt 0) { " ($($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber))" } else { '' }
                         Write-Verbose "Failed to register plugin $pn to PATH: $errMessage$where"
@@ -653,88 +492,7 @@ function Resolve-PluginsConfig {
         $Config
     )
 
-    function _TryGetConfigValue {
-        [CmdletBinding()]
-        param(
-            [Parameter()][AllowNull()]$Object,
-            [Parameter()][string]$Name
-        )
-
-        if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Resolve-PluginsConfig._TryGetConfigValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
-                # ignore
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Resolve-PluginsConfig._TryGetConfigValue: failed Contains('$Name'): $($_.Exception.Message)"
-                # ignore
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "Resolve-PluginsConfig._TryGetConfigValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
-                # ignore
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
-    function _TrySetConfigValue {
-        [CmdletBinding()]
-        param(
-            [Parameter()][AllowNull()]$Object,
-            [Parameter()][string]$Name,
-            [Parameter()][AllowNull()]$Value
-        )
-
-        if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-            return
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            $Object[$Name] = $Value
-            return
-        }
-
-        try {
-            $Object.$Name = $Value
-        }
-        catch {
-            Write-Verbose "Resolve-PluginsConfig._TrySetConfigValue: failed setting '$Name': $($_.Exception.Message)"
-            # ignore
-        }
-    }
-
-    $pluginsSource = _TryGetConfigValue -Object $Config -Name 'Plugins'
+    $pluginsSource = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Plugins'
     if (-not $pluginsSource) {
         throw [ConfigurationException]::new('Plugin manifest not loaded in configuration', 'Plugins')
     }
@@ -759,7 +517,7 @@ function Resolve-PluginsConfig {
     }
 
     $pluginsBag = $pluginsConfigType::FromObject($pluginsSource)
-    _TrySetConfigValue -Object $Config -Name 'Plugins' -Value $pluginsBag
+    Set-PSmmPluginsConfigMemberValue -Object $Config -Name 'Plugins' -Value $pluginsBag
 
     function _UnwrapPluginsManifest {
         param([Parameter()][AllowNull()]$Manifest)
@@ -793,10 +551,13 @@ function Resolve-PluginsConfig {
                 # ignore
             }
         }
-        if ($Manifest.PSObject.Properties.Match('Plugins').Count -gt 0) {
-            try { return $Manifest.Plugins }
-            catch {
-                Write-Verbose "_UnwrapPluginsManifest: failed reading 'Plugins' property: $($_.Exception.Message)"
+
+        if (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue) {
+            if (Test-PSmmPluginsConfigMember -Object $Manifest -Name 'Plugins') {
+                try { return Get-PSmmPluginsConfigMemberValue -Object $Manifest -Name 'Plugins' }
+                catch {
+                    Write-Verbose "_UnwrapPluginsManifest: failed reading 'Plugins' member: $($_.Exception.Message)"
+                }
             }
         }
         return $Manifest
@@ -823,9 +584,7 @@ function Resolve-PluginsConfig {
         # Attempt to auto-load project plugins manifest if a project is selected
         $candidateProjectPath = $null
         try {
-            $projectsObj = _TryGetConfigValue -Object $Config -Name 'Projects'
-            $currentObj = _TryGetConfigValue -Object $projectsObj -Name 'Current'
-            $currentPathObj = _TryGetConfigValue -Object $currentObj -Name 'Path'
+            $currentPathObj = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Projects', 'Current', 'Path')
             $currentPath = if ($null -ne $currentPathObj) { [string]$currentPathObj } else { '' }
             if (-not [string]::IsNullOrWhiteSpace($currentPath)) {
                 $candidateProjectPath = Join-Path -Path $currentPath -ChildPath 'Config/PSmm/PSmm.Plugins.psd1'
@@ -863,12 +622,12 @@ function Resolve-PluginsConfig {
 
             $prevGroup = $null
             if ($previousResolved) {
-                $prevGroup = Get-ConfigMemberValue -Object $previousResolved -Name $groupName
+                $prevGroup = Get-PSmmPluginsConfigMemberValue -Object $previousResolved -Name $groupName
             }
 
             if ($null -ne $prevGroup) {
-                $prevPlugin = Get-ConfigMemberValue -Object $prevGroup -Name $pluginKey
-                $prevState = Get-ConfigMemberValue -Object $prevPlugin -Name 'State'
+                $prevPlugin = Get-PSmmPluginsConfigMemberValue -Object $prevGroup -Name $pluginKey
+                $prevState = Get-PSmmPluginsConfigMemberValue -Object $prevPlugin -Name 'State'
                 if ($null -ne $prevState) {
                     $clone.State = $prevState
                 }
@@ -895,27 +654,35 @@ function Resolve-PluginsConfig {
                     $projectEntryKeys = @($projectEntry.Keys)
                 }
                 else {
-                    $projectEntryKeys = @($projectEntry.PSObject.Properties.Name)
+                    try {
+                        $projectEntryKeys = @(
+                            Get-Member -InputObject $projectEntry -MemberType NoteProperty,Property -ErrorAction SilentlyContinue |
+                                Select-Object -ExpandProperty Name
+                        )
+                    }
+                    catch {
+                        $projectEntryKeys = @()
+                    }
                 }
 
                 foreach ($prop in $projectEntryKeys) {
                     if ($prop -eq 'Enabled') { continue }
 
                     if ($prop -eq 'Mandatory') {
-                        $projectMandatory = Get-ConfigMemberValue -Object $projectEntry -Name 'Mandatory'
+                        $projectMandatory = Get-PSmmPluginsConfigMemberValue -Object $projectEntry -Name 'Mandatory'
                         if ([bool]$target.Mandatory -ne [bool]$projectMandatory) {
                             $conflicts += $prop
                         }
                         continue
                     }
 
-                    $targetValue = Get-ConfigMemberValue -Object $target -Name $prop
+                    $targetValue = Get-PSmmPluginsConfigMemberValue -Object $target -Name $prop
                     if ($null -eq $targetValue) {
                         $conflicts += $prop
                         continue
                     }
 
-                    $projectValue = Get-ConfigMemberValue -Object $projectEntry -Name $prop
+                    $projectValue = Get-PSmmPluginsConfigMemberValue -Object $projectEntry -Name $prop
                     if ($targetValue -ne $projectValue) {
                         $conflicts += $prop
                     }
@@ -928,19 +695,19 @@ function Resolve-PluginsConfig {
                 }
 
                 $projectEnabled = $true
-                $projectEnabledValue = Get-ConfigMemberValue -Object $projectEntry -Name 'Enabled'
+                $projectEnabledValue = Get-PSmmPluginsConfigMemberValue -Object $projectEntry -Name 'Enabled'
                 if ($null -ne $projectEnabledValue) {
                     $projectEnabled = [bool]$projectEnabledValue
                 }
 
                 if ($target.Mandatory -and -not $projectEnabled) {
-                    $pluginName = [string](Get-ConfigMemberValue -Object $target -Name 'Name')
+                    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $target -Name 'Name')
                     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = $pluginKey }
                     $msg = "Project manifest cannot disable mandatory plugin '$pluginName'. Global: $globalPath; Project: $projectPath"
                     throw [ConfigurationException]::new($msg, $projectPath)
                 }
 
-                $projectState = Get-ConfigMemberValue -Object $projectEntry -Name 'State'
+                $projectState = Get-PSmmPluginsConfigMemberValue -Object $projectEntry -Name 'State'
                 if ($null -ne $projectState -and -not $target.State) {
                     $target.State = $projectState
                 }
@@ -960,7 +727,7 @@ function Resolve-PluginsConfig {
     if ($projectPath) { $pluginsBag.Paths.Project = $projectPath }
 
     $pluginsBag.Resolved = $resolved
-    _TrySetConfigValue -Object $Config -Name 'Plugins' -Value $pluginsBag
+    Set-PSmmPluginsConfigMemberValue -Object $Config -Name 'Plugins' -Value $pluginsBag
     return $resolved
 }
 
@@ -1007,86 +774,13 @@ function Confirm-Plugins {
         $ServiceContainer
     )
 
-    function _TryGetConfigValue {
-        [CmdletBinding()]
-        param(
-            [Parameter()][AllowNull()]$Object,
-            [Parameter()][string]$Name
-        )
-
-        if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Confirm-Plugins._TryGetConfigValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
-                # ignore
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Confirm-Plugins._TryGetConfigValue: failed Contains('$Name'): $($_.Exception.Message)"
-                # ignore
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "Confirm-Plugins._TryGetConfigValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
-                # ignore
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
-    function _GetNestedConfigValue {
-        [CmdletBinding()]
-        param(
-            [Parameter()][AllowNull()]$Object,
-            [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Path
-        )
-
-        $cur = $Object
-        foreach ($segment in $Path) {
-            $cur = _TryGetConfigValue -Object $cur -Name $segment
-            if ($null -eq $cur) {
-                return $null
-            }
-        }
-
-        return $cur
-    }
-
     $resolvedPlugins = Resolve-PluginsConfig -Config $Config
 
-    $pluginRoot = _GetNestedConfigValue -Object $Config -Path @('Paths','App','Plugins','Root')
-    $pluginDownloads = _GetNestedConfigValue -Object $Config -Path @('Paths','App','Plugins','Downloads')
-    $pluginTemp = _GetNestedConfigValue -Object $Config -Path @('Paths','App','Plugins','Temp')
-    $vaultPath = _GetNestedConfigValue -Object $Config -Path @('Paths','App','Vault')
-    $updateMode = _GetNestedConfigValue -Object $Config -Path @('Parameters','Update')
+    $pluginRoot = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths', 'App', 'Plugins', 'Root')
+    $pluginDownloads = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths', 'App', 'Plugins', 'Downloads')
+    $pluginTemp = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths', 'App', 'Plugins', 'Temp')
+    $vaultPath = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths', 'App', 'Vault')
+    $updateMode = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Parameters', 'Update')
 
     if ([string]::IsNullOrWhiteSpace([string]$pluginRoot)) {
         throw [ValidationException]::new('Config.Paths.App.Plugins.Root is required for plugin confirmation', 'Paths.App.Plugins.Root')
@@ -1131,10 +825,39 @@ function Confirm-Plugins {
     $FileSystem = $null
     $Environment = $null
     $PathProvider = $null
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try { $FileSystem = $ServiceContainer.Resolve('FileSystem') } catch { Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_" }
         try { $Environment = $ServiceContainer.Resolve('Environment') } catch { Write-Verbose "Failed to resolve Environment from ServiceContainer: $_" }
         try { $PathProvider = $ServiceContainer.Resolve('PathProvider') } catch { Write-Verbose "Failed to resolve PathProvider from ServiceContainer: $_" }
+    }
+
+    if ($null -eq $PathProvider) {
+        # Prefer the canonical AppPaths behavior when available on Config.Paths
+        try {
+            $pathsCandidate = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths'
+            if ($null -ne $pathsCandidate -and ($pathsCandidate -is [IPathProvider])) {
+                $PathProvider = [PathProvider]::new([IPathProvider]$pathsCandidate)
+            }
+        }
+        catch {
+            Write-Verbose "Failed to bind PathProvider from Config.Paths: $($_.Exception.Message)"
+        }
+    }
+
+    if ($null -eq $PathProvider) {
+        # Fallback to global service container when available (host app bootstrap)
+        try {
+            $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+            $PathProvider = $globalServiceContainer.Resolve('PathProvider')
+        }
+        catch {
+            Write-Verbose "Failed to resolve PathProvider from global ServiceContainer: $($_.Exception.Message)"
+        }
+    }
+
+    if ($null -eq $PathProvider) {
+        # Minimal fallback for standalone/test scenarios
+        $PathProvider = [PathProvider]::new()
     }
 
     try {
@@ -1154,15 +877,15 @@ function Confirm-Plugins {
             $script:PSmm_PluginBaseline = @()
             foreach ($baselineGroup in $pluginGroups) {
                 foreach ($baselinePlugin in $baselineGroup.Value.GetEnumerator()) {
-                    $state = Get-ConfigMemberValue -Object $baselinePlugin.Value -Name 'State'
-                    $currentVersion = Get-ConfigMemberValue -Object $state -Name 'CurrentVersion'
+                    $state = Get-PSmmPluginsConfigMemberValue -Object $baselinePlugin.Value -Name 'State'
+                    $currentVersion = Get-PSmmPluginsConfigMemberValue -Object $state -Name 'CurrentVersion'
                     $isInstalled = -not [string]::IsNullOrWhiteSpace([string]$currentVersion)
-                    $isMandatory = [bool](Get-ConfigMemberValue -Object $baselinePlugin.Value -Name 'Mandatory')
-                    $isEnabled = [bool](Get-ConfigMemberValue -Object $baselinePlugin.Value -Name 'Enabled')
+                    $isMandatory = [bool](Get-PSmmPluginsConfigMemberValue -Object $baselinePlugin.Value -Name 'Mandatory')
+                    $isEnabled = [bool](Get-PSmmPluginsConfigMemberValue -Object $baselinePlugin.Value -Name 'Enabled')
                     if (-not ($isMandatory -or $isEnabled -or $isInstalled)) { continue }
 
                     $script:PSmm_PluginBaseline += [pscustomobject]@{
-                        Name = [string](Get-ConfigMemberValue -Object $baselinePlugin.Value -Name 'Name')
+                        Name = [string](Get-PSmmPluginsConfigMemberValue -Object $baselinePlugin.Value -Name 'Name')
                         Scope = $baselineGroup.Name
                         InstalledVersion = if ($state) { $state.CurrentVersion } else { $null }
                     }
@@ -1185,10 +908,10 @@ function Confirm-Plugins {
                     Config = $pluginEntry.Value
                 }
                 $pluginName = Resolve-PluginNameSafe -PluginOrConfig $plugin
-                $isMandatory = [bool](Get-ConfigMemberValue -Object $plugin.Config -Name 'Mandatory')
-                $isEnabled = [bool](Get-ConfigMemberValue -Object $plugin.Config -Name 'Enabled')
-                $state = Get-ConfigMemberValue -Object $plugin.Config -Name 'State'
-                $currentVersion = Get-ConfigMemberValue -Object $state -Name 'CurrentVersion'
+                $isMandatory = [bool](Get-PSmmPluginsConfigMemberValue -Object $plugin.Config -Name 'Mandatory')
+                $isEnabled = [bool](Get-PSmmPluginsConfigMemberValue -Object $plugin.Config -Name 'Enabled')
+                $state = Get-PSmmPluginsConfigMemberValue -Object $plugin.Config -Name 'State'
+                $currentVersion = Get-PSmmPluginsConfigMemberValue -Object $state -Name 'CurrentVersion'
                 $hasInstalledState = -not [string]::IsNullOrWhiteSpace([string]$currentVersion)
                 $shouldProcess = $isMandatory -or $isEnabled -or ($updateMode -and $hasInstalledState)
 
@@ -1309,7 +1032,10 @@ function Invoke-PluginConfirmation {
         }
     }
     else {
-        $hasPaths = ($null -ne $Config.PSObject.Properties['Paths'])
+        $hasPaths = $false
+        if (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue) {
+            $hasPaths = Test-PSmmPluginsConfigMember -Object $Config -Name 'Paths'
+        }
     }
 
     if (-not $hasPaths) {
@@ -1320,7 +1046,7 @@ function Invoke-PluginConfirmation {
     $FileSystem = $null
     $Process = $null
 
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try {
             $FileSystem = $ServiceContainer.Resolve('FileSystem')
             $Process = $ServiceContainer.Resolve('Process')
@@ -1336,8 +1062,8 @@ function Invoke-PluginConfirmation {
 
     # Get initial install state
     $state = Get-InstallState -Plugin $Plugin -Paths $Paths -FileSystem $FileSystem -Process $Process
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    Set-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
 
     # Store state in Run configuration
     $scopeKey = $Run.App.Plugins.Manifest.GetEnumerator() |
@@ -1372,8 +1098,8 @@ function Invoke-PluginConfirmation {
 
     # Refresh install state after changes
     $state = Get-InstallState -Plugin $Plugin -Paths $Paths -FileSystem $FileSystem -Process $Process
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    Set-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
 
     if ($scopeKey) {
         $Run.App.Plugins.Manifest.$scopeKey.$($Plugin.Key).State = $state
@@ -1445,8 +1171,8 @@ function Get-InstallState {
 
         if ($installPath) {
             Write-Verbose "Found installation at: $($installPath.FullName)"
-            $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-            Set-ConfigMemberValue -Object $pluginConfig -Name 'InstallPath' -Value $installPath.FullName
+            $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+            Set-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'InstallPath' -Value $installPath.FullName
             # Temporary PATH registration removed: callers should reference install paths directly.
         }
 
@@ -1539,7 +1265,7 @@ function Get-LatestDownloadUrl {
         $PathProvider = $null
         $Process = $null
 
-        if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        if ($null -ne $ServiceContainer) {
             try {
                 $Http = $ServiceContainer.Resolve('Http')
                 $Crypto = $ServiceContainer.Resolve('Crypto')
@@ -1551,6 +1277,32 @@ function Get-LatestDownloadUrl {
             catch {
                 Write-Verbose "Failed to resolve services from ServiceContainer: $_"
             }
+        }
+
+        if ($null -eq $PathProvider) {
+            try {
+                $pathsCandidate = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths'
+                if ($null -ne $pathsCandidate -and ($pathsCandidate -is [IPathProvider])) {
+                    $PathProvider = [PathProvider]::new([IPathProvider]$pathsCandidate)
+                }
+            }
+            catch {
+                Write-Verbose "Failed to bind PathProvider from Config.Paths: $($_.Exception.Message)"
+            }
+        }
+
+        if ($null -eq $PathProvider) {
+            try {
+                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+                $PathProvider = $globalServiceContainer.Resolve('PathProvider')
+            }
+            catch {
+                Write-Verbose "Failed to resolve PathProvider from global ServiceContainer: $($_.Exception.Message)"
+            }
+        }
+
+        if ($null -eq $PathProvider) {
+            $PathProvider = [PathProvider]::new()
         }
 
         # Ensure Config bucket exists before accessing nested members
@@ -1571,7 +1323,10 @@ function Get-LatestDownloadUrl {
                 }
             }
             else {
-                $hasConfig = ($null -ne $Plugin.PSObject.Properties['Config'])
+                $hasConfig = $false
+                if (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue) {
+                    $hasConfig = Test-PSmmPluginsConfigMember -Object $Plugin -Name 'Config'
+                }
             }
         }
         catch {
@@ -1618,10 +1373,18 @@ function Get-LatestDownloadUrl {
                 if ($hasSource) { $source = [string]$pluginConfig['Source'] }
             }
             else {
-                $pnProp = $pluginConfig.PSObject.Properties['Name']
-                if ($null -ne $pnProp) { $pluginName = [string]$pnProp.Value }
-                $srcProp = $pluginConfig.PSObject.Properties['Source']
-                if ($null -ne $srcProp) { $source = [string]$srcProp.Value }
+                if (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue) {
+                    if (Test-PSmmPluginsConfigMember -Object $pluginConfig -Name 'Name') {
+                        $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
+                    }
+                    if (Test-PSmmPluginsConfigMember -Object $pluginConfig -Name 'Source') {
+                        $source = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Source')
+                    }
+                }
+                else {
+                    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
+                    $source = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Source')
+                }
             }
         }
         catch {
@@ -1648,7 +1411,10 @@ function Get-LatestDownloadUrl {
                 }
             }
             else {
-                $hasState = ($null -ne $pluginConfig.PSObject.Properties['State'])
+                $hasState = $false
+                if (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue) {
+                    $hasState = Test-PSmmPluginsConfigMember -Object $pluginConfig -Name 'State'
+                }
             }
         }
         catch {
@@ -1977,7 +1743,7 @@ function Install-Plugin {
         $PathProvider = $null
         $Process = $null
 
-        if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+        if ($null -ne $ServiceContainer) {
             try {
                 $Http = $ServiceContainer.Resolve('Http')
                 $null = $ServiceContainer.Resolve('Crypto')
@@ -1991,12 +1757,38 @@ function Install-Plugin {
             }
         }
 
+        if ($null -eq $PathProvider) {
+            try {
+                $pathsCandidate = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths'
+                if ($null -ne $pathsCandidate -and ($pathsCandidate -is [IPathProvider])) {
+                    $PathProvider = [PathProvider]::new([IPathProvider]$pathsCandidate)
+                }
+            }
+            catch {
+                Write-Verbose "Failed to bind PathProvider from Config.Paths: $($_.Exception.Message)"
+            }
+        }
+
+        if ($null -eq $PathProvider) {
+            try {
+                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+                $PathProvider = $globalServiceContainer.Resolve('PathProvider')
+            }
+            catch {
+                Write-Verbose "Failed to resolve PathProvider from global ServiceContainer: $($_.Exception.Message)"
+            }
+        }
+
+        if ($null -eq $PathProvider) {
+            $PathProvider = [PathProvider]::new()
+        }
+
         # Prefer an already-secure token if available; otherwise build SecureString safely
         $token = $null
 
         $secrets = $null
         if ($null -ne $Config) {
-            $secrets = Get-ConfigMemberValue -Object $Config -Name 'Secrets'
+            $secrets = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Secrets'
         }
 
         if ($null -ne $secrets) {
@@ -2021,8 +1813,13 @@ function Install-Plugin {
             }
             else {
                 # If the secrets object exposes a SecureString property, use it directly
-                if ($secrets.PSObject.Properties.Match('GitHubToken') -and $secrets.GitHubToken -is [System.Security.SecureString]) {
-                    $token = $secrets.GitHubToken
+                if (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue) {
+                    if (Test-PSmmPluginsConfigMember -Object $secrets -Name 'GitHubToken') {
+                        $secretsToken = Get-PSmmPluginsConfigMemberValue -Object $secrets -Name 'GitHubToken'
+                        if ($secretsToken -is [System.Security.SecureString]) {
+                            $token = $secretsToken
+                        }
+                    }
                 }
             }
         }
@@ -2145,7 +1942,7 @@ function Request-PluginUpdate {
 
         $secrets = $null
         if ($null -ne $Config) {
-            $secrets = Get-ConfigMemberValue -Object $Config -Name 'Secrets'
+            $secrets = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Secrets'
         }
 
         if ($null -ne $secrets) {
@@ -2170,8 +1967,13 @@ function Request-PluginUpdate {
             }
             else {
                 # If the secrets object exposes a SecureString property, use it directly
-                if ($secrets.PSObject.Properties.Match('GitHubToken') -and $secrets.GitHubToken -is [System.Security.SecureString]) {
-                    $token = $secrets.GitHubToken
+                if (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue) {
+                    if (Test-PSmmPluginsConfigMember -Object $secrets -Name 'GitHubToken') {
+                        $secretsToken = Get-PSmmPluginsConfigMemberValue -Object $secrets -Name 'GitHubToken'
+                        if ($secretsToken -is [System.Security.SecureString]) {
+                            $token = $secretsToken
+                        }
+                    }
                 }
             }
         }
@@ -2191,11 +1993,11 @@ function Request-PluginUpdate {
         Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto `
             -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process | Out-Null
 
-        $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-        $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+        $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+        $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
 
-        $currentVersion = Get-ConfigMemberValue -Object $state -Name 'CurrentVersion'
-        $latestVersion = Get-ConfigMemberValue -Object $state -Name 'LatestVersion'
+        $currentVersion = Get-PSmmPluginsConfigMemberValue -Object $state -Name 'CurrentVersion'
+        $latestVersion = Get-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestVersion'
 
         if (-not $latestVersion) {
             Write-Warning "Could not determine latest version for: $pluginName"
@@ -2273,11 +2075,11 @@ function Update-Plugin {
 
     try {
         $pluginName = Resolve-PluginNameSafe -PluginOrConfig $Plugin
-        $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-        $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+        $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+        $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
 
-        $currentVersion = Get-ConfigMemberValue -Object $state -Name 'CurrentVersion'
-        $latestVersion = Get-ConfigMemberValue -Object $state -Name 'LatestVersion'
+        $currentVersion = Get-PSmmPluginsConfigMemberValue -Object $state -Name 'CurrentVersion'
+        $latestVersion = Get-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestVersion'
 
         # Update with ShouldProcess support
         if ($PSCmdlet.ShouldProcess("$pluginName", "Update from $currentVersion to $latestVersion")) {

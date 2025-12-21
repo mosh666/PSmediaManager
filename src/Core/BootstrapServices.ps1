@@ -22,36 +22,6 @@
 using namespace System
 using namespace System.IO
 
-# Define minimal PathProvider first (before imports to avoid scoping issues)
-# This is a lightweight helper used only during bootstrap for path joining
-class PathProvider {
-    [string] GetPath([string]$pathKey) {
-        # Minimal implementation – not used in early bootstrap
-        return $null
-    }
-
-    [bool] EnsurePathExists([string]$path) {
-        if ([string]::IsNullOrWhiteSpace($path)) { return $false }
-        if (-not (Test-Path -Path $path)) {
-            $null = New-Item -Path $path -ItemType Directory -Force -ErrorAction SilentlyContinue
-        }
-        return (Test-Path -Path $path)
-    }
-
-    [string] CombinePath([string[]]$paths) {
-        if ($null -eq $paths) { return '' }
-        $pathsArray = @($paths)
-        if ($pathsArray.Count -eq 0) { return '' }
-        $clean = @($pathsArray | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        if ($clean.Count -eq 0) { return '' }
-        $result = $clean[0]
-        for ($i = 1; $i -lt $clean.Count; $i++) {
-            $result = [System.IO.Path]::Combine($result, $clean[$i])
-        }
-        return $result
-    }
-}
-
 # Calculate paths to PSmm module classes
 $moduleRoot = Split-Path -Path $PSScriptRoot -Parent
 $psmmModulePath = Join-Path -Path $moduleRoot -ChildPath 'Modules\PSmm'

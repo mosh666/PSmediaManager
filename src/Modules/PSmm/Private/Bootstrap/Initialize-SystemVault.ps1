@@ -244,6 +244,20 @@ function Save-SystemSecret {
     $bstr = [IntPtr]::Zero
 
     try {
+        if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+            $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\Get-PSmmConfigNestedValue.ps1'
+            if (Test-Path -LiteralPath $helperPath) {
+                . $helperPath
+            }
+        }
+
+        if (-not (Get-Command -Name Get-PSmmAppConfigurationSafe -ErrorAction SilentlyContinue)) {
+            $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\Get-PSmmAppConfigurationSafe.ps1'
+            if (Test-Path -LiteralPath $helperPath) {
+                . $helperPath
+            }
+        }
+
         # Define entry mapping
         $entryMap = @{
             'GitHub-Token' = 'System/GitHub/API-Token'
@@ -266,14 +280,27 @@ function Save-SystemSecret {
                 $VaultPath = $env:PSMM_VAULT_PATH
                 Write-Verbose "[Save-SystemSecret] Resolved VaultPath from environment: $VaultPath"
             }
-            elseif (Get-Command -Name Get-AppConfiguration -ErrorAction SilentlyContinue) {
-                try {
-                        $VaultPath = (Get-AppConfiguration).Paths.App.Vault
-                                        Write-Verbose "[Save-SystemSecret] Resolved VaultPath from configuration: $VaultPath"
-                    }
-                    catch {
-                        Write-Verbose "Could not retrieve vault path from app configuration: $_"
-                    }
+            else {
+                $appConfig = if (Get-Command -Name Get-PSmmAppConfigurationSafe -ErrorAction SilentlyContinue) {
+                    Get-PSmmAppConfigurationSafe
+                }
+                else {
+                    $null
+                }
+
+                $VaultPath = if ($appConfig -and (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+                    Get-PSmmConfigNestedValue -Object $appConfig -Path @('Paths', 'App', 'Vault') -Default $null
+                }
+                else {
+                    $null
+                }
+
+                if ($VaultPath) {
+                    Write-Verbose "[Save-SystemSecret] Resolved VaultPath from configuration: $VaultPath"
+                }
+                else {
+                    Write-Verbose "Could not retrieve vault path from app configuration."
+                }
             }
             if (-not $VaultPath) {
                 throw [ConfigurationException]::new('VaultPath is not set. Provide -VaultPath or set PSMM_VAULT_PATH.')

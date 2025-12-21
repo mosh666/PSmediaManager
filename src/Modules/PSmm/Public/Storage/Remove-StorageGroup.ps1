@@ -43,97 +43,21 @@ function Remove-StorageGroup {
         [string[]]$GroupIds
     )
 
-    function Get-ConfigMemberValue {
-        param(
-            [Parameter(Mandatory)]
-            [AllowNull()]
-            $Object,
-
-            [Parameter(Mandatory)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name,
-
-            [Parameter()]
-            $Default = $null
-        )
-
-        if ($null -eq $Object) { return $Default }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: ContainsKey('$Name') failed: $($_.Exception.Message)"
-            }
-
-            try {
-                if ($Object.Contains($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: Contains('$Name') failed: $($_.Exception.Message)"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) { return $Object[$k] }
-                }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)"
-            }
-        }
-
-        $prop = $Object.PSObject.Properties[$Name]
-        if ($null -ne $prop) { return $prop.Value }
-
-        return $Default
-    }
-
-    function Set-ConfigMemberValue {
-        [CmdletBinding(SupportsShouldProcess = $true)]
-        param(
-            [Parameter(Mandatory)]
-            [AllowNull()]
-            $Object,
-
-            [Parameter(Mandatory)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name,
-
-            [Parameter()]
-            $Value
-        )
-
-        if ($null -eq $Object) { return }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            if ($PSCmdlet.ShouldProcess("Dictionary key '$Name'", 'Set value')) {
-                $Object[$Name] = $Value
-            }
-            return
-        }
-
-        if ($Object.PSObject.Properties[$Name]) {
-            if ($PSCmdlet.ShouldProcess("Property '$Name'", 'Set value')) {
-                $Object.$Name = $Value
-            }
-            return
-        }
-
-        if ($PSCmdlet.ShouldProcess("NoteProperty '$Name'", 'Add member')) {
-            $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+    if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+        $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\Private\Get-PSmmConfigNestedValue.ps1'
+        if (Test-Path -LiteralPath $helperPath) {
+            . $helperPath
         }
     }
 
-    $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage' -Default $null
+    $storageMap = Get-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Default $null
     if ($null -eq $storageMap -and $Config -is [System.Collections.IDictionary]) {
         # Allow passing a Storage-map directly in legacy/test scenarios
         $storageMap = $Config
     }
     if ($null -eq $storageMap) {
         $storageMap = @{}
-        Set-ConfigMemberValue -Object $Config -Name 'Storage' -Value $storageMap
+        Set-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Value $storageMap
     }
 
     $logAvail = Get-Command Write-PSmmLog -ErrorAction SilentlyContinue
@@ -200,24 +124,24 @@ function Remove-StorageGroup {
             foreach ($groupKey in $reloaded.Keys) {
                 $groupTable = $reloaded[$groupKey]
                 $group = [StorageGroupConfig]::new([string]$groupKey)
-                $displayNameValue = Get-ConfigMemberValue -Object $groupTable -Name 'DisplayName' -Default $null
+                $displayNameValue = Get-PSmmConfigMemberValue -Object $groupTable -Name 'DisplayName' -Default $null
                 if (-not [string]::IsNullOrWhiteSpace([string]$displayNameValue)) { $group.DisplayName = [string]$displayNameValue }
 
-                $mTable = Get-ConfigMemberValue -Object $groupTable -Name 'Master' -Default $null
+                $mTable = Get-PSmmConfigMemberValue -Object $groupTable -Name 'Master' -Default $null
                 if ($null -ne $mTable) {
-                    $mLabel = [string](Get-ConfigMemberValue -Object $mTable -Name 'Label' -Default '')
-                    $mSerial = [string](Get-ConfigMemberValue -Object $mTable -Name 'SerialNumber' -Default '')
+                    $mLabel = [string](Get-PSmmConfigNestedValue -Object $groupTable -Path @('Master','Label') -Default '')
+                    $mSerial = [string](Get-PSmmConfigNestedValue -Object $groupTable -Path @('Master','SerialNumber') -Default '')
                     $group.Master = [StorageDriveConfig]::new($mLabel, '')
                     $group.Master.SerialNumber = $mSerial
                 }
 
-                $bTable = Get-ConfigMemberValue -Object $groupTable -Name 'Backup' -Default $null
+                $bTable = Get-PSmmConfigMemberValue -Object $groupTable -Name 'Backup' -Default $null
                 if ($bTable -is [System.Collections.IDictionary] -and $bTable.Count -gt 0) {
                     foreach ($bk in ($bTable.Keys | Where-Object { $_ -match '^[0-9]+' } | Sort-Object { [int]$_ })) {
                         $b = $bTable[$bk]
                         if ($null -eq $b) { continue }
-                        $bLabel = [string](Get-ConfigMemberValue -Object $b -Name 'Label' -Default '')
-                        $bSerial = [string](Get-ConfigMemberValue -Object $b -Name 'SerialNumber' -Default '')
+                        $bLabel = [string](Get-PSmmConfigMemberValue -Object $b -Name 'Label' -Default '')
+                        $bSerial = [string](Get-PSmmConfigMemberValue -Object $b -Name 'SerialNumber' -Default '')
                         $cfg = [StorageDriveConfig]::new($bLabel, '')
                         $cfg.SerialNumber = $bSerial
                         $group.Backups[[string]$bk] = $cfg

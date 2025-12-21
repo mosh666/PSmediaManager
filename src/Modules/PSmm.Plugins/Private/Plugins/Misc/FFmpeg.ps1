@@ -5,116 +5,14 @@
 
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
+    }
+}
+
 #region ########## PRIVATE ##########
-
-function Get-ConfigMemberValue {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name
-    )
-
-    if ($null -eq $Object) {
-        return $null
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        try {
-            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey failed: $($_.Exception.Message)"
-        }
-
-        try {
-            if ($Object.Contains($Name)) { return $Object[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains failed: $($_.Exception.Message)"
-        }
-
-        try {
-            foreach ($k in $Object.Keys) {
-                if ($k -eq $Name) { return $Object[$k] }
-            }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
-        }
-
-        return $null
-    }
-
-    try {
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) { return $p.Value }
-    }
-    catch {
-        Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
-    }
-
-    return $null
-}
-
-function Set-ConfigMemberValue {
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name,
-
-        [Parameter()]
-        [AllowNull()]
-        [object]$Value
-    )
-
-    if ($null -eq $Object) {
-        return
-    }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        if (-not $PSCmdlet.ShouldProcess("$Name", 'Set config value')) {
-            return
-        }
-        $Object[$Name] = $Value
-        return
-    }
-
-    try {
-        if (-not $PSCmdlet.ShouldProcess("$Name", 'Set config value')) {
-            return
-        }
-        $Object.$Name = $Value
-        return
-    }
-    catch {
-        Write-Verbose "Set-ConfigMemberValue: direct assignment failed: $($_.Exception.Message)"
-    }
-
-    try {
-        if (-not $PSCmdlet.ShouldProcess("$Name", 'Set config value')) {
-            return
-        }
-        if ($null -eq $Object.PSObject.Properties[$Name]) {
-            $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
-        }
-        else {
-            $Object.PSObject.Properties[$Name].Value = $Value
-        }
-    }
-    catch {
-        Write-Verbose "Set-ConfigMemberValue: PSObject property set failed: $($_.Exception.Message)"
-    }
-}
 
 function Get-CurrentVersion-ffmpeg {
     param(
@@ -125,7 +23,7 @@ function Get-CurrentVersion-ffmpeg {
 
     # Resolve FileSystem from ServiceContainer if available
     $FileSystem = $null
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try {
             $FileSystem = $ServiceContainer.Resolve('FileSystem')
         }
@@ -134,8 +32,8 @@ function Get-CurrentVersion-ffmpeg {
         }
     }
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'FFmpeg' }
 
     if ($FileSystem) {
@@ -162,7 +60,7 @@ function Get-LatestUrlFromUrl-ffmpeg {
 
     # Resolve FileSystem from ServiceContainer if available
     $FileSystem = $null
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try {
             $FileSystem = $ServiceContainer.Resolve('FileSystem')
         }
@@ -171,10 +69,10 @@ function Get-LatestUrlFromUrl-ffmpeg {
         }
     }
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'FFmpeg' }
-    $versionUrl = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
+    $versionUrl = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
 
     Invoke-RestMethod -Uri $versionUrl -OutFile $Paths._Temp
 
@@ -188,13 +86,13 @@ function Get-LatestUrlFromUrl-ffmpeg {
     }
 
     $LatestVersion = $LatestInstaller.Split('-')[1]
-    $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
+    $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
     if ($null -eq $state) {
         $state = @{}
-        Set-ConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
+        Set-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State' -Value $state
     }
-    Set-ConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestVersion
-    Set-ConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $LatestInstaller
+    Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestVersion
+    Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $LatestInstaller
 
     $Url = $versionUrl
     return $Url
@@ -210,7 +108,7 @@ function Get-Installer-ffmpeg {
 
     # Resolve FileSystem from ServiceContainer if available
     $FileSystem = $null
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try {
             $FileSystem = $ServiceContainer.Resolve('FileSystem')
         }
@@ -219,8 +117,8 @@ function Get-Installer-ffmpeg {
         }
     }
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'FFmpeg' }
     $pattern = "$pluginName*.7z"
     if ($FileSystem) {
@@ -235,8 +133,8 @@ function Get-Installer-ffmpeg {
     }
     Move-Item -Path "$($Paths._Temp)\$pattern" -Destination $Paths._Downloads -Force
 
-    $state = Get-ConfigMemberValue -Object $pluginConfig -Name 'State'
-    $latestInstaller = [string](Get-ConfigMemberValue -Object $state -Name 'LatestInstaller')
+    $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
+    $latestInstaller = [string](Get-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestInstaller')
     $InstallerPath = Join-Path -Path $Paths._Downloads -ChildPath $latestInstaller
     return $InstallerPath
 }
@@ -281,16 +179,16 @@ function Invoke-Installer-ffmpeg {
             throw $ex
         }
 
-        $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-        $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+        $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+        $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
         if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'FFmpeg' }
         Write-PSmmLog -Level SUCCESS -Context "Install $pluginName" -Message "Installation completed for $($InstallerPath)" -Console -File
     }
     catch {
         $pn = 'FFmpeg'
         try {
-            $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-            $pnCandidate = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+            $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+            $pnCandidate = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
             if (-not [string]::IsNullOrWhiteSpace($pnCandidate)) { $pn = $pnCandidate }
         }
         catch {

@@ -206,8 +206,8 @@ class UiProjectsIndex {
             if ($obj.ContainsKey('Backup')) { $backupObj = $obj['Backup'] }
         }
         else {
-            if ($obj.PSObject.Properties.Match('Master').Count -gt 0) { $masterObj = $obj.Master }
-            if ($obj.PSObject.Properties.Match('Backup').Count -gt 0) { $backupObj = $obj.Backup }
+            try { $masterObj = $obj.Master } catch { $masterObj = $null }
+            try { $backupObj = $obj.Backup } catch { $backupObj = $null }
         }
 
         if ($masterObj -is [System.Collections.IDictionary]) {

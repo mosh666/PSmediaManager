@@ -5,61 +5,14 @@
 
 Set-StrictMode -Version Latest
 
-#region ########## PRIVATE ##########
-
-function Get-ConfigMemberValue {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name
-    )
-
-    if ($null -eq $Object) {
-        return $null
+if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
     }
-
-    if ($Object -is [System.Collections.IDictionary]) {
-        try {
-            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey failed: $($_.Exception.Message)"
-        }
-
-        try {
-            if ($Object.Contains($Name)) { return $Object[$Name] }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains failed: $($_.Exception.Message)"
-        }
-
-        try {
-            foreach ($k in $Object.Keys) {
-                if ($k -eq $Name) { return $Object[$k] }
-            }
-        }
-        catch {
-            Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys iteration failed: $($_.Exception.Message)"
-        }
-
-        return $null
-    }
-
-    try {
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) { return $p.Value }
-    }
-    catch {
-        Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
-    }
-
-    return $null
 }
+
+#region ########## PRIVATE ##########
 
 function Get-CurrentVersion-KeePassXC {
     param(
@@ -70,7 +23,7 @@ function Get-CurrentVersion-KeePassXC {
 
     # Resolve FileSystem from ServiceContainer if available
     $FileSystem = $null
-    if ($null -ne $ServiceContainer -and ($ServiceContainer.PSObject.Methods.Name -contains 'Resolve')) {
+    if ($null -ne $ServiceContainer) {
         try {
             $FileSystem = $ServiceContainer.Resolve('FileSystem')
         }
@@ -79,8 +32,8 @@ function Get-CurrentVersion-KeePassXC {
         }
     }
 
-    $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-    $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+    $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'KeePassXC' }
 
     if ($FileSystem) {
@@ -91,8 +44,8 @@ function Get-CurrentVersion-KeePassXC {
     }
 
     if ($InstallPath) {
-        $commandPath = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'CommandPath')
-        $command = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Command')
+        $commandPath = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'CommandPath')
+        $command = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Command')
         $bin = Join-Path -Path $InstallPath -ChildPath $commandPath -AdditionalChildPath $command
         $CurrentVersion = (& $bin --version)
         return $CurrentVersion
@@ -109,8 +62,8 @@ function Invoke-Installer-KeePassXC {
         [string]$InstallerPath
     )
     try {
-        $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-        $pluginName = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+        $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+        $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
         if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'KeePassXC' }
         $ExtractPath = $Paths.Root
         Expand-Archive -Path $InstallerPath -DestinationPath $ExtractPath -Force
@@ -119,8 +72,8 @@ function Invoke-Installer-KeePassXC {
     catch {
         $pn = 'KeePassXC'
         try {
-            $pluginConfig = Get-ConfigMemberValue -Object $Plugin -Name 'Config'
-            $pnCandidate = [string](Get-ConfigMemberValue -Object $pluginConfig -Name 'Name')
+            $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
+            $pnCandidate = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
             if (-not [string]::IsNullOrWhiteSpace($pnCandidate)) { $pn = $pnCandidate }
         }
         catch {

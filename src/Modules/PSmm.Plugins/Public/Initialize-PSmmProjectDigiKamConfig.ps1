@@ -74,68 +74,59 @@ function Initialize-PSmmProjectDigiKamConfig {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
+        if (
+            (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) -or
+            (-not (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue))
+        ) {
+            $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Private\ConfigMemberAccessHelpers.ps1'
+            if (Test-Path -Path $configHelpersPath) {
+                . $configHelpersPath
+            }
+        }
+
         Write-Verbose "Initializing digiKam configuration for project: $ProjectName"
     }
 
     process {
         try {
-            function _TryGetConfigValue {
-                [CmdletBinding()]
-                param(
-                    [Parameter()][AllowNull()]$Object,
-                    [Parameter()][string]$Name
-                )
+            # Ensure PathProvider is available, preferring DI/global instance, otherwise wrap Config.Paths when possible.
+            $pathProviderType = 'PathProvider' -as [type]
+            $iPathProviderType = 'IPathProvider' -as [type]
+            if ($null -eq $PathProvider) {
+                $resolved = $null
 
-                if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Name)) {
-                    return $null
-                }
-
-                if ($Object -is [System.Collections.IDictionary]) {
-                    try {
-                        if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-                    }
-                    catch {
-                        Write-Verbose "_TryGetConfigValue: ContainsKey('$Name') failed: $($_.Exception.Message)"
-                    }
-                    try {
-                        if ($Object.Contains($Name)) { return $Object[$Name] }
-                    }
-                    catch {
-                        Write-Verbose "_TryGetConfigValue: Contains('$Name') failed: $($_.Exception.Message)"
-                    }
-
-                    try {
-                        foreach ($k in $Object.Keys) {
-                            if ($k -eq $Name) { return $Object[$k] }
+                try {
+                    $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+                    if ($null -ne $globalServiceContainer) {
+                        try {
+                            $resolved = $globalServiceContainer.Resolve('PathProvider')
+                        }
+                        catch {
+                            $resolved = $null
                         }
                     }
-                    catch {
-                        Write-Verbose "_TryGetConfigValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)"
+                }
+                catch {
+                    $resolved = $null
+                }
+
+                if ($null -ne $resolved) {
+                    $PathProvider = $resolved
+                }
+                elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType) {
+                    $pathsCandidate = $null
+                    try { $pathsCandidate = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths' } catch { $pathsCandidate = $null }
+                    if ($null -ne $pathsCandidate -and $pathsCandidate -is $iPathProviderType) {
+                        $PathProvider = $pathProviderType::new([IPathProvider]$pathsCandidate)
                     }
-                    return $null
                 }
 
-                $p = $Object.PSObject.Properties[$Name]
-                if ($null -ne $p) {
-                    return $p.Value
+                if ($null -eq $PathProvider -and $null -ne $pathProviderType) {
+                    $PathProvider = $pathProviderType::new()
                 }
-
-                return $null
             }
-
-            function _TryGetNestedValue {
-                [CmdletBinding()]
-                param(
-                    [Parameter()][AllowNull()]$Root,
-                    [Parameter(Mandatory)][string[]]$PathParts
-                )
-
-                $cur = $Root
-                foreach ($part in $PathParts) {
-                    if ($null -eq $cur) { return $null }
-                    $cur = _TryGetConfigValue -Object $cur -Name $part
-                }
-                return $cur
+            elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+                $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
             }
 
             # Confirm the action with ShouldProcess
@@ -147,7 +138,7 @@ function Initialize-PSmmProjectDigiKamConfig {
             # Get project path - check if this is the current project
             $projectPath = $null
             $projectsCurrent = $null
-            $projectsCurrent = _TryGetNestedValue -Root $Config -PathParts @('Projects','Current')
+            $projectsCurrent = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Projects', 'Current')
 
             if ($null -ne $projectsCurrent) {
                 $currentProject = [ProjectCurrentConfig]::FromObject($projectsCurrent)
@@ -185,7 +176,7 @@ function Initialize-PSmmProjectDigiKamConfig {
 
             # Get plugin paths
             $pluginsRoot = $null
-            $pluginsRoot = _TryGetNestedValue -Root $Config -PathParts @('Paths','App','Plugins','Root')
+            $pluginsRoot = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths', 'App', 'Plugins', 'Root')
             $pluginsRoot = if ($null -eq $pluginsRoot) { '' } else { [string]$pluginsRoot }
             if ([string]::IsNullOrWhiteSpace($pluginsRoot)) {
                 throw [ConfigurationException]::new('Plugins root path not found in configuration (Paths.App.Plugins.Root)', 'PluginsRoot')
@@ -212,7 +203,7 @@ function Initialize-PSmmProjectDigiKamConfig {
             else {
                 # Load template and replace variables
                 $configDigiKamPath = $null
-                $configDigiKamPath = _TryGetNestedValue -Root $Config -PathParts @('Paths','App','ConfigDigiKam')
+                $configDigiKamPath = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths', 'App', 'ConfigDigiKam')
                 $configDigiKamPath = if ($null -eq $configDigiKamPath) { '' } else { [string]$configDigiKamPath }
                 if ([string]::IsNullOrWhiteSpace($configDigiKamPath)) {
                     throw [ConfigurationException]::new('digiKam config path not found in configuration (Paths.App.ConfigDigiKam)', 'ConfigDigiKam')
@@ -245,7 +236,7 @@ function Initialize-PSmmProjectDigiKamConfig {
             # Copy metadata profile if it doesn't exist
             if (-not $configDigiKamPath) {
                 $configDigiKamPath = $null
-                $configDigiKamPath = _TryGetNestedValue -Root $Config -PathParts @('Paths','App','ConfigDigiKam')
+                $configDigiKamPath = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Paths', 'App', 'ConfigDigiKam')
                 $configDigiKamPath = if ($null -eq $configDigiKamPath) { '' } else { [string]$configDigiKamPath }
             }
 
@@ -275,11 +266,23 @@ function Initialize-PSmmProjectDigiKamConfig {
             return $configResult
         }
         catch {
-            $errorMessage = if ($null -ne $_.Exception.PSObject.Properties['Context']) {
-                "[$($_.Exception.Context)] $($_.Exception.Message)"
+            $hasContext = $false
+            try {
+                if (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue) {
+                    $hasContext = Test-PSmmPluginsConfigMember -Object $_.Exception -Name 'Context'
+                }
+            }
+            catch {
+                $hasContext = $false
+            }
+
+            if ($hasContext) {
+                $contextValue = $null
+                try { $contextValue = Get-PSmmPluginsConfigMemberValue -Object $_.Exception -Name 'Context' } catch { $contextValue = $null }
+                $errorMessage = "[$contextValue] $($_.Exception.Message)"
             }
             else {
-                "Failed to initialize digiKam configuration for project $ProjectName`: $_"
+                $errorMessage = "Failed to initialize digiKam configuration for project $ProjectName`: $_"
             }
 
             Write-PSmmLog -Level ERROR -Context 'Initialize-PSmmProjectDigiKamConfig' `

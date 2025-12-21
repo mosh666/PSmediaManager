@@ -89,12 +89,7 @@ function Get-StorageDrive {
             return $false
         }
 
-        $containsKey = $Map.PSObject.Methods['ContainsKey']
-        if ($containsKey) {
-            try { return [bool]$Map.ContainsKey($Key) } catch { return $false }
-        }
-
-        return $false
+        try { return [bool]$Map.ContainsKey($Key) } catch { return $false }
     }
 
     $forceInlineEnumeration = $false

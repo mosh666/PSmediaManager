@@ -62,95 +62,74 @@ function Initialize-Logging {
         Write-Verbose 'ENTER Initialize-Logging'
         Write-Verbose 'Initializing logging system...'
 
-        function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-            if ($null -eq $Object) {
-                return $null
+        if (
+            (-not (Get-Command -Name 'Get-PSmmLoggingConfigMemberValue' -ErrorAction SilentlyContinue)) -or
+            (-not (Get-Command -Name 'Test-PSmmLoggingConfigMember' -ErrorAction SilentlyContinue))
+        ) {
+            try {
+                $helpersPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Private\ConfigMemberAccessHelpers.ps1'
+                if (Test-Path -Path $helpersPath) {
+                    . $helpersPath
+                }
             }
-
-            if ($Object -is [System.Collections.IDictionary]) {
-                try {
-                    if ($Object.ContainsKey($Name)) {
-                        return $Object[$Name]
-                    }
-                }
-                catch {
-                    Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    if ($Object.Contains($Name)) {
-                        return $Object[$Name]
-                    }
-                }
-                catch {
-                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $($_.Exception.Message)"
-                }
-
-                try {
-                    foreach ($k in $Object.Keys) {
-                        if ($k -eq $Name) {
-                            return $Object[$k]
-                        }
-                    }
-                }
-                catch {
-                    Write-Verbose "Get-ConfigMemberValue: IDictionary.Keys enumeration failed: $($_.Exception.Message)"
-                }
-
-                return $null
+            catch {
+                Write-Verbose "Initialize-Logging: failed to load ConfigMemberAccess helpers: $($_.Exception.Message)"
             }
-
-            $p = $Object.PSObject.Properties[$Name]
-            if ($null -ne $p) {
-                return $p.Value
-            }
-
-            return $null
         }
 
-        # Basic structure validation supporting both PSObjects and IDictionary (hashtable) inputs
+        $pathProviderType = 'PathProvider' -as [type]
+        $iPathProviderType = 'IPathProvider' -as [type]
+
+        if ($null -eq $PathProvider -and $null -ne $pathProviderType -and $null -ne $iPathProviderType) {
+            try {
+                $pathsCandidate = [ConfigMemberAccess]::GetMemberValue($Config, 'Paths')
+                if ($null -ne $pathsCandidate -and $pathsCandidate -is $iPathProviderType) {
+                    $PathProvider = $pathProviderType::new($pathsCandidate)
+                }
+            }
+            catch {
+                Write-Verbose "Initialize-Logging: failed to bind PathProvider from Config.Paths: $($_.Exception.Message)"
+            }
+        }
+
+        if ($null -eq $PathProvider) {
+            try {
+                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+                $resolved = $globalServiceContainer.Resolve('PathProvider')
+                if ($null -ne $resolved) {
+                    $PathProvider = $resolved
+                }
+            }
+            catch {
+                Write-Verbose "Initialize-Logging: failed to resolve PathProvider from global ServiceContainer: $($_.Exception.Message)"
+            }
+        }
+
+        if ($null -ne $PathProvider -and $null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+            $PathProvider = $pathProviderType::new($PathProvider)
+        }
+
+        # Basic structure validation supporting both typed classes and hashtable inputs.
+        # IMPORTANT: Do not rely on Get-Command visibility of private helper functions;
+        # use ConfigMemberAccess directly so AppConfiguration works reliably.
+        $parametersSource = $null
+        $loggingSource = $null
         $hasParameters = $false
         $hasLogging = $false
-        if ($Config -is [System.Collections.IDictionary]) {
-            try { $hasParameters = $Config.ContainsKey('Parameters') } catch { $hasParameters = $false }
-            if (-not $hasParameters) {
-                try { $hasParameters = $Config.Contains('Parameters') } catch { $hasParameters = $false }
-            }
-
-            if (-not $hasParameters) {
-                try {
-                    foreach ($k in $Config.Keys) {
-                        if ($k -eq 'Parameters') { $hasParameters = $true; break }
-                    }
-                }
-                catch { $hasParameters = $false }
-            }
-
-            try { $hasLogging = $Config.ContainsKey('Logging') } catch { $hasLogging = $false }
-            if (-not $hasLogging) {
-                try { $hasLogging = $Config.Contains('Logging') } catch { $hasLogging = $false }
-            }
-
-            if (-not $hasLogging) {
-                try {
-                    foreach ($k in $Config.Keys) {
-                        if ($k -eq 'Logging') { $hasLogging = $true; break }
-                    }
-                }
-                catch { $hasLogging = $false }
-            }
-        }
-        else {
-            $hasParameters = ($null -ne $Config.PSObject.Properties['Parameters'])
-            $hasLogging    = ($null -ne $Config.PSObject.Properties['Logging'])
-        }
+        try { $hasParameters = [ConfigMemberAccess]::TryGetMemberValue($Config, 'Parameters', [ref]$parametersSource) } catch { $hasParameters = $false }
+        try { $hasLogging = [ConfigMemberAccess]::TryGetMemberValue($Config, 'Logging', [ref]$loggingSource) } catch { $hasLogging = $false }
 
         if (-not $hasParameters -or -not $hasLogging) {
-            $ex = [ConfigurationException]::new("Invalid configuration object: missing 'Parameters' or 'Logging' members")
+            $available = @(
+                $Config |
+                    Get-Member -MemberType NoteProperty, Property, ScriptProperty, AliasProperty -ErrorAction SilentlyContinue |
+                    Select-Object -ExpandProperty Name
+            )
+            $availableText = if ($available) { ($available -join ', ') } else { '<none>' }
+            $ex = [ConfigurationException]::new("Invalid configuration object: missing 'Parameters' or 'Logging' members. Available members: $availableText")
             throw $ex
         }
 
-        $parametersSource = Get-ConfigMemberValue -Object $Config -Name 'Parameters'
         if ($null -eq $parametersSource) {
             $ex = [ConfigurationException]::new("Invalid configuration object: 'Parameters' is null")
             throw $ex
@@ -161,12 +140,11 @@ function Initialize-Logging {
             try { $nonInteractive = [bool]$parametersSource['NonInteractive'] } catch { $nonInteractive = $false }
         }
         else {
-            $nonInteractive = [bool](Get-ConfigMemberValue -Object $parametersSource -Name 'NonInteractive')
+            $nonInteractive = [bool]([ConfigMemberAccess]::GetMemberValue($parametersSource, 'NonInteractive'))
         }
 
         # Initialize script-level logging context
         $script:Context = @{ Context = $null }
-        $loggingSource = Get-ConfigMemberValue -Object $Config -Name 'Logging'
 
         if ($null -eq $loggingSource) {
             $ex = [ConfigurationException]::new("Logging configuration is null. Run.App.Logging was not properly initialized.")
@@ -187,25 +165,35 @@ function Initialize-Logging {
         else {
             # Convert objects (PSCustomObject or typed) to hashtable for easier merging
             # Prefer ToHashtable() when available (stable schema for typed config)
-            $toHashtableMethod = $null
-            try { $toHashtableMethod = $loggingSource.PSObject.Methods['ToHashtable'] } catch { $toHashtableMethod = $null }
-            if ($null -ne $toHashtableMethod) {
-                try {
-                    $loggingSettings = $loggingSource.ToHashtable()
+            try {
+                $loggingSettings = $loggingSource.ToHashtable()
+                if ($loggingSettings -is [System.Collections.IDictionary]) {
                     $keyCount = @($loggingSettings.Keys).Count
                     $convertedKeys = $loggingSettings.Keys -join ', '
                     Write-Verbose "Converted LoggingConfiguration via ToHashtable() with $keyCount keys: $convertedKeys"
                 }
-                catch {
-                    Write-Verbose "[Initialize-Logging] ToHashtable() failed; falling back to PSObject.Properties: $($_.Exception.Message)"
+                else {
                     $loggingSettings = $null
                 }
+            }
+            catch {
+                Write-Verbose "[Initialize-Logging] ToHashtable() failed; falling back to Get-Member: $($_.Exception.Message)"
+                $loggingSettings = $null
             }
 
             if ($null -eq $loggingSettings) {
                 $convertedLogging = @{}
-                foreach ($property in $loggingSource.PSObject.Properties) {
-                    $convertedLogging[$property.Name] = $property.Value
+                $memberNames = @(
+                    $loggingSource |
+                        Get-Member -MemberType NoteProperty, Property -ErrorAction SilentlyContinue |
+                        Select-Object -ExpandProperty Name
+                )
+                foreach ($memberName in $memberNames) {
+                    if ([string]::IsNullOrWhiteSpace([string]$memberName)) {
+                        continue
+                    }
+                    $memberValue = Get-PSmmLoggingConfigMemberValue -Object $loggingSource -Name ([string]$memberName)
+                    $convertedLogging[[string]$memberName] = $memberValue
                 }
                 # Use Keys count to avoid relying on .Count property availability across types
                 $keyCount = @($convertedLogging.Keys).Count
@@ -492,7 +480,7 @@ function Initialize-Logging {
         }
 
         # Clear log file in Dev mode
-        $devMode = [bool](Get-ConfigMemberValue -Object $parametersSource -Name 'Dev')
+        $devMode = [bool](Get-PSmmLoggingConfigMemberValue -Object $parametersSource -Name 'Dev')
         if ($devMode) {
             Write-Verbose 'Dev mode: Clearing log file'
             $logFilePath = $script:Logging.Path

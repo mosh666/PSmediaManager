@@ -1,6 +1,13 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\Private') -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
+    }
+}
+
 <#
 .SYNOPSIS
     Starts the digiKam application with project-specific configuration and isolated database.
@@ -76,55 +83,48 @@ function Start-PSmmdigiKam {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
-        function Get-ConfigMemberValue {
-            param(
-                [Parameter(Mandatory = $true)]
-                [AllowNull()]
-                [object]$Object,
-
-                [Parameter(Mandatory = $true)]
-                [ValidateNotNullOrEmpty()]
-                [string]$Name
-            )
-
-            if ($null -eq $Object) { return $null }
-
+        # Ensure PathProvider is available, preferring DI/global instance, otherwise wrap Config.Paths when possible.
+        $pathProviderType = 'PathProvider' -as [type]
+        $iPathProviderType = 'IPathProvider' -as [type]
+        if ($null -eq $PathProvider) {
+            $resolved = $null
             try {
-                if ($Object -is [System.Collections.IDictionary]) {
-                    $hasKey = $false
-                    try { $hasKey = $Object.ContainsKey($Name) } catch { $hasKey = $false }
-                    if (-not $hasKey) { try { $hasKey = $Object.Contains($Name) } catch { $hasKey = $false } }
-
-                    if (-not $hasKey) {
-                        try {
-                            foreach ($k in $Object.Keys) {
-                                if ($k -eq $Name) { $hasKey = $true; break }
-                            }
-                        }
-                        catch { $hasKey = $false }
+                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
+                if ($null -ne $globalServiceContainer) {
+                    try {
+                        $resolved = $globalServiceContainer.Resolve('PathProvider')
                     }
-
-                    if ($hasKey) { return $Object[$Name] }
+                    catch {
+                        $resolved = $null
+                    }
                 }
             }
             catch {
-                Write-Verbose "Get-ConfigMemberValue: dictionary access failed: $($_.Exception.Message)"
+                $resolved = $null
             }
 
-            try {
-                $prop = $Object.PSObject.Properties[$Name]
-                if ($null -ne $prop) { return $prop.Value }
+            if ($null -ne $resolved) {
+                $PathProvider = $resolved
             }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
+            elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType) {
+                $configPaths = $null
+                try { $configPaths = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths' } catch { $configPaths = $null }
+                if ($null -ne $configPaths -and $configPaths -is $iPathProviderType) {
+                    $PathProvider = $pathProviderType::new([IPathProvider]$configPaths)
+                }
             }
 
-            return $null
+            if ($null -eq $PathProvider -and $null -ne $pathProviderType) {
+                $PathProvider = $pathProviderType::new()
+            }
+        }
+        elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+            $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
         }
 
         # Get current project name from Config
-        $projects = Get-ConfigMemberValue -Object $Config -Name 'Projects'
-        $projectsCurrent = Get-ConfigMemberValue -Object $projects -Name 'Current'
+        $projects = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Projects'
+        $projectsCurrent = Get-PSmmPluginsConfigMemberValue -Object $projects -Name 'Current'
 
         if ($null -eq $projects -or $null -eq $projectsCurrent) {
             throw [ConfigurationException]::new('No current project selected', 'ProjectName')

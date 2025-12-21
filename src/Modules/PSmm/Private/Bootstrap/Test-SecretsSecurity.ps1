@@ -113,56 +113,14 @@ function Test-SecretsSecurity {
     try {
         Write-Verbose 'Starting security validation for KeePassXC vault...'
 
-        function Get-ConfigMemberValue {
-            [CmdletBinding()]
-            param(
-                [Parameter()][AllowNull()][object]$Object,
-                [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name
-            )
-
-            if ($null -eq $Object) {
-                return $null
+        if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+            $helperPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Get-PSmmConfigNestedValue.ps1'
+            if (Test-Path -LiteralPath $helperPath) {
+                . $helperPath
             }
-
-            if ($Object -is [System.Collections.IDictionary]) {
-                try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.ContainsKey('$Name') failed: $_" }
-                try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { Write-Verbose "Get-ConfigMemberValue: IDictionary.Contains('$Name') failed: $_" }
-                try {
-                    foreach ($k in $Object.Keys) {
-                        if ($k -eq $Name) { return $Object[$k] }
-                    }
-                }
-                catch { Write-Verbose "Get-ConfigMemberValue: Enumerating IDictionary.Keys failed: $_" }
-                return $null
-            }
-
-            $p = $Object.PSObject.Properties[$Name]
-            if ($null -ne $p) {
-                return $p.Value
-            }
-
-            return $null
         }
 
-        function Get-ConfigNestedValue {
-            [CmdletBinding()]
-            param(
-                [Parameter()][AllowNull()][object]$Object,
-                [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Path
-            )
-
-            $current = $Object
-            foreach ($segment in $Path) {
-                $current = Get-ConfigMemberValue -Object $current -Name $segment
-                if ($null -eq $current) {
-                    return $null
-                }
-            }
-
-            return $current
-        }
-
-        $vaultPath = Get-ConfigNestedValue -Object $Config -Path @('Paths','App','Vault')
+        $vaultPath = Get-PSmmConfigNestedValue -Object $Config -Path @('Paths','App','Vault') -Default $null
         if ([string]::IsNullOrWhiteSpace($vaultPath)) {
             Write-Warning 'Unable to resolve vault path (Config.Paths.App.Vault).'
             return $false
@@ -208,8 +166,9 @@ function Test-SecretsSecurity {
         Test-VaultPermissions -VaultPath $vaultPath -FileSystem $FileSystem
 
         # Test 4: Verify no secrets in configuration exports
-        $logRoot = Get-ConfigNestedValue -Object $Config -Path @('Paths','Log')
-        $internalName = Get-ConfigMemberValue -Object $Config -Name 'InternalName'
+        $logRoot = Get-PSmmConfigNestedValue -Object $Config -Path @('Paths','Log') -Default $null
+
+        $internalName = Get-PSmmConfigMemberValue -Object $Config -Name 'InternalName' -Default $null
 
         if (-not [string]::IsNullOrWhiteSpace($logRoot) -and -not [string]::IsNullOrWhiteSpace($internalName)) {
             $exportPath = Join-Path -Path $logRoot -ChildPath "$internalName`Run.psd1"

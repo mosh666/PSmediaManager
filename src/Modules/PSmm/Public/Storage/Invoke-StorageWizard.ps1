@@ -43,96 +43,9 @@ function Invoke-StorageWizard {
         [switch]$NonInteractive
     )
 
-    function Get-ConfigMemberValue {
-        param(
-            [Parameter(Mandatory)]
-            [AllowNull()]
-            $Object,
-
-            [Parameter(Mandatory)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name,
-
-            [Parameter()]
-            $Default = $null
-        )
-
-        if ($null -eq $Object) { return $Default }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: failed ContainsKey('$Name'): $($_.Exception.Message)"
-            }
-            try {
-                if ($Object.Contains($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: failed Contains('$Name'): $($_.Exception.Message)"
-            }
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) { return $Object[$k] }
-                }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: failed iterating Keys for '$Name': $($_.Exception.Message)"
-            }
-        }
-
-        $prop = $Object.PSObject.Properties[$Name]
-        if ($null -ne $prop) { return $prop.Value }
-
-        return $Default
-    }
-
-    function Set-ConfigMemberValue {
-        [CmdletBinding(SupportsShouldProcess = $true)]
-        param(
-            [Parameter(Mandatory)]
-            [AllowNull()]
-            $Object,
-
-            [Parameter(Mandatory)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name,
-
-            [Parameter()]
-            $Value
-        )
-
-        if ($null -eq $Object) {
-            return
-        }
-
-        if (-not $PSCmdlet.ShouldProcess("Config member '$Name'", 'Set value')) {
-            return
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            $Object[$Name] = $Value
-            return
-        }
-
-        $existing = $null
-        try { $existing = $Object.PSObject.Properties[$Name] } catch { $existing = $null }
-        if ($null -ne $existing) {
-            try { $Object.$Name = $Value }
-            catch {
-                Write-Verbose "Set-ConfigMemberValue: failed setting '$Name': $($_.Exception.Message)"
-            }
-            return
-        }
-
-        try {
-            $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value -Force
-        }
-        catch {
-            Write-Verbose "Set-ConfigMemberValue: failed Add-Member for '$Name': $($_.Exception.Message)"
-            # Best-effort: some typed objects may not allow adding properties
-        }
+    if (-not (Get-Command Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+        $nestedAccessPath = Join-Path $PSScriptRoot '..\..\Private\Get-PSmmConfigNestedValue.ps1'
+        if (Test-Path $nestedAccessPath) { . $nestedAccessPath }
     }
 
     function Test-MapContainsKey {
@@ -149,15 +62,12 @@ function Invoke-StorageWizard {
         if ($null -eq $Map) { return $false }
 
         if ($Map -is [System.Collections.IDictionary]) {
-            $containsKey = $Map.PSObject.Methods['ContainsKey']
-            if ($containsKey) {
-                try {
-                    if ($Map.ContainsKey($Key)) { return $true }
-                }
-                catch {
-                    Write-Verbose "Test-MapContainsKey: ContainsKey() failed: $($_.Exception.Message)"
-                    # fall through
-                }
+            try {
+                if ($Map.ContainsKey($Key)) { return $true }
+            }
+            catch {
+                Write-Verbose "Test-MapContainsKey: ContainsKey() failed: $($_.Exception.Message)"
+                # fall through
             }
 
             try {
@@ -178,22 +88,17 @@ function Invoke-StorageWizard {
             return $false
         }
 
-        $containsKey = $Map.PSObject.Methods['ContainsKey']
-        if ($containsKey) {
-            try { return [bool]$Map.ContainsKey($Key) } catch { return $false }
-        }
-
-        return $false
+        try { return [bool]$Map.ContainsKey($Key) } catch { return $false }
     }
 
-    $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage' -Default $null
+    $storageMap = Get-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Default $null
     if ($null -eq $storageMap -and $Config -is [System.Collections.IDictionary]) {
         # Allow passing a Storage-map directly in legacy/test scenarios
         $storageMap = $Config
     }
     if ($null -eq $storageMap) {
         $storageMap = @{}
-        Set-ConfigMemberValue -Object $Config -Name 'Storage' -Value $storageMap
+        Set-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Value $storageMap
     }
 
     # Validate parameters
@@ -258,20 +163,19 @@ function Invoke-StorageWizard {
 
         $group = $storageMap[$gKey]
 
-        $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master' -Default $null
-        $masterSerial = Get-ConfigMemberValue -Object $masterCfg -Name 'SerialNumber' -Default ''
+        $masterSerial = Get-PSmmConfigNestedValue -Object $group -Path @('Master', 'SerialNumber') -Default ''
         if (-not [string]::IsNullOrWhiteSpace($masterSerial)) {
             $usedSerials += ([string]$masterSerial).Trim()
         }
 
-        $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backups' -Default $null
+        $backupsCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Backups' -Default $null
         if ($null -eq $backupsCfg) {
-            $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backup' -Default $null
+            $backupsCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Backup' -Default $null
         }
         if ($backupsCfg -is [System.Collections.IDictionary] -and $backupsCfg.Count -gt 0) {
             foreach ($bKey in $backupsCfg.Keys) {
                 $backup = $backupsCfg[$bKey]
-                $backupSerial = Get-ConfigMemberValue -Object $backup -Name 'SerialNumber' -Default ''
+                $backupSerial = Get-PSmmConfigMemberValue -Object $backup -Name 'SerialNumber' -Default ''
                 if (-not [string]::IsNullOrWhiteSpace($backupSerial)) {
                     $usedSerials += ([string]$backupSerial).Trim()
                 }
@@ -318,20 +222,19 @@ function Invoke-StorageWizard {
     if ($Mode -eq 'Edit') {
         $groupId = $GroupId
         $existingGroup = $storageMap[$groupId]
-        $defaultDisplayNameValue = Get-ConfigMemberValue -Object $existingGroup -Name 'DisplayName' -Default ''
+        $defaultDisplayNameValue = Get-PSmmConfigMemberValue -Object $existingGroup -Name 'DisplayName' -Default ''
         $defaultDisplayName = if (-not [string]::IsNullOrWhiteSpace([string]$defaultDisplayNameValue)) { [string]$defaultDisplayNameValue } else { "Storage Group $groupId" }
         # Try to match existing drives to current candidates
-        $existingMasterCfg = Get-ConfigMemberValue -Object $existingGroup -Name 'Master' -Default $null
-        $existingMasterSerial = [string](Get-ConfigMemberValue -Object $existingMasterCfg -Name 'SerialNumber' -Default '')
+        $existingMasterSerial = [string](Get-PSmmConfigNestedValue -Object $existingGroup -Path @('Master', 'SerialNumber') -Default '')
         $existingBackupSerials = @()
-        $existingBackupsCfg = Get-ConfigMemberValue -Object $existingGroup -Name 'Backups' -Default $null
+        $existingBackupsCfg = Get-PSmmConfigMemberValue -Object $existingGroup -Name 'Backups' -Default $null
         if ($null -eq $existingBackupsCfg) {
-            $existingBackupsCfg = Get-ConfigMemberValue -Object $existingGroup -Name 'Backup' -Default $null
+            $existingBackupsCfg = Get-PSmmConfigMemberValue -Object $existingGroup -Name 'Backup' -Default $null
         }
         if ($existingBackupsCfg -is [System.Collections.IDictionary]) {
             foreach ($bk in $existingBackupsCfg.Keys) {
                 $b = $existingBackupsCfg[$bk]
-                $bSerial = [string](Get-ConfigMemberValue -Object $b -Name 'SerialNumber' -Default '')
+                $bSerial = [string](Get-PSmmConfigMemberValue -Object $b -Name 'SerialNumber' -Default '')
                 if (-not [string]::IsNullOrWhiteSpace($bSerial)) {
                     $existingBackupSerials += $bSerial
                 }
@@ -607,24 +510,24 @@ function Invoke-StorageWizard {
         foreach ($gKey in $reloaded.Keys) {
             $gTable = $reloaded[$gKey]
             $group = [StorageGroupConfig]::new([string]$gKey)
-            $displayNameValue = Get-ConfigMemberValue -Object $gTable -Name 'DisplayName' -Default $null
+            $displayNameValue = Get-PSmmConfigMemberValue -Object $gTable -Name 'DisplayName' -Default $null
             if (-not [string]::IsNullOrWhiteSpace([string]$displayNameValue)) { $group.DisplayName = [string]$displayNameValue }
 
-            $mTable = Get-ConfigMemberValue -Object $gTable -Name 'Master' -Default $null
+            $mTable = Get-PSmmConfigMemberValue -Object $gTable -Name 'Master' -Default $null
             if ($null -ne $mTable) {
-                $mLabel = [string](Get-ConfigMemberValue -Object $mTable -Name 'Label' -Default '')
-                $mSerial = [string](Get-ConfigMemberValue -Object $mTable -Name 'SerialNumber' -Default '')
+                $mLabel = [string](Get-PSmmConfigNestedValue -Object $gTable -Path @('Master', 'Label') -Default '')
+                $mSerial = [string](Get-PSmmConfigNestedValue -Object $gTable -Path @('Master', 'SerialNumber') -Default '')
                 $group.Master = [StorageDriveConfig]::new($mLabel, '')
                 $group.Master.SerialNumber = $mSerial
             }
 
-            $bTable = Get-ConfigMemberValue -Object $gTable -Name 'Backup' -Default $null
+            $bTable = Get-PSmmConfigMemberValue -Object $gTable -Name 'Backup' -Default $null
             if ($bTable -is [System.Collections.IDictionary] -and $bTable.Count -gt 0) {
                 foreach ($bk in ($bTable.Keys | Where-Object { $_ -match '^[0-9]+' } | Sort-Object { [int]$_ })) {
                     $b = $bTable[$bk]
                     if ($null -eq $b) { continue }
-                    $bLabel = [string](Get-ConfigMemberValue -Object $b -Name 'Label' -Default '')
-                    $bSerial = [string](Get-ConfigMemberValue -Object $b -Name 'SerialNumber' -Default '')
+                    $bLabel = [string](Get-PSmmConfigMemberValue -Object $b -Name 'Label' -Default '')
+                    $bSerial = [string](Get-PSmmConfigMemberValue -Object $b -Name 'SerialNumber' -Default '')
                     $cfg = [StorageDriveConfig]::new($bLabel, '')
                     $cfg.SerialNumber = $bSerial
                     $group.Backups[[string]$bk] = $cfg

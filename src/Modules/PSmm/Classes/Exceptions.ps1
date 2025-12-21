@@ -444,10 +444,34 @@ class ConfigValidationException : MediaManagerException {
 
         foreach ($issue in $issues) {
             if ($null -eq $issue) { continue }
-            $severity = $issue.PSObject.Properties['Severity']?.Value
-            $category = $issue.PSObject.Properties['Category']?.Value
-            $property = $issue.PSObject.Properties['Property']?.Value
-            $issueMessage = $issue.PSObject.Properties['Message']?.Value
+            $getValue = {
+                param(
+                    [Parameter()][AllowNull()]$Object,
+                    [Parameter(Mandatory)][string]$Name
+                )
+
+                if ($null -eq $Object) { return $null }
+
+                if ($Object -is [System.Collections.IDictionary]) {
+                    try { if ($Object.ContainsKey($Name)) { return $Object[$Name] } } catch { $null = $_ }
+                    try { if ($Object.Contains($Name)) { return $Object[$Name] } } catch { $null = $_ }
+                    try {
+                        foreach ($k in $Object.Keys) {
+                            if ($k -eq $Name) { return $Object[$k] }
+                        }
+                    }
+                    catch { $null = $_ }
+
+                    return $null
+                }
+
+                try { return $Object.$Name } catch { return $null }
+            }
+
+            $severity = & $getValue -Object $issue -Name 'Severity'
+            $category = & $getValue -Object $issue -Name 'Category'
+            $property = & $getValue -Object $issue -Name 'Property'
+            $issueMessage = & $getValue -Object $issue -Name 'Message'
 
             if ([string]::IsNullOrWhiteSpace([string]$severity)) { $severity = 'Unknown' }
             if ([string]::IsNullOrWhiteSpace([string]$category)) { $category = 'Unknown' }

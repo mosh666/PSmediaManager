@@ -43,57 +43,15 @@ function Invoke-ManageStorage {
         [switch]$NonInteractive
     )
 
+    if (-not (Get-Command Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
+        $nestedAccessPath = Join-Path $PSScriptRoot '..\..\Private\Get-PSmmConfigNestedValue.ps1'
+        if (Test-Path $nestedAccessPath) { . $nestedAccessPath }
+    }
+
     $logAvail = Get-Command Write-PSmmLog -ErrorAction SilentlyContinue
     function Write-ManageLog([string]$level, [string]$context, [string]$msg) {
         if ($logAvail) { Write-PSmmLog -Level $level -Context $context -Message $msg -File }
         else { Write-Verbose "$context : $msg" }
-    }
-
-    function Get-ConfigMemberValue {
-        param(
-            [Parameter(Mandatory)]
-            [AllowNull()]
-            $Object,
-
-            [Parameter(Mandatory)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name,
-
-            [Parameter()]
-            $Default = $null
-        )
-
-        if ($null -eq $Object) { return $Default }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: ContainsKey('$Name') failed: $($_.Exception.Message)"
-            }
-
-            try {
-                if ($Object.Contains($Name)) { return $Object[$Name] }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: Contains('$Name') failed: $($_.Exception.Message)"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) { return $Object[$k] }
-                }
-            }
-            catch {
-                Write-Verbose "Get-ConfigMemberValue: Enumerating dictionary keys for '$Name' failed: $($_.Exception.Message)"
-            }
-        }
-
-        $prop = $Object.PSObject.Properties[$Name]
-        if ($null -ne $prop) { return $prop.Value }
-
-        return $Default
     }
 
     function Test-MapContainsKey {
@@ -110,14 +68,11 @@ function Invoke-ManageStorage {
         if ($null -eq $Map) { return $false }
 
         if ($Map -is [System.Collections.IDictionary]) {
-            $containsKey = $Map.PSObject.Methods['ContainsKey']
-            if ($containsKey) {
-                try {
-                    if ($Map.ContainsKey($Key)) { return $true }
-                }
-                catch {
-                    Write-Verbose "Test-MapContainsKey: ContainsKey('$Key') failed: $($_.Exception.Message)"
-                }
+            try {
+                if ($Map.ContainsKey($Key)) { return $true }
+            }
+            catch {
+                Write-Verbose "Test-MapContainsKey: ContainsKey('$Key') failed: $($_.Exception.Message)"
             }
 
             try {
@@ -137,15 +92,10 @@ function Invoke-ManageStorage {
             return $false
         }
 
-        $containsKey = $Map.PSObject.Methods['ContainsKey']
-        if ($containsKey) {
-            try { return [bool]$Map.ContainsKey($Key) } catch { return $false }
-        }
-
-        return $false
+        try { return [bool]$Map.ContainsKey($Key) } catch { return $false }
     }
 
-    $storageMap = Get-ConfigMemberValue -Object $Config -Name 'Storage' -Default $null
+    $storageMap = Get-PSmmConfigMemberValue -Object $Config -Name 'Storage' -Default $null
     if ($null -eq $storageMap -and $Config -is [System.Collections.IDictionary]) {
         # Allow passing a Storage-map directly in legacy/test scenarios
         $storageMap = $Config
@@ -252,28 +202,28 @@ function Invoke-ManageStorage {
                     Write-Information ''
                     foreach ($groupId in ($storageMap.Keys | Sort-Object {[int]$_})) {
                         $group = $storageMap[$groupId]
-                        $displayNameValue = Get-ConfigMemberValue -Object $group -Name 'DisplayName' -Default ''
+                        $displayNameValue = Get-PSmmConfigMemberValue -Object $group -Name 'DisplayName' -Default ''
                         $displayName = if (-not [string]::IsNullOrWhiteSpace([string]$displayNameValue)) { [string]$displayNameValue } else { "Storage Group $groupId" }
                         Write-PSmmHost "  [$groupId] $displayName" -ForegroundColor White
 
                         # Show Master drive
-                        $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master' -Default $null
+                        $masterCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Master' -Default $null
                         if ($masterCfg) {
-                            $masterLabelValue = Get-ConfigMemberValue -Object $masterCfg -Name 'Label' -Default ''
-                            $masterSerialValue = Get-ConfigMemberValue -Object $masterCfg -Name 'SerialNumber' -Default ''
+                            $masterLabelValue = Get-PSmmConfigNestedValue -Object $group -Path @('Master', 'Label') -Default ''
+                            $masterSerialValue = Get-PSmmConfigNestedValue -Object $group -Path @('Master', 'SerialNumber') -Default ''
                             $masterLabel = if (-not [string]::IsNullOrWhiteSpace([string]$masterLabelValue)) { [string]$masterLabelValue } else { 'N/A' }
                             $masterSerial = if (-not [string]::IsNullOrWhiteSpace([string]$masterSerialValue)) { [string]$masterSerialValue } else { 'N/A' }
                             Write-PSmmHost "      Master: $masterLabel (S/N: $masterSerial)" -ForegroundColor Gray
                         }
 
                         # Show Backup drives
-                        $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backups' -Default $null
-                        if ($null -eq $backupsCfg) { $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backup' -Default $null }
+                        $backupsCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Backups' -Default $null
+                        if ($null -eq $backupsCfg) { $backupsCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Backup' -Default $null }
                         if ($backupsCfg -is [System.Collections.IDictionary] -and $backupsCfg.Keys.Count -gt 0) {
                             foreach ($backupId in ($backupsCfg.Keys | Sort-Object { [int]$_ })) {
                                 $backup = $backupsCfg[$backupId]
-                                $backupLabelValue = Get-ConfigMemberValue -Object $backup -Name 'Label' -Default ''
-                                $backupSerialValue = Get-ConfigMemberValue -Object $backup -Name 'SerialNumber' -Default ''
+                                $backupLabelValue = Get-PSmmConfigMemberValue -Object $backup -Name 'Label' -Default ''
+                                $backupSerialValue = Get-PSmmConfigMemberValue -Object $backup -Name 'SerialNumber' -Default ''
                                 $backupLabel = if (-not [string]::IsNullOrWhiteSpace([string]$backupLabelValue)) { [string]$backupLabelValue } else { 'N/A' }
                                 $backupSerial = if (-not [string]::IsNullOrWhiteSpace([string]$backupSerialValue)) { [string]$backupSerialValue } else { 'N/A' }
                                 Write-PSmmHost "      Backup $backupId`: $backupLabel (S/N: $backupSerial)" -ForegroundColor Gray
@@ -346,28 +296,28 @@ function Invoke-ManageStorage {
                     Write-Information ''
                     foreach ($groupId in ($storageMap.Keys | Sort-Object {[int]$_})) {
                         $group = $storageMap[$groupId]
-                        $displayNameValue = Get-ConfigMemberValue -Object $group -Name 'DisplayName' -Default ''
+                        $displayNameValue = Get-PSmmConfigMemberValue -Object $group -Name 'DisplayName' -Default ''
                         $displayName = if (-not [string]::IsNullOrWhiteSpace([string]$displayNameValue)) { [string]$displayNameValue } else { "Storage Group $groupId" }
                         Write-PSmmHost "  [$groupId] $displayName" -ForegroundColor White
 
                         # Show Master drive
-                        $masterCfg = Get-ConfigMemberValue -Object $group -Name 'Master' -Default $null
+                        $masterCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Master' -Default $null
                         if ($masterCfg) {
-                            $masterLabelValue = Get-ConfigMemberValue -Object $masterCfg -Name 'Label' -Default ''
-                            $masterSerialValue = Get-ConfigMemberValue -Object $masterCfg -Name 'SerialNumber' -Default ''
+                            $masterLabelValue = Get-PSmmConfigNestedValue -Object $group -Path @('Master', 'Label') -Default ''
+                            $masterSerialValue = Get-PSmmConfigNestedValue -Object $group -Path @('Master', 'SerialNumber') -Default ''
                             $masterLabel = if (-not [string]::IsNullOrWhiteSpace([string]$masterLabelValue)) { [string]$masterLabelValue } else { 'N/A' }
                             $masterSerial = if (-not [string]::IsNullOrWhiteSpace([string]$masterSerialValue)) { [string]$masterSerialValue } else { 'N/A' }
                             Write-PSmmHost "      Master: $masterLabel (S/N: $masterSerial)" -ForegroundColor Gray
                         }
 
                         # Show Backup drives
-                        $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backups' -Default $null
-                        if ($null -eq $backupsCfg) { $backupsCfg = Get-ConfigMemberValue -Object $group -Name 'Backup' -Default $null }
+                        $backupsCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Backups' -Default $null
+                        if ($null -eq $backupsCfg) { $backupsCfg = Get-PSmmConfigMemberValue -Object $group -Name 'Backup' -Default $null }
                         if ($backupsCfg -is [System.Collections.IDictionary] -and $backupsCfg.Keys.Count -gt 0) {
                             foreach ($backupId in ($backupsCfg.Keys | Sort-Object { [int]$_ })) {
                                 $backup = $backupsCfg[$backupId]
-                                $backupLabelValue = Get-ConfigMemberValue -Object $backup -Name 'Label' -Default ''
-                                $backupSerialValue = Get-ConfigMemberValue -Object $backup -Name 'SerialNumber' -Default ''
+                                $backupLabelValue = Get-PSmmConfigMemberValue -Object $backup -Name 'Label' -Default ''
+                                $backupSerialValue = Get-PSmmConfigMemberValue -Object $backup -Name 'SerialNumber' -Default ''
                                 $backupLabel = if (-not [string]::IsNullOrWhiteSpace([string]$backupLabelValue)) { [string]$backupLabelValue } else { 'N/A' }
                                 $backupSerial = if (-not [string]::IsNullOrWhiteSpace([string]$backupSerialValue)) { [string]$backupSerialValue } else { 'N/A' }
                                 Write-PSmmHost "      Backup $backupId`: $backupLabel (S/N: $backupSerial)" -ForegroundColor Gray

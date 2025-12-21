@@ -33,6 +33,13 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command -Name Get-PSmmUiConfigMemberValue -ErrorAction SilentlyContinue)) {
+    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\\Private') -ChildPath 'ConfigMemberAccessHelpers.ps1'
+    if (Test-Path -Path $configHelpersPath) {
+        . $configHelpersPath
+    }
+}
+
 function Invoke-PSmmUI {
     [CmdletBinding()]
     param (
@@ -50,34 +57,6 @@ function Invoke-PSmmUI {
     $FileSystem = $ServiceContainer.Resolve('FileSystem')
     $PathProvider = $ServiceContainer.Resolve('PathProvider')
 
-    # PS 7.5.4+ baseline and entrypoint import order guarantee core types are available
-    # Defensive: ensure AppConfiguration class is loaded (runtime resilience against import order issues)
-    try {
-        $appConfigTypeLoaded = [System.AppDomain]::CurrentDomain.GetAssemblies().GetTypes() | Where-Object { $_.Name -eq 'AppConfiguration' } | Select-Object -First 1
-    }
-    catch {
-        $appConfigTypeLoaded = $null
-    }
-    if (-not $appConfigTypeLoaded) {
-        try {
-            $uiPublicDir = $PSScriptRoot
-            $uiModuleRoot = Split-Path -Path $uiPublicDir -Parent  # PSmm.UI module root
-            $modulesRoot  = Split-Path -Path $uiModuleRoot -Parent # Modules root containing PSmm
-            $classesPath  = Join-Path -Path $modulesRoot -ChildPath 'PSmm\Classes\AppConfiguration.ps1'
-            if (Test-Path -Path $classesPath -PathType Leaf) {
-                . $classesPath
-                if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
-                    Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message 'AppConfiguration class dynamically loaded (fallback)' -File
-                }
-            }
-        }
-        catch {
-            if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
-                Write-PSmmLog -Level WARNING -Context 'Invoke-PSmmUI' -Message "Failed dynamic AppConfiguration load: $_" -File -Console
-            }
-        }
-    }
-
     # Normalize config shape early so downstream UI functions can rely on AppConfiguration
     try {
         $Config = [AppConfiguration]::FromObject($Config)
@@ -86,55 +65,9 @@ function Invoke-PSmmUI {
         throw [System.InvalidOperationException]::new("Invoke-PSmmUI requires a valid AppConfiguration-compatible object. Failed to normalize Config: $($_.Exception.Message)")
     }
 
-    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-        if ($null -eq $Object) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Dictionary ContainsKey failed for '$Name'. $($_.Exception.Message)"
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Dictionary Contains failed for '$Name'. $($_.Exception.Message)"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "Dictionary key enumeration failed for '$Name'. $($_.Exception.Message)"
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
     function Test-UiDebugOrDev([object]$UiConfig) {
-        $parametersSource = Get-ConfigMemberValue -Object $UiConfig -Name 'Parameters'
-        return ([bool](Get-ConfigMemberValue -Object $parametersSource -Name 'Debug')) -or ([bool](Get-ConfigMemberValue -Object $parametersSource -Name 'Dev'))
+        $parametersSource = Get-PSmmUiConfigMemberValue -Object $UiConfig -Name 'Parameters'
+        return ([bool](Get-PSmmUiConfigMemberValue -Object $parametersSource -Name 'Debug')) -or ([bool](Get-PSmmUiConfigMemberValue -Object $parametersSource -Name 'Dev'))
     }
 
     try {
@@ -186,7 +119,7 @@ function Invoke-PSmmUI {
             # Retrieve projects once per loop iteration (centralized) and pass downstream
             $loopProjects = $null
             try {
-                $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                $storageSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Storage'
                 $storageGroupCount = 0
                 try { $storageGroupCount = @($storageSource.Keys).Count } catch { $storageGroupCount = 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $storageGroupCount" -File
@@ -286,7 +219,7 @@ function Invoke-PSmmUI {
                     Write-PSmmHost ''
                     Write-PSmmHost 'Available Storage Groups:' -ForegroundColor Cyan
 
-                    $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                    $storageSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Storage'
                     $storageKeys = @()
                     try { $storageKeys = @($storageSource.Keys) } catch { $storageKeys = @() }
 
@@ -294,7 +227,7 @@ function Invoke-PSmmUI {
                     foreach ($groupKey in ($storageKeys | Sort-Object)) {
                         $group = $null
                         try { $group = $storageSource[$groupKey] } catch { $group = $null }
-                        $masterDrive = Get-ConfigMemberValue -Object $group -Name 'Master'
+                        $masterDrive = Get-PSmmUiConfigMemberValue -Object $group -Name 'Master'
                         if ($masterDrive) {
                             $driveInfo = "$($masterDrive.Label)"
                             if (-not [string]::IsNullOrWhiteSpace($masterDrive.DriveLetter)) {
@@ -354,17 +287,17 @@ function Invoke-PSmmUI {
                 'R' {
                     # Manage Storage (Edit/Add/Remove)
                     try {
-                        $pathsSource = Get-ConfigMemberValue -Object $Config -Name 'Paths'
-                        $rootPath = [string](Get-ConfigMemberValue -Object $pathsSource -Name 'Root')
+                        $pathsSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Paths'
+                        $rootPath = [string](Get-PSmmUiConfigMemberValue -Object $pathsSource -Name 'Root')
                         $driveRoot = if ([string]::IsNullOrWhiteSpace($rootPath)) { $null } else { [System.IO.Path]::GetPathRoot($rootPath) }
                         if (-not [string]::IsNullOrWhiteSpace($driveRoot)) {
                             if (Get-Command Invoke-ManageStorage -ErrorAction SilentlyContinue) {
-                                $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                                $storageSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Storage'
                                 $preCount = 0
                                 try { $preCount = @($storageSource.Keys).Count } catch { $preCount = 0 }
                                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Storage groups before management: $preCount" -File
                                 $null = Invoke-ManageStorage -Config $Config -DriveRoot $driveRoot
-                                $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                                $storageSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Storage'
                                 $postCount = 0
                                 try { $postCount = @($storageSource.Keys).Count } catch { $postCount = 0 }
                                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Storage groups after management: $postCount" -File
@@ -404,7 +337,7 @@ function Invoke-PSmmUI {
                             $SelectedProject = $null
 
                             # Determine which storage groups to include based on filter
-                            $storageSource = Get-ConfigMemberValue -Object $Config -Name 'Storage'
+                            $storageSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Storage'
                             $storageKeys = @()
                             try { $storageKeys = @($storageSource.Keys) } catch { $storageKeys = @() }
                             $StorageGroupsToFilter = if ([string]::IsNullOrWhiteSpace($SelectedStorageGroup)) {
@@ -631,52 +564,6 @@ function Invoke-ProjectMenu {
         [object]$Config
     )
 
-    function Get-ConfigMemberValue([object]$Object, [string]$Name) {
-        if ($null -eq $Object) {
-            return $null
-        }
-
-        if ($Object -is [System.Collections.IDictionary]) {
-            try {
-                if ($Object.ContainsKey($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Dictionary ContainsKey failed for '$Name'. $($_.Exception.Message)"
-            }
-
-            try {
-                if ($Object.Contains($Name)) {
-                    return $Object[$Name]
-                }
-            }
-            catch {
-                Write-Verbose "Dictionary Contains failed for '$Name'. $($_.Exception.Message)"
-            }
-
-            try {
-                foreach ($k in $Object.Keys) {
-                    if ($k -eq $Name) {
-                        return $Object[$k]
-                    }
-                }
-            }
-            catch {
-                Write-Verbose "Dictionary key enumeration failed for '$Name'. $($_.Exception.Message)"
-            }
-
-            return $null
-        }
-
-        $p = $Object.PSObject.Properties[$Name]
-        if ($null -ne $p) {
-            return $p.Value
-        }
-
-        return $null
-    }
-
     do {
         Clear-Host
         try {
@@ -704,8 +591,8 @@ function Invoke-ProjectMenu {
         $ProcDigiKam = $null
 
         $currentProject = $null
-        $projectsSource = Get-ConfigMemberValue -Object $Config -Name 'Projects'
-        $currentSource = Get-ConfigMemberValue -Object $projectsSource -Name 'Current'
+        $projectsSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Projects'
+        $currentSource = Get-PSmmUiConfigMemberValue -Object $projectsSource -Name 'Current'
         if ($null -ne $currentSource) {
             $currentProject = [ProjectCurrentConfig]::FromObject($currentSource)
         }
