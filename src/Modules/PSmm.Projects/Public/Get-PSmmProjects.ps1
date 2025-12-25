@@ -28,12 +28,12 @@ function Get-PSmmProjects {
     .PARAMETER Force
         Forces a full rescan of all drives, bypassing the registry cache.
 
-    .PARAMETER ServiceContainer
-        ServiceContainer instance providing access to FileSystem service.
-        If omitted, creates a new FileSystemService instance or falls back to cmdlets.
+    .PARAMETER FileSystem
+        FileSystem service used to enumerate drives and project folders.
+        Required (service-first DI).
 
     .EXAMPLE
-        $projects = Get-PSmmProjects -Config $appConfig -ServiceContainer $ServiceContainer
+        $projects = Get-PSmmProjects -Config $appConfig -FileSystem $FileSystem
         # Returns: @{ Master = @{ DriveLabel = @(ProjectObjects...) }; Backup = @{ ... } }
 
     .EXAMPLE
@@ -49,7 +49,7 @@ function Get-PSmmProjects {
         The _GLOBAL_ project is automatically excluded from results.
         Registry cache includes LastScanned timestamp for cache invalidation.
 
-        BREAKING CHANGE (v0.2.0): Replaced -FileSystem parameter with -ServiceContainer parameter.
+        BREAKING CHANGE: Requires injected -FileSystem (service-first DI); does not resolve FileSystem from ServiceContainer.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Function retrieves multiple project configurations')]
     [CmdletBinding()]
@@ -62,8 +62,9 @@ function Get-PSmmProjects {
         [Parameter()]
         [switch]$Force,
 
-        [Parameter()]
-        $ServiceContainer = $null
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
     )
 
     function ConvertTo-PSmmLegacyView([object]$value) {
@@ -298,26 +299,8 @@ function Get-PSmmProjects {
         $Config = [pscustomobject]$Config
     }
 
-    # Resolve FileSystem service from container or create fallback
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
-
-    # Fallback: create new FileSystemService or use cmdlets
     if ($null -eq $FileSystem) {
-        try {
-            $FileSystem = [FileSystemService]::new()
-        }
-        catch {
-            Write-Verbose "FileSystemService type not available, using PowerShell cmdlets directly"
-            $FileSystem = $null
-        }
+        throw 'Get-PSmmProjects requires a non-null FileSystem service (pass DI service).'
     }
 
     # Ensure Projects.Registry exists on Config
@@ -797,20 +780,7 @@ function Get-ProjectsFromDrive {
     $internalErrorMessages = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'InternalErrorMessages'
     $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
     if (-not $uiErrorCatalogType) {
-        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
-        if (Test-Path -LiteralPath $psmmManifestPath) {
-            try {
-                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
-            }
-            catch {
-                Write-Verbose "[Get-PSmmProjects] Unable to import module '$psmmManifestPath' to resolve UiErrorCatalog: $_"
-            }
-        }
-        $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
-    }
-
-    if (-not $uiErrorCatalogType) {
-        throw 'Unable to resolve type [UiErrorCatalog].'
+        throw 'Unable to resolve type [UiErrorCatalog]. Ensure PSmm is loaded before PSmm.Projects.'
     }
 
     $errorCatalog = $uiErrorCatalogType::FromObject($internalErrorMessages)

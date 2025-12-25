@@ -18,6 +18,27 @@
 
 using namespace System.IO
 
+$__psmmDynVerRoot = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($__psmmDynVerRoot)) {
+    try {
+        $__psmmDynVerRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+    }
+    catch {
+        $__psmmDynVerRoot = $null
+    }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($__psmmDynVerRoot)) {
+    $nativeCapture = Join-Path -Path $__psmmDynVerRoot -ChildPath 'Invoke-PSmmNativeProcessCapture.ps1'
+    if (Test-Path -LiteralPath $nativeCapture) {
+        . $nativeCapture
+    }
+}
+
+if (-not (Get-Command -Name Invoke-PSmmNativeProcessCapture -ErrorAction SilentlyContinue)) {
+    throw "Invoke-PSmmNativeProcessCapture helper not available. Expected to dot-source 'Invoke-PSmmNativeProcessCapture.ps1'."
+}
+
 <#
 .SYNOPSIS
     Gets the dynamic version from Git using GitVersion.
@@ -133,11 +154,16 @@ function Get-PSmmDynamicVersion {
         if ($gitVersionExe) {
             Write-Verbose "Using GitVersion: $gitVersionExe"
 
-            $gitVersionOutput = & $gitVersionExe $RepositoryRoot /output json /nofetch 2>$null
+            $gitVersionResult = Invoke-PSmmNativeProcessCapture -FilePath $gitVersionExe -ArgumentList @(
+                $RepositoryRoot,
+                '/output',
+                'json',
+                '/nofetch'
+            )
 
-            if ($LASTEXITCODE -eq 0 -and $gitVersionOutput) {
+            if ($gitVersionResult.Success -and -not [string]::IsNullOrWhiteSpace($gitVersionResult.StdOut)) {
                 try {
-                    $gitVersionJson = ($gitVersionOutput | Out-String)
+                    $gitVersionJson = [string]$gitVersionResult.StdOut
                     $gitVersionData = $gitVersionJson | ConvertFrom-Json -ErrorAction Stop
 
                     if ($IncludePrerelease) {
@@ -170,7 +196,8 @@ function Get-PSmmDynamicVersion {
                 }
             }
             else {
-                Write-Warning "GitVersion did not return valid output (exit code: $LASTEXITCODE)"
+                $exitCode = [int]$gitVersionResult.ExitCode
+                Write-Warning "GitVersion did not return valid output (exit code: $exitCode)"
             }
         }
 
@@ -180,18 +207,42 @@ function Get-PSmmDynamicVersion {
             Write-Verbose "Falling back to native git commands"
 
             # Try to get the latest tag
-            $latestTag = & git.exe -C $RepositoryRoot describe --tags --abbrev=0 2>$null
+            $latestTagResult = Invoke-PSmmNativeProcessCapture -FilePath 'git.exe' -ArgumentList @(
+                '-C',
+                $RepositoryRoot,
+                'describe',
+                '--tags',
+                '--abbrev=0'
+            )
+
+            $latestTag = $null
+            if ($latestTagResult.Success -and -not [string]::IsNullOrWhiteSpace($latestTagResult.StdOut)) {
+                $latestTag = $latestTagResult.StdOut.Trim() -replace '^v', ''
+            }
+
             if ($latestTag) {
-                $latestTag = $latestTag.Trim() -replace '^v', ''
 
                 if ($IncludePrerelease) {
                     # Get commits since tag and short SHA
-                    $commitsSinceTag = & git.exe -C $RepositoryRoot rev-list "$latestTag..HEAD" --count 2>$null
-                    $shortSha = & git.exe -C $RepositoryRoot rev-parse --short HEAD 2>$null
+                    $commitsResult = Invoke-PSmmNativeProcessCapture -FilePath 'git.exe' -ArgumentList @(
+                        '-C',
+                        $RepositoryRoot,
+                        'rev-list',
+                        "$latestTag..HEAD",
+                        '--count'
+                    )
 
-                    if ($commitsSinceTag -and $shortSha) {
-                        $commitsSinceTag = $commitsSinceTag.Trim()
-                        $shortSha = $shortSha.Trim()
+                    $shaResult = Invoke-PSmmNativeProcessCapture -FilePath 'git.exe' -ArgumentList @(
+                        '-C',
+                        $RepositoryRoot,
+                        'rev-parse',
+                        '--short',
+                        'HEAD'
+                    )
+
+                    if ($commitsResult.Success -and $shaResult.Success -and $commitsResult.StdOut -and $shaResult.StdOut) {
+                        $commitsSinceTag = $commitsResult.StdOut.Trim()
+                        $shortSha = $shaResult.StdOut.Trim()
 
                         if ($commitsSinceTag -eq '0') {
                             return "$latestTag-$shortSha"
@@ -209,8 +260,13 @@ function Get-PSmmDynamicVersion {
             }
 
             # No tags yet - check if we're in a repo at all
-            $isRepo = & git.exe -C $RepositoryRoot rev-parse --git-dir 2>$null
-            if ($isRepo) {
+            $repoResult = Invoke-PSmmNativeProcessCapture -FilePath 'git.exe' -ArgumentList @(
+                '-C',
+                $RepositoryRoot,
+                'rev-parse',
+                '--git-dir'
+            )
+            if ($repoResult.Success) {
                 Write-Verbose "No tags found in repository - using initial version 0.0.1"
                 return '0.0.1'
             }

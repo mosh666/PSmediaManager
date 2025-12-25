@@ -24,25 +24,7 @@ Set-StrictMode -Version Latest
     ANSI color code for the border. Default is a gray color.
 
 .PARAMETER Columns
-    Array of column definitions. Each column can be either:
-    - A legacy hashtable with the properties below, or
-    - A UiColumn instance (recommended) created via New-UiColumn.
-
-    Hashtable columns support the following properties:
-    - Text: The content for this column
-    - Width: Column width (can be absolute number, percentage like "25%", or "auto")
-    - Alignment: 'l', 'c', 'r' (default: 'l')
-    - Padding: Padding for this column (default: 1)
-    - TextColor: ANSI color code for this column's text
-    - BackgroundColor: ANSI background color code for this column (optional)
-    - Bold: Apply bold formatting (boolean, default: false)
-    - Italic: Apply italic formatting (boolean, default: false)
-    - Underline: Apply underline formatting (boolean, default: false)
-    - Dim: Apply dim formatting (boolean, default: false)
-    - Blink: Apply blink formatting (boolean, default: false)
-    - Strikethrough: Apply strikethrough formatting (boolean, default: false)
-    - MinWidth: Minimum width for auto-sized columns (default: 10)
-    - MaxWidth: Maximum width for auto-sized columns (default: calculated)
+    Array of UiColumn instances created via New-UiColumn.
 
 .PARAMETER ColumnSeparator
     Character(s) to separate columns. Default is single space.
@@ -89,13 +71,6 @@ Set-StrictMode -Version Latest
 Set-StrictMode -Version Latest
 
 #region ########## PRIVATE ##########
-
-if (-not (Get-Command -Name Get-PSmmUiConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
-}
 
 function New-UiColumn {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Factory function creates an in-memory UI model object and does not modify system state')]
@@ -150,20 +125,7 @@ function New-UiColumn {
 
     $uiColumnType = 'UiColumn' -as [type]
     if (-not $uiColumnType) {
-        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
-        if (Test-Path -LiteralPath $psmmManifestPath) {
-            try {
-                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
-            }
-            catch {
-                Write-Verbose "New-UiColumn: failed to import PSmm types module: $($_.Exception.Message)"
-            }
-        }
-        $uiColumnType = 'UiColumn' -as [type]
-    }
-
-    if (-not $uiColumnType) {
-        throw 'Unable to resolve type [UiColumn].'
+        throw 'Unable to resolve required type [UiColumn]. Ensure PSmm is loaded before PSmm.UI.'
     }
 
     $col = $uiColumnType::new()
@@ -201,20 +163,7 @@ function New-UiKeyValueItem {
 
     $uiKeyValueItemType = 'UiKeyValueItem' -as [type]
     if (-not $uiKeyValueItemType) {
-        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
-        if (Test-Path -LiteralPath $psmmManifestPath) {
-            try {
-                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
-            }
-            catch {
-                Write-Verbose "New-UiKeyValueItem: failed to import PSmm types module: $($_.Exception.Message)"
-            }
-        }
-        $uiKeyValueItemType = 'UiKeyValueItem' -as [type]
-    }
-
-    if (-not $uiKeyValueItemType) {
-        throw 'Unable to resolve type [UiKeyValueItem].'
+        throw 'Unable to resolve required type [UiKeyValueItem]. Ensure PSmm is loaded before PSmm.UI.'
     }
 
     return $uiKeyValueItemType::new($Key, $Value, $Color)
@@ -278,7 +227,7 @@ function Format-UI {
     process {
         Write-Verbose "[Format-UI] Calculating layout..."
 
-        # Normalize columns: accept legacy hashtables and UiColumn objects.
+        # Normalize columns: UiColumn objects only (legacy hashtables removed).
         $columnsForEngine = @()
         foreach ($column in @($Columns)) {
             if ($null -eq $column) {
@@ -286,8 +235,7 @@ function Format-UI {
             }
 
             if ($column -is [hashtable]) {
-                $columnsForEngine += $column
-                continue
+                throw 'Legacy hashtable column definitions are not supported. Use New-UiColumn to create UiColumn instances.'
             }
 
             if ($column.PSObject.TypeNames -contains 'UiColumn') {
@@ -296,7 +244,7 @@ function Format-UI {
             }
 
             $typeName = $column.GetType().FullName
-            throw "Unsupported column definition type: $typeName. Expected hashtable or UiColumn."
+            throw "Unsupported column definition type: $typeName. Expected UiColumn."
         }
 
         # Calculate effective width based on border presence

@@ -171,15 +171,15 @@ function Confirm-PowerShellModules {
     $parameters = [RuntimeParameters]::FromObject($parametersSource)
     Set-PSmmConfigMemberValue -Object $Config -Name 'Parameters' -Value $parameters
 
-    # Install and import required modules
+    # Validate and import required modules (no runtime installs/updates)
     foreach ($module in $requirements.PowerShell.Modules) {
         Install-RequiredModule -ModuleInfo $module
         Import-RequiredModule -ModuleInfo $module
     }
 
-    # Update modules if requested
     if ($parameters.Update) {
-        Update-PowerShellModules
+        Write-PSmmLog -Level WARNING -Context 'Confirm PS Modules' `
+            -Message 'Runtime module updates are disabled by policy. Update modules manually if needed.' -Console -File
     }
 }
 
@@ -200,22 +200,15 @@ function Install-RequiredModule {
 
     $moduleName = $ModuleInfo.Name
 
-    if (Get-InstalledModule -Name $moduleName -ErrorAction SilentlyContinue) {
-        Write-Verbose "Module already installed: $moduleName"
+    $candidate = Get-Module -Name $moduleName -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+    if ($candidate) {
+        Write-Verbose "Module available: $moduleName (Version: $($candidate.Version))"
         return
     }
 
-    try {
-        Write-Verbose "Installing module: $moduleName"
-        Install-Module -Name $moduleName -Force -Scope CurrentUser -ErrorAction Stop
-
-        Write-PSmmLog -Level SUCCESS -Context 'Install PS Modules' `
-            -Message "Installed missing module: $moduleName" -Console -File
-    }
-    catch {
-        Write-PSmmLog -Level ERROR -Context 'Install PS Modules' `
-            -Message "Failed to install module: $moduleName" -ErrorRecord $_ -Console -File
-    }
+    $message = "Required PowerShell module '$moduleName' is missing. Install it manually with: Install-Module -Name $moduleName -Scope CurrentUser"
+    Write-PSmmLog -Level ERROR -Context 'Confirm PS Modules' -Message $message -Console -File
+    throw $message
 }
 
 <#
@@ -245,219 +238,6 @@ function Import-RequiredModule {
     catch {
         Write-PSmmLog -Level ERROR -Context 'Import PS Modules' `
             -Message "Failed to import module: $moduleName" -ErrorRecord $_ -Console -File
-    }
-}
-
-<#
-.SYNOPSIS
-    Updates all installed PowerShell modules with user confirmation.
-
-.DESCRIPTION
-    Scans for outdated modules, prompts for update confirmation, performs
-    updates with health checks, and automatically rolls back on failure.
-#>
-function Update-PowerShellModules {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Function updates multiple PowerShell modules')]
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    param()
-
-    Write-Verbose 'Starting module update process...'
-
-    if ($PSCmdlet.ShouldProcess('PowerShell modules', 'Update all installed modules')) {
-        try {
-            $installedModules = Get-InstalledModule -ErrorAction Stop
-
-            foreach ($module in $installedModules) {
-                Update-SingleModule -Module $module
-            }
-
-            Write-PSmmLog -Level SUCCESS -Context 'Update PS Modules' `
-                -Message 'Module update process complete' -Console -File
-        }
-        catch {
-            Write-PSmmLog -Level ERROR -Context 'Update PS Modules' `
-                -Message 'Failed to complete module updates' -ErrorRecord $_ -Console -File
-        }
-    }
-}
-
-<#
-.SYNOPSIS
-    Updates a single PowerShell module with health check and rollback.
-
-.PARAMETER Module
-    The installed module object to potentially update.
-#>
-function Update-SingleModule {
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Low')]
-    param (
-        [Parameter(Mandatory)]
-        [ValidateNotNull()]
-        [object]$Module
-    )
-
-    $moduleName = $Module.Name
-    $currentVersion = $Module.Version
-
-    try {
-        # Check for available updates
-        $latestModule = Find-Module -Name $moduleName -ErrorAction SilentlyContinue
-
-        if (-not $latestModule) {
-            Write-Verbose "Could not find module in repository: $moduleName"
-            return
-        }
-
-        if ($currentVersion -ge $latestModule.Version) {
-            Write-PSmmLog -Level INFO -Context 'Update PS Modules' `
-                -Message "$moduleName is up to date (Version: $currentVersion)" -Console -File
-            return
-        }
-
-        # Update with ShouldProcess support
-        if ($PSCmdlet.ShouldProcess("$moduleName", "Update from $currentVersion to $($latestModule.Version)")) {
-            Invoke-ModuleUpdate -ModuleName $moduleName `
-                -CurrentVersion $currentVersion `
-                -TargetVersion $latestModule.Version
-        }
-        else {
-            Write-PSmmLog -Level INFO -Context 'Update PS Modules' `
-                -Message "Skipped update for $moduleName" -Console -File
-        }
-    }
-    catch {
-        Write-PSmmLog -Level ERROR -Context 'Update PS Modules' `
-            -Message "Error processing update for $moduleName" -ErrorRecord $_ -Console -File
-    }
-}
-
-<#
-.SYNOPSIS
-    Performs module update with health check and rollback capability.
-
-.PARAMETER ModuleName
-    Name of the module to update.
-
-.PARAMETER CurrentVersion
-    Current installed version (for rollback).
-
-.PARAMETER TargetVersion
-    Target version to update to.
-#>
-function Invoke-ModuleUpdate {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$ModuleName,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNull()]
-        [version]$CurrentVersion,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNull()]
-        [version]$TargetVersion
-    )
-
-    try {
-        Write-Verbose "Updating $ModuleName from $CurrentVersion to $TargetVersion..."
-
-        # Perform update
-        Update-Module -Name $ModuleName -Force -ErrorAction Stop
-
-        Write-PSmmLog -Level SUCCESS -Context 'Update PS Modules' `
-            -Message "Updated $ModuleName from $CurrentVersion to $TargetVersion" -Console -File
-
-        # Health check: verify module can be imported
-        Test-ModuleHealth -ModuleName $ModuleName -RollbackVersion $CurrentVersion
-    }
-    catch {
-        Write-PSmmLog -Level ERROR -Context 'Update PS Modules' `
-            -Message "Failed to update $ModuleName" -ErrorRecord $_ -Console -File
-    }
-}
-
-<#
-.SYNOPSIS
-    Tests module health after update and rolls back on failure.
-
-.PARAMETER ModuleName
-    Name of the module to test.
-
-.PARAMETER RollbackVersion
-    Version to rollback to if health check fails.
-#>
-function Test-ModuleHealth {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$ModuleName,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNull()]
-        [version]$RollbackVersion
-    )
-
-    try {
-        Write-Verbose "Performing health check on $ModuleName..."
-
-        Import-Module -Name $ModuleName -Force -ErrorAction Stop
-
-        Write-PSmmLog -Level SUCCESS -Context 'Import PS Modules' `
-            -Message "Health check passed for $ModuleName" -Console -File
-    }
-    catch {
-        Write-PSmmLog -Level WARNING -Context 'Import PS Modules' `
-            -Message "Health check failed for $ModuleName. Rolling back to $RollbackVersion..." `
-            -Console -File
-
-        # Attempt rollback
-        Invoke-ModuleRollback -ModuleName $ModuleName -Version $RollbackVersion
-    }
-}
-
-<#
-.SYNOPSIS
-    Rolls back a module to a previous version.
-
-.PARAMETER ModuleName
-    Name of the module to rollback.
-
-.PARAMETER Version
-    Version to rollback to.
-#>
-function Invoke-ModuleRollback {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$ModuleName,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNull()]
-        [version]$Version
-    )
-
-    try {
-        Write-Verbose "Rolling back $ModuleName to version $Version..."
-
-        Install-Module -Name $ModuleName -RequiredVersion $Version -Force -ErrorAction Stop
-
-        try {
-            Import-Module -Name $ModuleName -Force -ErrorAction Stop
-            Write-PSmmLog -Level SUCCESS -Context 'Install PS Modules' `
-                -Message "Rollback successful: $ModuleName restored to $Version" -Console -File
-        }
-        catch {
-            Write-PSmmLog -Level EMERGENCY -Context 'Install PS Modules' `
-                -Message "Rollback import failed for $ModuleName $Version" -ErrorRecord $_ -Console -File
-        }
-    }
-    catch {
-        Write-PSmmLog -Level ERROR -Context 'Install PS Modules' `
-            -Message "Rollback failed for $ModuleName" -ErrorRecord $_ -Console -File
     }
 }
 

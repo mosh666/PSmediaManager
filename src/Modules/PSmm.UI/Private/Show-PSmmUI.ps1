@@ -21,13 +21,6 @@ Set-StrictMode -Version Latest
 
 # Note: Build-UIRuntimeFromConfig has been removed. UI functions now work directly with AppConfiguration.
 
-if (-not (Get-Command -Name Get-PSmmUiConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
-}
-
 #endregion ########## Helpers ##########
 
 #region ########## Header/Footer ##########
@@ -120,20 +113,7 @@ function Show-Header {
         $internalErrorsSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'InternalErrorMessages'
         $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
         if (-not $uiErrorCatalogType) {
-            $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
-            if (Test-Path -LiteralPath $psmmManifestPath) {
-                try {
-                    Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
-                }
-                catch {
-                    Write-Verbose "Show-Header: failed to import PSmm types module: $($_.Exception.Message)"
-                }
-            }
-            $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
-        }
-
-        if (-not $uiErrorCatalogType) {
-            throw 'Unable to resolve type [UiErrorCatalog].'
+            throw 'Unable to resolve required type [UiErrorCatalog]. Ensure PSmm is loaded before PSmm.UI.'
         }
 
         $errorCatalog = $uiErrorCatalogType::FromObject($internalErrorsSource)
@@ -294,6 +274,10 @@ function Show-MenuMain {
         [ValidateNotNull()]
         [object]$Config,
 
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
         [Parameter()]
         [string]$StorageGroup = $null,
 
@@ -386,25 +370,12 @@ function Show-MenuMain {
 
     Write-PSmmLog -Level NOTICE -Context 'Show-Projects' -Message 'Load available projects' -File
     if ($null -eq $Projects) {
-        $Projects = Get-PSmmProjects -Config $Config
+        $Projects = Get-PSmmProjects -Config $Config -FileSystem $FileSystem
     }
 
     $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
     if (-not $uiProjectsIndexType) {
-        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
-        if (Test-Path -LiteralPath $psmmManifestPath) {
-            try {
-                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
-            }
-            catch {
-                Write-Verbose "Show-MenuMain: failed to import PSmm types module: $($_.Exception.Message)"
-            }
-        }
-        $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
-    }
-
-    if (-not $uiProjectsIndexType) {
-        throw 'Unable to resolve type [UiProjectsIndex].'
+        throw 'Unable to resolve required type [UiProjectsIndex]. Ensure PSmm is loaded before PSmm.UI.'
     }
 
     $projectsIndex = $uiProjectsIndexType::FromObject($Projects)

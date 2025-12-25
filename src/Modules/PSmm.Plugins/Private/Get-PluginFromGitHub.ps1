@@ -163,32 +163,30 @@ function Get-GitHubLatestRelease {
             }
         }
 
-        # Prefer Invoke-WebRequest for header (ETag) access; fallback to service on errors
-        try {
-            $raw = Invoke-WebRequest -Uri $apiUrl -Headers $headers -Method GET -ErrorAction Stop
-            if ($raw.StatusCode -eq 304 -and $cachedEntry) {
-                Write-Verbose "GitHub responded 304 Not Modified; extending cache TTL"
-                $cachedEntry.ExpiresAt = (Get-Date).AddSeconds($CacheSeconds)
-                return $cachedEntry.Release
-            }
-            elseif ($raw.StatusCode -eq 200) {
-                $release = $raw.Content | ConvertFrom-Json
-                $etag = $raw.Headers['ETag']
-                $script:GitHubReleaseCache[$Repo] = @{ Release = $release; ExpiresAt = (Get-Date).AddSeconds($CacheSeconds); ETag = $etag }
-                Write-Verbose "Successfully retrieved release: $($release.tag_name); Cached with ETag: $etag"
-                return $release
-            }
-            else {
-                Write-Verbose "Unexpected status code $($raw.StatusCode); falling back to HTTP service"
-            }
+        if ($null -eq $Http) {
+            throw [System.InvalidOperationException]::new('Http service is required to query GitHub releases')
         }
-        catch {
-            Write-Verbose "Invoke-WebRequest path failed: $($_.Exception.Message); attempting HttpService"
+
+        $raw = $Http.InvokeWebRequest($apiUrl, 'GET', $headers, 0)
+        if ($raw.StatusCode -eq 304 -and $cachedEntry) {
+            Write-Verbose "GitHub responded 304 Not Modified; extending cache TTL"
+            $cachedEntry.ExpiresAt = (Get-Date).AddSeconds($CacheSeconds)
+            return $cachedEntry.Release
+        }
+        elseif ($raw.StatusCode -eq 200) {
+            $release = $raw.Content | ConvertFrom-Json
+            $etag = $raw.Headers['ETag']
+            $script:GitHubReleaseCache[$Repo] = @{ Release = $release; ExpiresAt = (Get-Date).AddSeconds($CacheSeconds); ETag = $etag }
+            Write-Verbose "Successfully retrieved release: $($release.tag_name); Cached with ETag: $etag"
+            return $release
+        }
+        else {
+            Write-Verbose "Unexpected status code $($raw.StatusCode); attempting REST method as fallback"
         }
 
         $response = $Http.InvokeRestMethod($apiUrl, 'GET', $headers, $null)
         $script:GitHubReleaseCache[$Repo] = @{ Release = $response; ExpiresAt = (Get-Date).AddSeconds($CacheSeconds); ETag = $null }
-        Write-Verbose "Successfully retrieved release (no ETag capture): $($response.tag_name)"
+        Write-Verbose "Successfully retrieved release (fallback; no ETag capture): $($response.tag_name)"
         return $response
     }
     catch {
@@ -314,10 +312,11 @@ function Get-LatestUrlFromGitHub {
 
     try {
         if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-            $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath 'ConfigMemberAccessHelpers.ps1'
-            if (Test-Path -Path $configHelpersPath) {
-                . $configHelpersPath
-            }
+            throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before calling Get-PluginFromGitHub."
+        }
+
+        if (-not (Get-Command -Name Set-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
+            throw "Set-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before calling Get-PluginFromGitHub."
         }
 
         # Validate required plugin configuration

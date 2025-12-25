@@ -95,6 +95,24 @@ class MediaManagerException : Exception {
 
 <#
 .SYNOPSIS
+    Exception thrown to indicate a fatal error has already been handled.
+
+.DESCRIPTION
+    Used to prevent double-invocation of the fatal UI service when a catch block
+    intercepts the test-mode throw from the fatal service.
+#>
+class PSmmFatalException : MediaManagerException {
+    [int]$ExitCode
+    [bool]$NonInteractive
+
+    PSmmFatalException([string]$message, [string]$context, [int]$exitCode, [bool]$nonInteractive) : base($message, $context) {
+        $this.ExitCode = $exitCode
+        $this.NonInteractive = $nonInteractive
+    }
+}
+
+<#
+.SYNOPSIS
     Exception thrown when configuration is invalid or cannot be loaded.
 
 .DESCRIPTION
@@ -468,10 +486,10 @@ class ConfigValidationException : MediaManagerException {
                 try { return $Object.$Name } catch { return $null }
             }
 
-            $severity = & $getValue -Object $issue -Name 'Severity'
-            $category = & $getValue -Object $issue -Name 'Category'
-            $property = & $getValue -Object $issue -Name 'Property'
-            $issueMessage = & $getValue -Object $issue -Name 'Message'
+            $severity = $getValue.InvokeReturnAsIs($issue, 'Severity')
+            $category = $getValue.InvokeReturnAsIs($issue, 'Category')
+            $property = $getValue.InvokeReturnAsIs($issue, 'Property')
+            $issueMessage = $getValue.InvokeReturnAsIs($issue, 'Message')
 
             if ([string]::IsNullOrWhiteSpace([string]$severity)) { $severity = 'Unknown' }
             if ([string]::IsNullOrWhiteSpace([string]$category)) { $category = 'Unknown' }

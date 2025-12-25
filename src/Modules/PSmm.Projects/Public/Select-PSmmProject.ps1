@@ -40,11 +40,26 @@ function Select-PSmmProject {
     .PARAMETER FileSystem
         File system service for testing. Defaults to FileSystemService instance.
 
-    .EXAMPLE
-        Select-PSmmProject -Config $appConfig -pName "MyVideoProject"
+    .PARAMETER PathProvider
+        Path provider service from DI.
+
+    .PARAMETER Http
+        HTTP service for plugin confirmation.
+
+    .PARAMETER Crypto
+        Crypto service for plugin confirmation.
+
+    .PARAMETER Environment
+        Environment service for plugin confirmation.
+
+    .PARAMETER Process
+        Process service for plugin confirmation.
 
     .EXAMPLE
-        Select-PSmmProject -Config $appConfig -pName "MyVideoProject" -SerialNumber "ABC123"
+        Select-PSmmProject -Config $appConfig -pName "MyVideoProject" -FileSystem $FileSystem -PathProvider $PathProvider -Http $Http -Crypto $Crypto -Environment $Environment -Process $Process
+
+    .EXAMPLE
+        Select-PSmmProject -Config $appConfig -pName "MyVideoProject" -SerialNumber "ABC123" -FileSystem $FileSystem -PathProvider $PathProvider -Http $Http -Crypto $Crypto -Environment $Environment -Process $Process
 
     .NOTES
         This function modifies the Projects.Current configuration.
@@ -64,10 +79,30 @@ function Select-PSmmProject {
         [string]$SerialNumber = $null,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         $FileSystem,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         $PathProvider
+
+        ,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
 
     # Prefer a strongly-typed config when the class is available, but keep legacy/fallback behavior
@@ -82,42 +117,13 @@ function Select-PSmmProject {
         }
     }
 
-    # Ensure PathProvider is available, preferring DI/global instance, otherwise wrap Config.Paths when possible.
+    # Break-fast: PathProvider must be explicitly provided by DI.
     $pathProviderType = 'PathProvider' -as [type]
     $iPathProviderType = 'IPathProvider' -as [type]
     if ($null -eq $PathProvider) {
-        $resolved = $null
-
-        try {
-            $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
-            if ($null -ne $globalServiceContainer) {
-                try {
-                    $resolved = $globalServiceContainer.Resolve('PathProvider')
-                }
-                catch {
-                    $resolved = $null
-                }
-            }
-        }
-        catch {
-            $resolved = $null
-        }
-
-        if ($null -ne $resolved) {
-            $PathProvider = $resolved
-        }
-        elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType) {
-            $configPaths = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Paths'
-            if ($null -ne $configPaths -and $configPaths -is $iPathProviderType) {
-                $PathProvider = $pathProviderType::new([IPathProvider]$configPaths)
-            }
-        }
-
-        if ($null -eq $PathProvider -and $null -ne $pathProviderType) {
-            $PathProvider = $pathProviderType::new()
-        }
+        throw 'PathProvider is required for Select-PSmmProject (pass DI service).'
     }
-    elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+    if ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
         $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
     }
 
@@ -237,9 +243,7 @@ function Select-PSmmProject {
         }
 
         # Find the project across all storage groups and drives
-        $projectsServiceContainer = [ServiceContainer]::new()
-        $projectsServiceContainer.RegisterSingleton('FileSystem', $FileSystem)
-        $AllProjects = Get-PSmmProjects -Config $Config -ServiceContainer $projectsServiceContainer
+        $AllProjects = Get-PSmmProjects -Config $Config -FileSystem $FileSystem
         $FoundProject = $null
         $StorageDriveLabel = $null
 
@@ -408,40 +412,7 @@ function Select-PSmmProject {
         Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Plugins' -Value $pluginsConfig
 
         try {
-            # Use pre-instantiated services from global context when available,
-            # otherwise instantiate new ones (for standalone/test usage)
-            $globalServiceContainer = $null
-            try {
-                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
-            }
-            catch {
-                Write-Verbose "[Select-PSmmProject] Global ServiceContainer not available: $($_.Exception.Message)"
-                $globalServiceContainer = $null
-            }
-
-            if ($null -ne $globalServiceContainer) {
-                $httpService = $globalServiceContainer.Resolve('Http')
-                $cryptoService = $globalServiceContainer.Resolve('Crypto')
-                $environmentService = $globalServiceContainer.Resolve('Environment')
-                $processService = $globalServiceContainer.Resolve('Process')
-            }
-            else {
-                $httpService = [HttpService]::new()
-                $cryptoService = [CryptoService]::new()
-                $environmentService = [EnvironmentService]::new()
-                $processService = [ProcessService]::new()
-            }
-
-            # Create ServiceContainer for plugin confirmation
-            $pluginServiceContainer = [ServiceContainer]::new()
-            $pluginServiceContainer.RegisterSingleton('Http', $httpService)
-            $pluginServiceContainer.RegisterSingleton('Crypto', $cryptoService)
-            $pluginServiceContainer.RegisterSingleton('FileSystem', $FileSystem)
-            $pluginServiceContainer.RegisterSingleton('Environment', $environmentService)
-            $pluginServiceContainer.RegisterSingleton('PathProvider', $PathProvider)
-            $pluginServiceContainer.RegisterSingleton('Process', $processService)
-
-            Confirm-Plugins -Config $Config -ServiceContainer $pluginServiceContainer
+            Confirm-Plugins -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
         }
         catch {
             Write-Warning "Failed to confirm project plugins for '$pName': $_"

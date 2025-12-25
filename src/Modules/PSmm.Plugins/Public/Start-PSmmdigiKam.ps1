@@ -1,13 +1,6 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
-if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\Private') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
-}
-
 <#
 .SYNOPSIS
     Starts the digiKam application with project-specific configuration and isolated database.
@@ -67,12 +60,15 @@ function Start-PSmmdigiKam {
         $Config,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         $FileSystem,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         $PathProvider,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         $Process,
 
         [Parameter()]
@@ -83,42 +79,13 @@ function Start-PSmmdigiKam {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
-        # Ensure PathProvider is available, preferring DI/global instance, otherwise wrap Config.Paths when possible.
+        # Break-fast: PathProvider must be explicitly provided by DI.
         $pathProviderType = 'PathProvider' -as [type]
         $iPathProviderType = 'IPathProvider' -as [type]
         if ($null -eq $PathProvider) {
-            $resolved = $null
-            try {
-                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
-                if ($null -ne $globalServiceContainer) {
-                    try {
-                        $resolved = $globalServiceContainer.Resolve('PathProvider')
-                    }
-                    catch {
-                        $resolved = $null
-                    }
-                }
-            }
-            catch {
-                $resolved = $null
-            }
-
-            if ($null -ne $resolved) {
-                $PathProvider = $resolved
-            }
-            elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType) {
-                $configPaths = $null
-                try { $configPaths = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths' } catch { $configPaths = $null }
-                if ($null -ne $configPaths -and $configPaths -is $iPathProviderType) {
-                    $PathProvider = $pathProviderType::new([IPathProvider]$configPaths)
-                }
-            }
-
-            if ($null -eq $PathProvider -and $null -ne $pathProviderType) {
-                $PathProvider = $pathProviderType::new()
-            }
+            throw 'PathProvider is required for Start-PSmmdigiKam (pass DI service).'
         }
-        elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+        if ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
             $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
         }
 

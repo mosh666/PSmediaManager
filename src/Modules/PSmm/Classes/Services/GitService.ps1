@@ -21,6 +21,19 @@ using namespace System.IO
 #>
 class GitService : IGitService {
 
+    [IProcessService] $Process
+
+    GitService() {
+        throw [InvalidOperationException]::new('GitService requires an injected Process service. Construct via DI (GitService(Process)).')
+    }
+
+    GitService([IProcessService]$Process) {
+        if ($null -eq $Process) {
+            throw [InvalidOperationException]::new('GitService requires an injected Process service (Process is null).')
+        }
+        $this.Process = $Process
+    }
+
     <#
     .SYNOPSIS
         Gets the current branch name.
@@ -35,20 +48,26 @@ class GitService : IGitService {
         }
 
         try {
-            Push-Location $repositoryPath
-            $branch = git rev-parse --abbrev-ref HEAD 2>&1
-            Pop-Location
-
-            if ($LASTEXITCODE -ne 0) {
-                throw [InvalidOperationException]::new("Failed to get current branch: $branch")
+            if (-not $this.Process.TestCommand('git')) {
+                throw [InvalidOperationException]::new('Git command not found: git')
             }
 
-            return [PSCustomObject]@{
-                Name = $branch.Trim()
+            $result = $this.Process.InvokeCommand('git', @(
+                    '-C',
+                    $repositoryPath,
+                    'rev-parse',
+                    '--abbrev-ref',
+                    'HEAD'
+                ))
+
+            if (-not $result.Success) {
+                throw [InvalidOperationException]::new("Failed to get current branch: $($result.Output | Out-String)")
             }
+
+            $branch = ($result.Output | Out-String).Trim()
+            return [PSCustomObject]@{ Name = $branch }
         }
         catch {
-            Pop-Location
             throw [InvalidOperationException]::new("Failed to get current branch: $_", $_.Exception)
         }
     }
@@ -67,20 +86,30 @@ class GitService : IGitService {
         }
 
         try {
-            Push-Location $repositoryPath
-            $tag = git describe --tags --abbrev=0 2>&1
-            Pop-Location
-
-            if ($LASTEXITCODE -ne 0) {
+            if (-not $this.Process.TestCommand('git')) {
                 return $null
             }
 
-            return [PSCustomObject]@{
-                Name = $tag.Trim()
+            $result = $this.Process.InvokeCommand('git', @(
+                    '-C',
+                    $repositoryPath,
+                    'describe',
+                    '--tags',
+                    '--abbrev=0'
+                ))
+
+            if (-not $result.Success) {
+                return $null
             }
+
+            $tag = ($result.Output | Out-String).Trim()
+            if ([string]::IsNullOrWhiteSpace($tag)) {
+                return $null
+            }
+
+            return [PSCustomObject]@{ Name = $tag }
         }
         catch {
-            Pop-Location
             return $null
         }
     }
@@ -99,22 +128,42 @@ class GitService : IGitService {
         }
 
         try {
-            Push-Location $repositoryPath
-            $hash = git rev-parse HEAD 2>&1
-            $shortHash = git rev-parse --short HEAD 2>&1
-            Pop-Location
-
-            if ($LASTEXITCODE -ne 0) {
-                throw [InvalidOperationException]::new("Failed to get commit hash: $hash")
+            if (-not $this.Process.TestCommand('git')) {
+                throw [InvalidOperationException]::new('Git command not found: git')
             }
 
+            $fullResult = $this.Process.InvokeCommand('git', @(
+                    '-C',
+                    $repositoryPath,
+                    'rev-parse',
+                    'HEAD'
+                ))
+
+            if (-not $fullResult.Success) {
+                throw [InvalidOperationException]::new("Failed to get commit hash: $($fullResult.Output | Out-String)")
+            }
+
+            $shortResult = $this.Process.InvokeCommand('git', @(
+                    '-C',
+                    $repositoryPath,
+                    'rev-parse',
+                    '--short',
+                    'HEAD'
+                ))
+
+            if (-not $shortResult.Success) {
+                throw [InvalidOperationException]::new("Failed to get short commit hash: $($shortResult.Output | Out-String)")
+            }
+
+            $hash = ($fullResult.Output | Out-String).Trim()
+            $shortHash = ($shortResult.Output | Out-String).Trim()
+
             return [PSCustomObject]@{
-                Full = $hash.Trim()
-                Short = $shortHash.Trim()
+                Full = $hash
+                Short = $shortHash
             }
         }
         catch {
-            Pop-Location
             throw [InvalidOperationException]::new("Failed to get commit hash: $_", $_.Exception)
         }
     }
@@ -136,13 +185,16 @@ class GitService : IGitService {
                 $gitArgs += $filePattern
             }
 
-            $files = & git @gitArgs 2>&1
-
-            if ($LASTEXITCODE -ne 0) {
+            if (-not $this.Process.TestCommand('git')) {
                 return @()
             }
 
-            return @($files)
+            $result = $this.Process.InvokeCommand('git', $gitArgs)
+            if (-not $result.Success) {
+                return @()
+            }
+
+            return @($result.Output)
         }
         catch {
             return @()

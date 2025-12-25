@@ -104,7 +104,12 @@ function Remove-StorageGroup {
     # Write updated storage (with renumbering)
     if ($PSCmdlet.ShouldProcess($storagePath, "Update storage file")) {
         try {
-            [AppConfigurationBuilder]::WriteStorageFile($storagePath, $storageHashtable)
+            $fs = Get-PSmmConfigMemberValue -Object $Config -Name 'FileSystem' -Default $null
+            if ($null -eq $fs) {
+                throw [ValidationException]::new('FileSystem service is required to write storage configuration', 'FileSystem', $null)
+            }
+
+            [AppConfigurationBuilder]::WriteStorageFile($storagePath, $storageHashtable, $fs)
             Write-RemoveLog 'NOTICE' "Updated storage file: $storagePath (removed $removedCount group(s), renumbered remaining)"
         }
         catch {

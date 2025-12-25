@@ -9,10 +9,13 @@
 .PARAMETER Config
     The AppConfiguration object containing logging settings.
 
-.EXAMPLE
-    Initialize-Logging -Config $appConfig
+.PARAMETER FileSystem
+    A FileSystem service instance (service-first DI). This is required; no filesystem shim/fallback is used.
 
-    Initializes logging using the AppConfiguration object.
+.EXAMPLE
+    Initialize-Logging -Config $appConfig -FileSystem $fileSystemService -PathProvider $pathProviderService
+
+    Initializes logging using the AppConfiguration object and injected services.
 
 
 
@@ -28,19 +31,6 @@ Set-StrictMode -Version Latest
 
 #region ########## PUBLIC ##########
 
-function Set-PSmmRepositoryInstallationPolicy {
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact='Medium')]
-    param(
-        [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][string]$InstallationPolicy
-    )
-
-    # Thin wrapper to make Set-PSRepository easy to mock in tests
-    if ($PSCmdlet.ShouldProcess("Repository '$Name'", "Set InstallationPolicy to '$InstallationPolicy'")) {
-        Set-PSRepository -Name $Name -InstallationPolicy $InstallationPolicy -ErrorAction Stop
-    }
-}
-
 function Initialize-Logging {
     [CmdletBinding()]
     param(
@@ -48,7 +38,8 @@ function Initialize-Logging {
         [ValidateNotNull()]
         [object]$Config,
 
-        [Parameter()]
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
         [object]$FileSystem,
 
         [Parameter()]
@@ -93,15 +84,15 @@ function Initialize-Logging {
         }
 
         if ($null -eq $PathProvider) {
-            try {
-                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
-                $resolved = $globalServiceContainer.Resolve('PathProvider')
-                if ($null -ne $resolved) {
-                    $PathProvider = $resolved
-                }
-            }
-            catch {
-                Write-Verbose "Initialize-Logging: failed to resolve PathProvider from global ServiceContainer: $($_.Exception.Message)"
+            throw 'PathProvider is required for Initialize-Logging (pass -PathProvider, or ensure Config.Paths provides an IPathProvider).'
+        }
+
+        # Logging is service-first: a FileSystem service must be injected.
+        $requiredFsMethods = @('TestPath', 'NewItem', 'SetContent')
+        foreach ($methodName in $requiredFsMethods) {
+            $hasMethod = $null -ne ($FileSystem | Get-Member -Name $methodName -MemberType Method -ErrorAction SilentlyContinue)
+            if (-not $hasMethod) {
+                throw "FileSystem is missing required method '$methodName'. Initialize-Logging requires an injected FileSystem service implementing: $($requiredFsMethods -join ', ')."
             }
         }
 
@@ -323,77 +314,21 @@ function Initialize-Logging {
             $script:Logging.Format = '[%{timestamp}] [%{level}] %{message}'
         }
 
-        # Ensure PSLogs module is available
-        if (-not $SkipPsLogsInit -and -not (Get-Module -ListAvailable -Name PSLogs)) {
-            Write-Verbose 'PSLogs module not found, installing...'
-            try {
-                $nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
-                if (-not $nugetProvider) {
-                    Write-Verbose 'NuGet provider not found, installing...'
-                    Install-PackageProvider -Name NuGet -Scope CurrentUser -Force -ErrorAction Stop
-                }
-            }
-            catch {
-                $nugetMessage = "Failed to install NuGet provider required for PSLogs: $_"
-                if ($nonInteractive) {
-                    throw $nugetMessage
-                }
-                Write-Warning $nugetMessage
-            }
-
-            try {
-                $psGallery = Get-PSRepository -Name 'PSGallery' -ErrorAction Stop
-                if ($psGallery.InstallationPolicy -ne 'Trusted') {
-                    Write-Verbose 'PSGallery repository not trusted - marking as Trusted'
-                    Set-PSmmRepositoryInstallationPolicy -Name 'PSGallery' -InstallationPolicy 'Trusted'
-                }
-            }
-            catch {
-                $repoMessage = "Failed to configure PSGallery repository for PSLogs installation: $_"
-                if ($nonInteractive) {
-                    throw $repoMessage
-                }
-                Write-Warning $repoMessage
-            }
-
-            try {
-                Install-Module -Name PSLogs -Force -Scope CurrentUser -ErrorAction Stop -Confirm:$false
-            }
-            catch {
-                $installMessage = "Failed to install PSLogs module automatically. Install it manually with 'Install-Module -Name PSLogs -Scope CurrentUser'. Details: $_"
-                throw $installMessage
-            }
-        }
-
         if (-not $SkipPsLogsInit) {
-            try {
-                Write-Verbose 'DEBUG: Importing PSLogs module...'
-                Import-Module -Name PSLogs -Force -ErrorAction Stop
-                Write-Verbose 'PSLogs module loaded'
+            Write-Verbose 'DEBUG: Validating PSLogs dependency...'
+            if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
+                throw "PSLogs dependency is missing. Ensure PSLogs is installed and imported before calling Initialize-Logging. (Module loading is owned by PSmm bootstrap.)"
             }
-            catch {
-                throw "Failed to import PSLogs module: $_"
-            }
+            Write-Verbose 'DEBUG: PSLogs dependency is available'
         }
         else {
-            Write-Verbose 'DEBUG: Skipping PSLogs import per -SkipPsLogsInit flag'
+            Write-Verbose 'DEBUG: Skipping PSLogs dependency validation per -SkipPsLogsInit flag'
         }
 
         # Note: Format-Pattern is an internal PSLogs function and not needed in PSLogs 5.5.2+
         # PSLogs handles format string parsing internally via Add-LoggingTarget
 
-        # Instantiate FileSystemService only if available (avoid hard failure on missing type)
-            Write-Verbose 'DEBUG: Checking FileSystemService parameter...'
-        if (-not $PSBoundParameters.ContainsKey('FileSystem') -or $null -eq $FileSystem) {
-            try {
-                $FileSystem = New-FileSystemService
-            }
-            catch {
-                Write-Verbose 'FileSystemService type not available - falling back to native cmdlets.'
-                $FileSystem = $null
-            }
-        }
-            Write-Verbose 'DEBUG: FileSystemService check complete'
+        Write-Verbose 'DEBUG: FileSystemService parameter validated'
 
         # Ensure log directory exists (using PathProvider and FileSystem services)
     $scriptLoggingType = $script:Logging.GetType().FullName
@@ -409,23 +344,11 @@ function Initialize-Logging {
         }
         try {
             Write-Verbose "DEBUG: Checking log directory exists: $logDir"
-            # Use FileSystem service if available, otherwise use native cmdlet
-            if ($FileSystem) {
-                $logDirExists = $FileSystem.TestPath($logDir)
-            } else {
-                $logDirExists = Test-Path -Path $logDir
-            }
+            $logDirExists = $FileSystem.TestPath($logDir)
             if (-not $logDirExists) {
                 Write-Verbose "Creating log directory: $logDir"
                 try {
-                    if ($FileSystem) {
-                        $FileSystem.NewItem($logDir, 'Directory')
-                    }
-                    else {
-                        # Fallback only during early bootstrap when services may not be loaded
-                        Write-Verbose 'FileSystem service not available during bootstrap, using native New-Item cmdlet'
-                        $null = New-Item -Path $logDir -ItemType Directory -Force -ErrorAction Stop
-                    }
+                    $FileSystem.NewItem($logDir, 'Directory')
                 }
                 catch {
                     $ex = [LoggingException]::new("Failed to create log directory '$logDir'", $logDir, $_.Exception)
@@ -484,20 +407,10 @@ function Initialize-Logging {
         if ($devMode) {
             Write-Verbose 'Dev mode: Clearing log file'
             $logFilePath = $script:Logging.Path
-            $logFileExists = if ($FileSystem) {
-                $FileSystem.TestPath($logFilePath)
-            } else {
-                Test-Path -Path $logFilePath
-            }
+            $logFileExists = $FileSystem.TestPath($logFilePath)
             if ($logFileExists) {
                 try {
-                    if ($FileSystem) {
-                        $FileSystem.SetContent($logFilePath, '')
-                    }
-                    else {
-                        # Fallback during early bootstrap
-                        Set-Content -Path $logFilePath -Value '' -Force -ErrorAction Stop
-                    }
+                    $FileSystem.SetContent($logFilePath, '')
                 }
                 catch {
                     Write-Warning "Failed to clear log file '$logFilePath': $_"

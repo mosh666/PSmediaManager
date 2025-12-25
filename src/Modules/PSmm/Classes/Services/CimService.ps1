@@ -45,7 +45,7 @@ function Get-InternalCimInstance {
     param([hashtable]$Params)
     # Prefer script-scoped test hook for portability (WSL may lack CIM).
     if ($script:CimInstanceProvider) {
-        return & $script:CimInstanceProvider @Params
+        return $script:CimInstanceProvider.InvokeReturnAsIs($Params)
     }
     elseif (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) {
         return Get-CimInstance @Params

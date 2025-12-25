@@ -6,10 +6,7 @@
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
+    throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before loading plugin definitions."
 }
 
 #region ########## PRIVATE ##########
@@ -18,30 +15,16 @@ function Get-CurrentVersion-ffmpeg {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
     )
-
-    # Resolve FileSystem from ServiceContainer if available
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'FFmpeg' }
 
-    if ($FileSystem) {
-        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
-    }
-    else {
-        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
-    }
+    $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
 
     if ($CurrentVersion) {
         return $CurrentVersion.BaseName.Split('-')[1]
@@ -55,35 +38,57 @@ function Get-LatestUrlFromUrl-ffmpeg {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
-    )
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Http,
 
-    # Resolve FileSystem from ServiceContainer if available
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
+    )
+    $null = $Http, $Crypto, $Environment, $PathProvider, $Process
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'FFmpeg' }
     $versionUrl = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
 
-    Invoke-RestMethod -Uri $versionUrl -OutFile $Paths._Temp
+    if ($null -eq $Http) {
+        throw [System.InvalidOperationException]::new('Http service is required to download FFmpeg artifacts')
+    }
 
-    if ($FileSystem) {
-        $tempFiles = @($FileSystem.GetChildItem($Paths._Temp, "$pluginName*.7z", 'File'))
-        $latestFile = $tempFiles | Select-Object -First 1
-        $LatestInstaller = $latestFile.Name
+    # Ensure a clean temp directory state for this plugin
+    $existing = @($FileSystem.GetChildItem($Paths._Temp, "$pluginName*.7z", 'File'))
+    foreach ($f in $existing) {
+        $FileSystem.RemoveItem($f.FullName, $false)
     }
-    else {
-        $LatestInstaller = Split-Path -Path (Get-ChildItem -Path $Paths._Temp -Name "$pluginName*.7z") -Leaf
-    }
+
+    $fileName = $null
+    try { $fileName = [System.IO.Path]::GetFileName(([uri]$versionUrl).LocalPath) } catch { $fileName = $null }
+    if ([string]::IsNullOrWhiteSpace($fileName)) { $fileName = "$pluginName.7z" }
+    $outFile = Join-Path -Path $Paths._Temp -ChildPath $fileName
+
+    $Http.DownloadFile($versionUrl, $outFile)
+
+    $tempFiles = @($FileSystem.GetChildItem($Paths._Temp, "$pluginName*.7z", 'File'))
+    $latestFile = $tempFiles | Select-Object -First 1
+    $LatestInstaller = $latestFile.Name
 
     $LatestVersion = $LatestInstaller.Split('-')[1]
     $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
@@ -101,35 +106,30 @@ function Get-LatestUrlFromUrl-ffmpeg {
 function Get-Installer-ffmpeg {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Http', Justification = 'Parameter reserved for future HTTP-based downloads')]
     param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Url,
+
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        $Http,
+        $Crypto,
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+        $Environment,
+        $PathProvider,
+        $Process
     )
-
-    # Resolve FileSystem from ServiceContainer if available
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
+    $null = $Url, $Http, $Crypto, $Environment, $PathProvider, $Process
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'FFmpeg' }
     $pattern = "$pluginName*.7z"
-    if ($FileSystem) {
-        $filesToRemove = @($FileSystem.GetChildItem($Paths._Downloads, $pattern, 'File'))
-        foreach ($file in $filesToRemove) {
-            $FileSystem.RemoveItem($file.FullName, $false)
-        }
-    }
-    else {
-        Get-ChildItem -Path "$($Paths._Downloads)\$pattern" -ErrorAction SilentlyContinue |
-            Remove-Item -Force -ErrorAction SilentlyContinue
+    $filesToRemove = @($FileSystem.GetChildItem($Paths._Downloads, $pattern, 'File'))
+    foreach ($file in $filesToRemove) {
+        $FileSystem.RemoveItem($file.FullName, $false)
     }
     Move-Item -Path "$($Paths._Temp)\$pattern" -Destination $Paths._Downloads -Force
 
@@ -145,8 +145,11 @@ function Invoke-Installer-ffmpeg {
         [hashtable]$Paths,
         [string]$InstallerPath,
         $Process,
-        $FileSystem
+        $FileSystem,
+        $Environment,
+        $PathProvider
     )
+    $null = $Environment, $PathProvider
     try {
         $ExtractPath = $Paths.Root
 
@@ -158,23 +161,17 @@ function Invoke-Installer-ffmpeg {
             New-Item -Path $ExtractPath -ItemType Directory -Force | Out-Null
         }
 
+        if ($null -eq $Process) {
+            throw [System.InvalidOperationException]::new('Process service is required to extract FFmpeg archive')
+        }
+
         # Use 7z.exe to extract the archive
-        if ($Process) {
-            $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
-        }
-        else {
-            $sevenZipCmd = '7z'
-        }
+        $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
 
         # Extract archive
-        $result = if ($Process) {
-            $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$ExtractPath", '-y'))
-        }
-        else {
-            & $sevenZipCmd x $InstallerPath "-o$ExtractPath" -y
-        }
+        $result = $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$ExtractPath", '-y'))
 
-        if ($Process -and -not $result.Success) {
+        if ($result -and -not $result.Success) {
             $ex = [System.Exception]::new("7z extraction failed with exit code: $($result.ExitCode)")
             throw $ex
         }

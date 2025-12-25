@@ -20,8 +20,9 @@
     - Storage configuration
 
 
+
 .EXAMPLE
-    Invoke-PSmm -Config $appConfig
+    Invoke-PSmm -Config $appConfig -FatalErrorUi $fatal -FileSystem $fs -Environment $env -PathProvider $paths -Process $proc -Http $http -Crypto $crypto
 
     Bootstraps the application using the provided configuration object.
 
@@ -46,7 +47,35 @@ function Invoke-PSmm {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [object]$Config
+        [object]$Config,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FatalErrorUi,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto
     )
 
     begin {
@@ -62,19 +91,11 @@ function Invoke-PSmm {
             }
 
             if (-not (Get-Command -Name Get-PSmmConfigMemberValue -ErrorAction SilentlyContinue)) {
-                $moduleRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-                $helperPath = Join-Path -Path $moduleRoot -ChildPath 'Private\\Get-PSmmConfigMemberValue.ps1'
-                if (Test-Path -Path $helperPath) {
-                    . $helperPath
-                }
+                throw 'Get-PSmmConfigMemberValue is not available. Ensure PSmm is imported and exports required helpers.'
             }
 
             if (-not (Get-Command -Name Get-PSmmConfigNestedValue -ErrorAction SilentlyContinue)) {
-                $moduleRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-                $helperPath = Join-Path -Path $moduleRoot -ChildPath 'Private\\Get-PSmmConfigNestedValue.ps1'
-                if (Test-Path -Path $helperPath) {
-                    . $helperPath
-                }
+                throw 'Get-PSmmConfigNestedValue is not available. Ensure PSmm is imported and exports required helpers.'
             }
 
             if ($null -eq $Config.Paths) {
@@ -91,6 +112,16 @@ function Invoke-PSmm {
                 throw 'Configuration is missing Paths.RepositoryRoot; unable to bootstrap.'
             }
 
+            #region ----- Initialize Shared Services (Early)
+            # Services are injected (service-first runtime)
+            $fileSystemService = $FileSystem
+            $pathProviderService = $PathProvider
+            $environmentService = $Environment
+            $processService = $Process
+            $httpService = $Http
+            $cryptoService = $Crypto
+            #endregion ----- Initialize Shared Services (Early)
+
             #region ----- Setup Folders
             Write-Verbose 'Creating directory structure...'
             if ($null -eq $Config.Paths) {
@@ -98,22 +129,12 @@ function Invoke-PSmm {
             }
 
             try {
-                $Config.Paths.EnsureDirectoriesExist()
+                $Config.Paths.EnsureDirectoriesExist($fileSystemService)
             }
             catch {
                 throw "Failed to ensure directories exist from Config.Paths: $_"
             }
             #endregion ----- Setup Folders
-
-            #region ----- Initialize Shared Services (Early)
-            # Create core services needed for configuration and logging
-            $fileSystemService = [FileSystemService]::new()
-            $pathProviderService = [PathProvider]::new([IPathProvider]$Config.Paths)
-            $environmentService = [EnvironmentService]::new()
-            $processService = [ProcessService]::new()
-            $httpService = [HttpService]::new()
-            $cryptoService = [CryptoService]::new()
-            #endregion ----- Initialize Shared Services (Early)
 
             #region ----- Load Configuration
             Write-Verbose 'Verifying configuration...'
@@ -130,20 +151,15 @@ function Invoke-PSmm {
 
             #region ----- Initialize Logging
             Write-Verbose 'Initializing logging system...'
-            Write-Verbose 'SENTINEL: About to call Initialize-Logging'
             Write-Output ''
             try {
-                Initialize-Logging -Config $Config -FileSystem $fileSystemService -PathProvider $pathProviderService -SkipPsLogsInit
-                Write-Verbose 'SENTINEL: Returned from Initialize-Logging'
+                Import-Module -Name PSLogs -Force -ErrorAction Stop
+                Initialize-Logging -Config $Config -FileSystem $fileSystemService -PathProvider $pathProviderService
             }
             catch {
-                Write-Error "EXCEPTION DETAILS: $($_.Exception.Message)"
-                Write-Verbose "InvocationInfo: $($_.InvocationInfo | Out-String)"
-                Write-Verbose "ScriptStackTrace: $($_.ScriptStackTrace)"
-                Write-Verbose "TargetObject: $($_.TargetObject)"
-                throw
+                $detail = if ($_.Exception) { $_.Exception.Message } else { [string]$_ }
+                throw "Initialize-Logging failed: $detail"
             }
-            Start-Sleep -Milliseconds 500
             #endregion ----- Initialize Logging
 
             Write-PSmmLog -Level NOTICE -Context 'Start PSmediaManager' -Message '########## Bootstrapping PSmediaManager' -Console -File
@@ -168,28 +184,15 @@ function Invoke-PSmm {
                     elseif ($setupSuccess -eq $false) {
                         Write-PSmmLog -Level ERROR -Context 'First-Run Setup' `
                             -Message 'First-run setup was cancelled. Application cannot continue without vault setup.' -Console -File
-                        Write-Output ''
-                        Write-Error 'Application terminated.'
-                        Write-Output ''
-                        if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
-                            throw 'First-run setup cancelled. (Test Mode: throwing instead of exit)'
-                        }
-                        else {
-                            exit 1
-                        }
+                        Invoke-PSmmFatal -Context 'First-Run Setup' -Message 'First-run setup was cancelled. Application cannot continue without vault setup.' -ExitCode 1 -NonInteractive:$nonInteractive -FatalErrorUi $FatalErrorUi
+                        return
                     }
                 }
                 else {
                     Write-PSmmLog -Level ERROR -Context 'First-Run Setup' `
                         -Message 'Invoke-FirstRunSetup function not available. Vault setup required.' -Console -File
-                    Write-Error "Invoke-FirstRunSetup function not available. Vault setup required."
-                    Write-Error "Use 'Initialize-SystemVault' and 'Save-SystemSecret' to set up secrets."
-                    if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
-                        throw 'Invoke-FirstRunSetup not available. (Test Mode: throwing instead of exit)'
-                    }
-                    else {
-                        exit 1
-                    }
+                    Invoke-PSmmFatal -Context 'First-Run Setup' -Message "Invoke-FirstRunSetup function not available. Vault setup required. Use 'Initialize-SystemVault' and 'Save-SystemSecret' to set up secrets." -ExitCode 1 -NonInteractive:$nonInteractive -FatalErrorUi $FatalErrorUi
+                    return
                 }
             }
             #endregion ----- First-Run Setup
@@ -226,17 +229,7 @@ function Invoke-PSmm {
 
             #region ----- Verify Required Plugins
             Write-PSmmLog -Level NOTICE -Context 'Confirm-Plugins' -Message 'Checking required plugins' -Console -File
-
-            # Create temporary ServiceContainer for plugin confirmation with available services
-            $pluginServiceContainer = [ServiceContainer]::new()
-            $pluginServiceContainer.RegisterSingleton('Http', $httpService)
-            $pluginServiceContainer.RegisterSingleton('Crypto', $cryptoService)
-            $pluginServiceContainer.RegisterSingleton('FileSystem', $fileSystemService)
-            $pluginServiceContainer.RegisterSingleton('Environment', $environmentService)
-            $pluginServiceContainer.RegisterSingleton('PathProvider', $pathProviderService)
-            $pluginServiceContainer.RegisterSingleton('Process', $processService)
-
-            Confirm-Plugins -Config $Config -ServiceContainer $pluginServiceContainer
+            Confirm-Plugins -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
             Write-Verbose "Required plugins verified"
             #endregion ----- Verify Required Plugins
 
@@ -259,15 +252,8 @@ function Invoke-PSmm {
                         if (-not $ok -or $pending) {
                             Write-PSmmLog -Level ERROR -Context 'First-Run Setup' `
                                 -Message 'Failed to complete vault setup after KeePassXC installation' -Console -File
-                            Write-Output ''
-                            Write-Error 'Failed to complete setup. Application terminated.'
-                            Write-Output ''
-                            if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
-                                throw 'Failed to complete vault setup. (Test Mode: throwing instead of exit)'
-                            }
-                            else {
-                                exit 1
-                            }
+                            Invoke-PSmmFatal -Context 'First-Run Setup' -Message 'Failed to complete vault setup after KeePassXC installation' -ExitCode 1 -NonInteractive:$nonInteractive -FatalErrorUi $FatalErrorUi
+                            return
                         }
                     }
                 }
@@ -287,7 +273,7 @@ function Invoke-PSmm {
 
             #region ----- Security Validation
             Write-PSmmLog -Level NOTICE -Context 'Security Check' -Message 'Validating secrets security' -Console -File
-            $securityCheckPassed = Test-SecretsSecurity -Config $Config
+            $securityCheckPassed = Test-SecretsSecurity -Config $Config -FileSystem $fileSystemService
             if (-not $securityCheckPassed) {
                 Write-Warning 'Security validation identified issues - please review'
             }
@@ -309,7 +295,7 @@ function Invoke-PSmm {
 
                 $gitVersionExecutable = Get-LocalPluginExecutablePath -PluginConfig $gitVersionPlugin -PluginsRootPath $pluginsPath
             }
-            $Config.AppVersion = Get-ApplicationVersion -GitPath $GitPath -GitVersionExecutablePath $gitVersionExecutable
+            $Config.AppVersion = Get-ApplicationVersion -GitPath $GitPath -GitVersionExecutablePath $gitVersionExecutable -Process $processService
             Write-PSmmLog -Level NOTICE -Context 'Get-AppVersion' -Message "Current PSmediaManager version: $($Config.AppVersion)" -Console -File
             #endregion ----- Get Application Version
 
@@ -352,6 +338,9 @@ function Invoke-PSmm {
             Write-Verbose "Bootstrap completed successfully"
         }
         catch {
+            if ($_.Exception -is [PSmmFatalException]) {
+                throw
+            }
             $stack = $_.ScriptStackTrace
             $invocation = $null
             if ($_.InvocationInfo) {
@@ -409,7 +398,11 @@ function Get-ApplicationVersion {
         [string]$GitPath,
 
         [Parameter()]
-        [string]$GitVersionExecutablePath
+        [string]$GitVersionExecutablePath,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
 
     try {
@@ -463,11 +456,16 @@ function Get-ApplicationVersion {
 
         if ($gitVersionExecutable) {
             Write-Verbose "Using GitVersion executable at: $gitVersionExecutable"
-            $gitVersionOutput = & $gitVersionExecutable $gitVersionTargetPath /output json /nofetch 2>$null
+            $gitVersionResult = $Process.StartProcess($gitVersionExecutable, @(
+                    $gitVersionTargetPath,
+                    '/output',
+                    'json',
+                    '/nofetch'
+                ))
 
-            if ($LASTEXITCODE -eq 0 -and $gitVersionOutput) {
+            if ($gitVersionResult.Success -and -not [string]::IsNullOrWhiteSpace([string]$gitVersionResult.StdOut)) {
                 try {
-                    $gitVersionJson = ($gitVersionOutput | Out-String)
+                    $gitVersionJson = [string]$gitVersionResult.StdOut
                     $gitVersionData = $gitVersionJson | ConvertFrom-Json -ErrorAction Stop
                     $verSemVer = $gitVersionData.SemVer
 
@@ -489,14 +487,33 @@ function Get-ApplicationVersion {
         }
 
         # Fallback: use native git commands if GitVersion output was unavailable
-        $gitExe = Get-Command git.exe -ErrorAction SilentlyContinue
-        if ($gitExe) {
-            $gitSemVer = & git.exe -C $repositoryPath describe --tags --exact-match 2>$null
-            if (-not $gitSemVer) {
-                $gitSemVer = & git.exe -C $repositoryPath describe --tags --long 2>$null
+        if ($Process.TestCommand('git.exe')) {
+            $describeExact = $Process.InvokeCommand('git.exe', @(
+                    '-C',
+                    $repositoryPath,
+                    'describe',
+                    '--tags',
+                    '--exact-match'
+                ))
+
+            $gitSemVer = $null
+            if ($describeExact.Success) {
+                $gitSemVer = ($describeExact.Output | Out-String).Trim()
             }
 
-            $gitSemVer = $gitSemVer.Trim()
+            if (-not $gitSemVer) {
+                $describeLong = $Process.InvokeCommand('git.exe', @(
+                        '-C',
+                        $repositoryPath,
+                        'describe',
+                        '--tags',
+                        '--long'
+                    ))
+
+                if ($describeLong.Success) {
+                    $gitSemVer = ($describeLong.Output | Out-String).Trim()
+                }
+            }
 
             if ($gitSemVer) {
                 Write-Verbose "Retrieved version from git describe fallback: $gitSemVer"

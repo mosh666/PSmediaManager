@@ -14,6 +14,7 @@
 
 using namespace System
 using namespace System.IO
+using namespace System.IO.Compression
 
 <#
 .SYNOPSIS
@@ -210,5 +211,34 @@ class FileSystemService : IFileSystemService {
         }
 
         return Get-Item -Path $path -ErrorAction Stop
+    }
+
+    <#
+    .SYNOPSIS
+        Extracts a zip archive to a destination folder.
+    #>
+    [void] ExtractZip([string]$zipPath, [string]$destinationPath, [bool]$overwrite) {
+        if ([string]::IsNullOrWhiteSpace($zipPath)) {
+            throw [ArgumentException]::new('ZipPath cannot be empty', 'zipPath')
+        }
+
+        if ([string]::IsNullOrWhiteSpace($destinationPath)) {
+            throw [ArgumentException]::new('DestinationPath cannot be empty', 'destinationPath')
+        }
+
+        if (-not $this.TestPath($zipPath)) {
+            throw [FileNotFoundException]::new("Zip file not found: $zipPath")
+        }
+
+        if (-not $this.TestPath($destinationPath)) {
+            $this.NewItem($destinationPath, 'Directory')
+        }
+
+        try {
+            [ZipFile]::ExtractToDirectory($zipPath, $destinationPath, $overwrite)
+        }
+        catch {
+            throw [InvalidOperationException]::new("Failed to extract zip '$zipPath' to '$destinationPath': $_", $_.Exception)
+        }
     }
 }

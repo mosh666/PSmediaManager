@@ -6,10 +6,7 @@
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
+    throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before loading plugin definitions."
 }
 
 #region ########## PRIVATE ##########
@@ -18,30 +15,16 @@ function Get-CurrentVersion-digiKam {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
     )
-
-    # Resolve FileSystem from ServiceContainer if available, otherwise create fallback
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'digiKam' }
 
-    if ($FileSystem) {
-        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
-    }
-    else {
-        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
-    }
+    $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
 
     if ($CurrentVersion) {
         return $CurrentVersion.BaseName.Split('-')[1]
@@ -55,9 +38,31 @@ function Get-LatestUrlFromUrl-digiKam {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
-    $null = $Paths, $ServiceContainer
+    $null = $Paths, $Http, $Crypto, $FileSystem, $Environment, $PathProvider, $Process
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $versionUrl = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
@@ -65,13 +70,13 @@ function Get-LatestUrlFromUrl-digiKam {
         throw [System.InvalidOperationException]::new('Plugin config is missing VersionUrl')
     }
 
-    $Response = Invoke-WebRequest -Uri $versionUrl
+    $Response = $Http.InvokeWebRequest($versionUrl, 'GET', $null, 0)
     $VersionPattern = '(\d+\.\d+\.\d+)/'
     $Match = [regex]::Matches($Response.Content, $VersionPattern)
     $LatestVersion = ($Match | ForEach-Object { $_.Groups[1].Value }) | Sort-Object -Descending | Select-Object -First 1
 
     $DownloadPageUrl = "$versionUrl$LatestVersion/"
-    $Response = Invoke-WebRequest -Uri "$($DownloadPageUrl)"
+    $Response = $Http.InvokeWebRequest($DownloadPageUrl, 'GET', $null, 0)
     $LatestInstaller = [regex]::Match($Response.Content, '(digiKam-\d+\.\d+\.\d+-Qt6-Win64.exe)').Groups[1].Value
 
     $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
@@ -98,27 +103,12 @@ function Invoke-Installer-digiKam {
         [Parameter(Mandatory)]
         [string]$InstallerPath,
 
-        $ServiceContainer
+        $Process,
+        $FileSystem,
+        $Environment,
+        $PathProvider
     )
-
-    # Resolve optional services
-    $FileSystem = $null
-    $Process = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-
-        try {
-            $Process = $ServiceContainer.Resolve('Process')
-        }
-        catch {
-            Write-Verbose "Failed to resolve Process from ServiceContainer: $_"
-        }
-    }
+    $null = $Environment, $PathProvider
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
@@ -156,17 +146,13 @@ function Invoke-Installer-digiKam {
 
         $arguments = @('x', $InstallerPath, "-o$extractPath", '-y')
 
-        if ($Process) {
-            $result = $Process.InvokeCommand($sevenZipCmd, $arguments)
-            if ($result -and -not $result.Success) {
-                throw [System.Exception]::new("7z extraction failed with exit code $($result.ExitCode)")
-            }
+        if ($null -eq $Process) {
+            throw [System.InvalidOperationException]::new('Process service is required to extract digiKam installer')
         }
-        else {
-            $nativeResult = & $sevenZipCmd @('x', $InstallerPath, "-o$extractPath", '-y')
-            if ($LASTEXITCODE -ne 0) {
-                throw [System.Exception]::new("7z extraction failed with exit code $LASTEXITCODE. Output: $nativeResult")
-            }
+
+        $result = $Process.InvokeCommand($sevenZipCmd, $arguments)
+        if ($result -and -not $result.Success) {
+            throw [System.Exception]::new("7z extraction failed with exit code $($result.ExitCode)")
         }
 
         Write-PSmmLog -Level SUCCESS -Context "Install $pluginName" -Message "Installation completed for $InstallerPath" -Console -File

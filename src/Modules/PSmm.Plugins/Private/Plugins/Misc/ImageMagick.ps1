@@ -6,10 +6,7 @@
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
+    throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before loading plugin definitions."
 }
 
 #region ########## PRIVATE ##########
@@ -18,30 +15,16 @@ function Get-CurrentVersion-ImageMagick {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
     )
-
-    # Resolve FileSystem from ServiceContainer if available
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'ImageMagick' }
 
-    if ($FileSystem) {
-        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
-    }
-    else {
-        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
-    }
+    $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
 
     if ($CurrentVersion) {
         #$LatestVersion = [System.IO.Path]::GetFileNameWithoutExtension($Latest.FileName).Split("-")[1,2] -join "-"
@@ -56,9 +39,31 @@ function Get-LatestUrlFromUrl-ImageMagick {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
-    $null = $Paths, $ServiceContainer
+    $null = $Paths, $Http, $Crypto, $FileSystem, $Environment, $PathProvider, $Process
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
@@ -68,7 +73,7 @@ function Get-LatestUrlFromUrl-ImageMagick {
     $baseUri = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'BaseUri')
 
     try {
-        $Response = Invoke-WebRequest -Uri $versionUrl -TimeoutSec 10
+        $Response = $Http.InvokeWebRequest($versionUrl, 'GET', $null, 10)
     }
     catch {
         throw [PluginRequirementException]::new("Failed to retrieve version information from $versionUrl", $pluginName, $_.Exception)
@@ -130,8 +135,15 @@ function Get-Installer-ImageMagick {
     param(
         [string]$Url,
         [hashtable]$Plugin,
-        [hashtable]$Paths
+        [hashtable]$Paths,
+        $Http,
+        $Crypto,
+        $FileSystem,
+        $Environment,
+        $PathProvider,
+        $Process
     )
+    $null = $Url, $Http, $Crypto, $FileSystem, $Environment, $PathProvider, $Process
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'ImageMagick' }
@@ -142,7 +154,7 @@ function Get-Installer-ImageMagick {
     Write-PSmmLog -Level INFO -Context "Download $pluginName" -Message "Downloading $pluginName from $Url ..." -Console -File
     try {
         $outFile = Join-Path -Path $Paths._Downloads -ChildPath $latestInstaller
-        Invoke-WebRequest -Uri "$Url" -OutFile $outFile
+        $Http.DownloadFile($Url, $outFile)
         $InstallerPath = Join-Path -Path $Paths._Downloads -ChildPath $latestInstaller
         Write-PSmmLog -Level SUCCESS -Context "Download $pluginName" -Message "$pluginName downloaded successfully to $InstallerPath" -Console -File
         return $InstallerPath

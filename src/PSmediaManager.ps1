@@ -115,43 +115,7 @@ if ($MyInvocation.InvocationName -eq '.') {
 # Provide a concise startup banner (avoid Write-Host in analysis-critical paths)
 Write-Verbose ('Starting PSmediaManager (PID {0}) in {1} mode' -f $PID, ($(if ($Dev) { 'Dev' } else { 'Normal' })))
 
-#region ===== Early Service Initialization =====
-
-<#
-    Load core service/interface definitions before module imports so we can use
-    dependency-injected services for path and file operations during module loading.
-    (Option B refactor)
-#>
-try {
-    $coreServicesPath = Join-Path -Path $script:ModuleRoot -ChildPath 'Core/BootstrapServices.ps1'
-    if (-not (Test-Path -Path $coreServicesPath)) {
-        throw "Core services file not found: $coreServicesPath"
-    }
-    . $coreServicesPath
-    Write-Verbose "Loaded core bootstrap services definitions"
-}
-catch {
-    Write-Error "Failed to load core bootstrap services: $_" -ErrorAction Stop
-}
-
-try {
-    Write-Verbose "Instantiating early services for module loading..."
-    $script:ServiceContainer = [ServiceContainer]::new()
-
-    # Register early services required for module loading
-    $script:ServiceContainer.RegisterSingleton('FileSystem', [FileSystemService]::new())
-    $script:ServiceContainer.RegisterSingleton('Environment', [EnvironmentService]::new())
-    $script:ServiceContainer.RegisterSingleton('Process', [ProcessService]::new())
-
-    Write-Verbose "Early services registered in ServiceContainer"
-}
-catch {
-    Write-Error "Failed to instantiate early services: $_" -ErrorAction Stop
-}
-
-#endregion ===== Early Service Initialization =====
-
-#region ===== Module Imports =====
+#region ===== Module Loading (Loader-First) =====
 
 <#
     Import all PSmediaManager modules from the Modules directory.
@@ -160,105 +124,69 @@ catch {
     needed for configuration and other modules.
 #>
 try {
-    # Calculate modules path without PathProvider (PSmm types not imported yet)
     $modulesPath = Join-Path -Path $script:ModuleRoot -ChildPath 'Modules'
     Write-Verbose "Importing modules from: $modulesPath"
 
-    # Define module load order (dependencies first)
+    # 1) Import PSmm FIRST to load all core classes and DI types.
+    $psmmManifestPath = Join-Path -Path (Join-Path -Path $modulesPath -ChildPath 'PSmm') -ChildPath 'PSmm.psd1'
+    if (-not (Test-Path -LiteralPath $psmmManifestPath)) {
+        throw "PSmm module manifest not found: $psmmManifestPath"
+    }
+
+    Import-Module -Name $psmmManifestPath -Force -Global -ErrorAction Stop -Verbose:($VerbosePreference -eq 'Continue')
+
+    # 2) Create DI container and register core services (service-first runtime)
+    $script:ServiceContainer = [ServiceContainer]::new()
+    $script:ServiceContainer.RegisterSingleton('FileSystem', [FileSystemService]::new())
+    $script:ServiceContainer.RegisterSingleton('Environment', [EnvironmentService]::new())
+    $script:ServiceContainer.RegisterSingleton('Process', [ProcessService]::new())
+    $script:ServiceContainer.RegisterSingleton('PathProvider', [PathProvider]::new())
+
+    $httpService = [HttpService]::new($script:ServiceContainer.Resolve('FileSystem'))
+    $script:ServiceContainer.RegisterSingleton('Http', $httpService)
+    $script:ServiceContainer.RegisterSingleton('Crypto', [CryptoService]::new())
+    $script:ServiceContainer.RegisterSingleton('Cim', [CimService]::new())
+    $script:ServiceContainer.RegisterSingleton('Storage', [StorageService]::new())
+    $script:ServiceContainer.RegisterSingleton('Git', [GitService]::new($script:ServiceContainer.Resolve('Process')))
+
+    # Fatal handling must exist before importing additional modules
+    $script:ServiceContainer.RegisterSingleton('FatalErrorUi', [FatalErrorUiService]::new())
+
+    # Do not expose ServiceContainer globally; enforce explicit DI (service-first runtime).
+
+    # 3) Import remaining modules in dependency order
     $moduleLoadOrder = @(
-        'PSmm',              # Core module (contains classes and base functions)
-        'PSmm.Logging',      # Logging functionality
-        'PSmm.Plugins',      # External plugin orchestration and digiKam helpers
-        'PSmm.Projects',     # Project management
-        'PSmm.UI'            # User interface (depends on all others)
+        'PSmm.Logging',
+        'PSmm.Plugins',
+        'PSmm.Projects',
+        'PSmm.UI'
     )
 
-    $loadedModules = 0
     foreach ($moduleName in $moduleLoadOrder) {
         $moduleFolder = Join-Path -Path $modulesPath -ChildPath $moduleName
         $manifestPath = Join-Path -Path $moduleFolder -ChildPath "$moduleName.psd1"
 
-        if ($script:ServiceContainer.Resolve('FileSystem').TestPath($manifestPath)) {
-            try {
-                Write-Verbose "Importing module: $moduleName"
-                # Import modules with global scope so class definitions are available to dependent code.
-                # This is necessary for service instantiation and type resolution in functions that
-                # reference classes from PSmm (e.g., [HttpService], [CryptoService], etc.)
-                Import-Module -Name $manifestPath -Force -Global -ErrorAction Stop -Verbose:($VerbosePreference -eq 'Continue')
-                $loadedModules++
-            }
-            catch {
-                # Wrap the original error to preserve inner exception details without relying on module-defined types
-                $innerEx = if ($_.Exception) { $_.Exception } else { $_ }
-                throw [System.Exception]::new("Failed to import module '$moduleName'", $innerEx)
-            }
-        }
-        else {
-            Write-Warning "Module manifest not found: $manifestPath"
-        }
+        Write-Verbose "Importing module: $moduleName"
+        Import-PSmmModuleOrFatal -ModuleName $moduleName -ManifestPath $manifestPath -FatalErrorUi ($script:ServiceContainer.Resolve('FatalErrorUi')) -NonInteractive:([bool]$NonInteractive.IsPresent)
     }
 
-    if ($loadedModules -eq 0) {
-        throw "No modules were loaded from: $modulesPath"
-    }
-
-    Write-Verbose "Successfully imported $loadedModules module(s)"
+    Write-Verbose "Core modules imported and DI container initialized"
 }
 catch {
-    $innerMsg = if ($_.Exception -and $_.Exception.InnerException) { $_.Exception.InnerException.Message } elseif ($_.Exception) { $_.Exception.Message } else { $null }
-    if ($innerMsg) {
-        Write-Error "Failed to import modules: $($_.Exception.Message) | Inner: $innerMsg"
-    }
-    else {
-        Write-Error "Failed to import modules: $_"
-    }
-    exit 1
+    # PSmm import failure occurs before the fatal service exists.
+    # Do not emit ad-hoc fatal output here; rely on the thrown exception.
+    throw [System.Exception]::new(('Failed to load core module PSmm. {0}' -f $_.Exception.Message), $_.Exception)
 }
 
-#endregion ===== Module Imports =====
-
-
-#region ===== Register PSmm PathProvider =====
-
-<#
-    Register PathProvider AFTER importing PSmm so the canonical class definition
-    is available. Early module discovery uses Join-Path to avoid requiring this.
-#>
-try {
-    $script:ServiceContainer.RegisterSingleton('PathProvider', [PathProvider]::new())
-    Write-Verbose "Registered PathProvider service"
-}
-catch {
-    Write-Error "Failed to register PathProvider service: $_"
-    exit 1
-}
-
-#endregion ===== Register PSmm PathProvider =====
-
-
-#region ===== Service Instantiation (Full Set) =====
+#endregion ===== Module Loading (Loader-First) =====
 
 <#
     Instantiate service implementations for dependency injection.
     These services provide testable abstractions over system operations.
 #>
-try {
-    Write-Verbose "Extending early services with remaining implementations..."
-    $script:ServiceContainer.RegisterSingleton('Http', [HttpService]::new())
-    $script:ServiceContainer.RegisterSingleton('Crypto', [CryptoService]::new())
-    $script:ServiceContainer.RegisterSingleton('Cim', [CimService]::new())
-    $script:ServiceContainer.RegisterSingleton('Storage', [StorageService]::new())
-    $script:ServiceContainer.RegisterSingleton('Git', [GitService]::new())
+#region ===== Service Instantiation =====
 
-    # Expose ServiceContainer globally so modules can access services
-    Set-Variable -Name 'PSmmServiceContainer' -Scope Global -Value $script:ServiceContainer -Force
-
-    Write-Verbose "Full service layer available (ServiceContainer with $($script:ServiceContainer.Count()) services)"
-}
-catch {
-    Write-Error "Failed to extend service layer: $_"
-    exit 1
-}
+Write-Verbose "Service layer available (ServiceContainer with $($script:ServiceContainer.Count()) services)"
 
 #endregion ===== Service Instantiation =====
 
@@ -324,8 +252,10 @@ try {
     Write-Verbose "Runtime configuration initialized successfully"
 }
 catch {
-    Write-Error "Failed to initialize runtime configuration: $_"
-    exit 1
+    if ($_.Exception -is [PSmmFatalException]) {
+        throw
+    }
+    Invoke-PSmmFatal -Context 'Config' -Message 'Failed to initialize runtime configuration' -Error $_ -ExitCode 1 -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
 }
 
 #endregion ===== Runtime Configuration Initialization =====
@@ -458,10 +388,19 @@ try {
 
     # Bootstrap using modern AppConfiguration approach
     # All bootstrap functions now support AppConfiguration natively
-    Invoke-PSmm -Config $appConfig
+    Invoke-PSmm -Config $appConfig -FatalErrorUi ($script:ServiceContainer.Resolve('FatalErrorUi')) `
+        -FileSystem ($script:ServiceContainer.Resolve('FileSystem')) `
+        -Environment ($script:ServiceContainer.Resolve('Environment')) `
+        -PathProvider ($script:ServiceContainer.Resolve('PathProvider')) `
+        -Process ($script:ServiceContainer.Resolve('Process')) `
+        -Http ($script:ServiceContainer.Resolve('Http')) `
+        -Crypto ($script:ServiceContainer.Resolve('Crypto'))
     Write-Verbose 'Bootstrap completed successfully'
 }
 catch {
+    if ($_.Exception -is [PSmmFatalException]) {
+        throw
+    }
     $errorMessage = if ($_.Exception -is [MediaManagerException]) {
         "[$($_.Exception.Context)] $($_.Exception.Message)"
     }
@@ -469,14 +408,7 @@ catch {
         "Failed to bootstrap application: $_"
     }
 
-    Write-Error $errorMessage
-
-    # Attempt to log the error if logging is initialized
-    if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
-        Write-PSmmLog -Level ERROR -Context 'Bootstrap' -Message $errorMessage -Console -File
-    }
-
-    exit 1
+    Invoke-PSmmFatal -Context 'Bootstrap' -Message $errorMessage -Error $_ -ExitCode 1 -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
 }
 
 #endregion ===== Application Bootstrap =====
@@ -570,8 +502,10 @@ try {
     }
 }
 catch {
-    Write-Error "Service health verification failed: $_"
-    exit 1
+    if ($_.Exception -is [PSmmFatalException]) {
+        throw
+    }
+    Invoke-PSmmFatal -Context 'ServiceHealth' -Message 'Service health verification failed' -Error $_ -ExitCode 1 -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
 }
 
 #endregion ===== Service Health Checks =====
@@ -602,12 +536,21 @@ try {
         }
         catch { Write-PSmmHost "[UI] Launching $($appConfig.DisplayName) UI (ConfigType=UNKNOWN, error collecting UI details: $($_.Exception.Message))" -ForegroundColor Cyan }
         Invoke-PSmmUI -Config $appConfig `
-            -ServiceContainer $script:ServiceContainer
+            -FatalErrorUi ($script:ServiceContainer.Resolve('FatalErrorUi')) `
+            -Http ($script:ServiceContainer.Resolve('Http')) `
+            -Crypto ($script:ServiceContainer.Resolve('Crypto')) `
+            -Environment ($script:ServiceContainer.Resolve('Environment')) `
+            -Process ($script:ServiceContainer.Resolve('Process')) `
+            -FileSystem ($script:ServiceContainer.Resolve('FileSystem')) `
+            -PathProvider ($script:ServiceContainer.Resolve('PathProvider'))
         Write-Verbose 'UI session completed'
     }
     #endregion User Interface Launch
 }
 catch {
+    if ($_.Exception -is [PSmmFatalException]) {
+        throw
+    }
     $exitCode = 1
 
     $errorMessage = if ($_.Exception -is [MediaManagerException]) {
@@ -617,17 +560,7 @@ catch {
         "UI error: $_"
     }
 
-    Write-Error $errorMessage
-
-    # Log the error
-    if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
-        try {
-            Write-PSmmLog -Level ERROR -Context 'UI' -Message $errorMessage -Console -File
-        }
-        catch {
-            Write-Warning "Failed to log UI error: $_"
-        }
-    }
+    Invoke-PSmmFatal -Context 'UI' -Message $errorMessage -Error $_ -ExitCode $exitCode -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
 }
 finally {
     #region Application Cleanup
@@ -644,7 +577,7 @@ finally {
         Write-Verbose "Saving configuration to: $runConfigPath"
         try {
             Export-SafeConfiguration -Configuration $appConfig -Path $runConfigPath `
-                -ServiceContainer $script:ServiceContainer -ErrorAction Stop
+                -FileSystem ($script:ServiceContainer.Resolve('FileSystem')) -ErrorAction Stop
         }
         catch {
             Write-Warning "Failed to save configuration: $_"
@@ -745,9 +678,8 @@ finally {
         Write-Warning "Failed to remove modules: $_"
     }
 
-    # Exit with appropriate code
-    Write-Verbose "Exiting with code: $exitCode"
-    exit $exitCode
+    # No explicit exit here: fatal termination is owned by FatalErrorUiService.
+    Write-Verbose "Shutdown completed (ExitCode=$exitCode)"
     #endregion Application Cleanup
 }
 

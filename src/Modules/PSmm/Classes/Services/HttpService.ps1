@@ -24,12 +24,14 @@ class HttpService : IHttpService {
     [FileSystemService] $FileSystem
 
     HttpService() {
-        try {
-            $this.FileSystem = [FileSystemService]::new()
+        throw [InvalidOperationException]::new('HttpService requires an injected FileSystem service. Construct via DI (HttpService(FileSystem)).')
+    }
+
+    HttpService([FileSystemService]$FileSystem) {
+        if ($null -eq $FileSystem) {
+            throw [InvalidOperationException]::new('HttpService requires an injected FileSystem service (FileSystem is null).')
         }
-        catch {
-            throw [InvalidOperationException]::new('FileSystemService is required by HttpService and could not be initialized')
-        }
+        $this.FileSystem = $FileSystem
     }
 
     <#
@@ -61,6 +63,29 @@ class HttpService : IHttpService {
 
     <#
     .SYNOPSIS
+        Invokes a web request and returns the raw response.
+
+    .DESCRIPTION
+        Provides access to status code and headers (e.g. ETag) in a DI-friendly way.
+    #>
+    [object] InvokeWebRequest([string]$uri, [string]$method, [hashtable]$headers, [int]$timeoutSec) {
+        if ([string]::IsNullOrWhiteSpace($uri)) {
+            throw [ArgumentException]::new("URI cannot be empty", "uri")
+        }
+
+        $effectiveMethod = if ([string]::IsNullOrWhiteSpace($method)) { 'GET' } else { $method }
+        $effectiveTimeout = if ($timeoutSec -lt 0) { 0 } else { $timeoutSec }
+
+        try {
+            return Invoke-HttpWebRequestRaw -Uri $uri -Method $effectiveMethod -Headers $headers -TimeoutSec $effectiveTimeout
+        }
+        catch {
+            throw [WebException]::new("Failed to invoke web request $effectiveMethod on $uri : $_", $_.Exception)
+        }
+    }
+
+    <#
+    .SYNOPSIS
         Downloads a file from a URI to a local path.
     #>
     [void] DownloadFile([string]$uri, [string]$outFile) {
@@ -70,6 +95,10 @@ class HttpService : IHttpService {
 
         if ([string]::IsNullOrWhiteSpace($outFile)) {
             throw [ArgumentException]::new("Output file path cannot be empty", "outFile")
+        }
+
+        if ($null -eq $this.FileSystem) {
+            throw [InvalidOperationException]::new('HttpService.FileSystem is required for DownloadFile but was not provided.')
         }
 
         # Ensure directory exists via FileSystem service

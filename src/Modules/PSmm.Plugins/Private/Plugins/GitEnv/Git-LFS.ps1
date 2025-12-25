@@ -6,10 +6,7 @@
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
+    throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before loading plugin definitions."
 }
 
 #region ########## PRIVATE ##########
@@ -18,30 +15,16 @@ function Get-CurrentVersion-Git-LFS {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
     )
-
-    # Resolve FileSystem from ServiceContainer if available
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'Git-LFS' }
 
-    if ($FileSystem) {
-        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
-    }
-    else {
-        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
-    }
+    $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
 
     if ($CurrentVersion) {
         return 'v' + $CurrentVersion.BaseName.Split('-')[2]
@@ -55,15 +38,24 @@ function Invoke-Installer-Git-LFS {
     param (
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        [string]$InstallerPath
+        [string]$InstallerPath,
+        $Process,
+        $FileSystem,
+        $Environment,
+        $PathProvider
     )
+    $null = $Process, $Environment, $PathProvider
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'Git-LFS' }
 
     try {
         $ExtractPath = $Paths.Root
-        Expand-Archive -Path $InstallerPath -DestinationPath $ExtractPath -Force
+        if ($null -eq $FileSystem) {
+            throw [System.InvalidOperationException]::new('FileSystem service is required to extract Git-LFS zip')
+        }
+
+        $FileSystem.ExtractZip($InstallerPath, $ExtractPath, $true)
         Write-PSmmLog -Level SUCCESS -Context "Install $pluginName" -Message "Installation completed for $($InstallerPath)" -Console -File
     }
     catch {

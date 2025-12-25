@@ -487,7 +487,12 @@ function Invoke-StorageWizard {
 
     # Write to file (with renumbering for Add mode, preserving numbering for Edit mode)
     try {
-        [AppConfigurationBuilder]::WriteStorageFile($storagePath, $storageHashtable)
+        $fs = Get-PSmmConfigMemberValue -Object $Config -Name 'FileSystem' -Default $null
+        if ($null -eq $fs) {
+            throw [ValidationException]::new('FileSystem service is required to write storage configuration', 'FileSystem', $null)
+        }
+
+        [AppConfigurationBuilder]::WriteStorageFile($storagePath, $storageHashtable, $fs)
         $actionVerb = if ($Mode -eq 'Edit') { 'updated' } else { 'written' }
         Write-WizardLog -level 'NOTICE' -id 'PSMM-STORAGE-WRITTEN' -msg "Storage configuration $actionVerb to $storagePath"
 

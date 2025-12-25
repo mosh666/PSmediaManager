@@ -29,37 +29,15 @@ if (-not (Get-Variable -Name _VaultMasterPasswordCache -Scope Script -ErrorActio
     $script:_VaultMasterPasswordCache = $null
 }
 
-# Get module paths (service-aware - check ServiceContainer variable existence first to avoid StrictMode errors)
-$serviceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ErrorAction SilentlyContinue
-$hasServiceContainer = ($null -ne $serviceContainer) -and ($null -ne $serviceContainer.Value)
-$pathProvider = $null
-$fileSystem   = $null
-
-if ($hasServiceContainer) {
-    try {
-        $pathProvider = $serviceContainer.Value.Resolve('PathProvider')
-        $fileSystem   = $serviceContainer.Value.Resolve('FileSystem')
-    }
-    catch {
-        Write-Verbose "Failed to resolve services from ServiceContainer: $_"
-    }
-}
-
-if ($pathProvider) {
-    $ClassesPath = $pathProvider.CombinePath(@($PSScriptRoot,'Classes'))
-    $PublicPath  = $pathProvider.CombinePath(@($PSScriptRoot,'Public'))
-    $PrivatePath = $pathProvider.CombinePath(@($PSScriptRoot,'Private'))
-}
-else {
-    $ClassesPath = Join-Path -Path $PSScriptRoot -ChildPath 'Classes'
-    $PublicPath  = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
-    $PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
-}
+# Get module paths (loader-first: do not depend on DI or globals during import)
+$ClassesPath = Join-Path -Path $PSScriptRoot -ChildPath 'Classes'
+$PublicPath  = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
+$PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
 
 # Import all classes, public and private functions
 try {
     # Import classes first (order matters for dependencies)
-    if ((($fileSystem) -and $fileSystem.TestPath($ClassesPath)) -or (-not $fileSystem -and (Test-Path $ClassesPath))) {
+    if (Test-Path -Path $ClassesPath) {
         # Load classes in dependency order
         # 1. Interfaces and base classes (no dependencies)
         # 2. Exception classes (inherit from base)
@@ -77,12 +55,14 @@ try {
             # Service implementations (in dependency order)
             'Services\FileSystemService.ps1', # File system service (implements IFileSystemService)
             'Services\EnvironmentService.ps1', # Environment service (implements IEnvironmentService)
+            'Services\PathProvider.ps1',   # Path provider (implements IPathProvider)
             'Services\ProcessService.ps1',  # Process service (implements IProcessService)
             'Services\HttpService.ps1',    # HTTP service (implements IHttpService)
             'Services\CimService.ps1',     # CIM service (implements ICimService)
             'Services\GitService.ps1',     # Git service (implements IGitService)
             'Services\CryptoService.ps1',  # Crypto service (implements ICryptoService)
             'Services\StorageService.ps1', # Storage service (implements IStorageService)
+            'Services\FatalErrorUiService.ps1', # Fatal error handling (implements IFatalErrorUiService)
             # Configuration classes (use services and interfaces)
             'AppConfiguration.ps1',        # Configuration classes (uses exceptions and interfaces)
             'ConfigValidator.ps1',         # Configuration validator (Phase 10)
@@ -91,8 +71,8 @@ try {
 
         $importDiagnostics = [System.Collections.Generic.List[object]]::new()
         foreach ($ClassFile in $ClassFiles) {
-            $ClassPath = if ($pathProvider) { $pathProvider.CombinePath(@($ClassesPath,$ClassFile)) } else { Join-Path -Path $ClassesPath -ChildPath $ClassFile }
-            if ((($fileSystem) -and $fileSystem.TestPath($ClassPath)) -or (-not $fileSystem -and (Test-Path $ClassPath))) {
+            $ClassPath = Join-Path -Path $ClassesPath -ChildPath $ClassFile
+            if (Test-Path -Path $ClassPath) {
                 Write-Verbose "[ClassImport] BEGIN $ClassFile"
                 $sw = [System.Diagnostics.Stopwatch]::StartNew()
                 try {
@@ -127,11 +107,11 @@ try {
         Write-Verbose "Imported $($ClassFiles.Count) class file(s) (Failures: $failureCount)"
     }
     else {
-        Write-Verbose "Classes path not found: $ClassesPath"
+        throw "Classes path not found: $ClassesPath"
     }
 
     # Import public functions
-    if ((($fileSystem) -and $fileSystem.TestPath($PublicPath)) -or (-not $fileSystem -and (Test-Path $PublicPath))) {
+    if (Test-Path -Path $PublicPath) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PublicFunctions.Count -gt 0) {
@@ -155,7 +135,7 @@ try {
     }
 
     # Import private functions
-    if ((($fileSystem) -and $fileSystem.TestPath($PrivatePath)) -or (-not $fileSystem -and (Test-Path $PrivatePath))) {
+    if (Test-Path -Path $PrivatePath) {
         $PrivateFunctions = @(Get-ChildItem -Path "$PrivatePath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PrivateFunctions.Count -gt 0) {
@@ -175,13 +155,7 @@ try {
         }
     }
     else {
-        Write-Verbose "Creating Private functions directory: $PrivatePath"
-        if ($fileSystem -and ($fileSystem | Get-Member -Name 'NewItem' -ErrorAction SilentlyContinue)) {
-            $null = $fileSystem.NewItem($PrivatePath, 'Directory')
-        }
-        else {
-            throw "FileSystem service is required to create Private functions directory: $PrivatePath"
-        }
+        throw "Private functions path not found: $PrivatePath"
     }
 }
 catch {
@@ -190,6 +164,8 @@ catch {
 
 # Export module members (public API only)
 Export-ModuleMember -Function @(
+    'Invoke-PSmmFatal',
+    'Import-PSmmModuleOrFatal',
     'Invoke-PSmm',
     'New-CustomFileName',
     'New-DirectoriesFromHashtable',

@@ -297,7 +297,7 @@ class ConfigValidator {
         # Custom validator
         if ($null -ne $schema.CustomValidator) {
             try {
-                $result = & $schema.CustomValidator $current
+                $result = $schema.CustomValidator.InvokeReturnAsIs($current)
                 if ($result -is [bool] -and -not $result) {
                     $issue = [ValidationIssue]::new('Error', 'Custom', $schema.PropertyPath, "Custom validation failed")
                     $issue.ActualValue = $current

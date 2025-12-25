@@ -10,13 +10,31 @@
 .PARAMETER Config
     The AppConfiguration object containing application state and settings.
 
-.PARAMETER ServiceContainer
-    ServiceContainer instance providing access to all application services (FileSystem, Process, PathProvider, etc.).
+.PARAMETER Process
+    Process service used by the UI.
+
+.PARAMETER FileSystem
+    FileSystem service used by the UI.
+
+.PARAMETER PathProvider
+    PathProvider service used by the UI.
+
+.PARAMETER Http
+    HTTP service used for plugin confirmation during project selection.
+
+.PARAMETER Crypto
+    Crypto service used for plugin confirmation during project selection.
+
+.PARAMETER Environment
+    Environment service used for plugin confirmation during project selection.
+
+.PARAMETER FatalErrorUi
+    FatalErrorUi service used to handle fatal errors (must provide InvokeFatal).
 
 .EXAMPLE
-    Invoke-PSmmUI -Config $appConfig -ServiceContainer $ServiceContainer
+    Invoke-PSmmUI -Config $appConfig -FatalErrorUi $FatalErrorUi -Process $Process -FileSystem $FileSystem -PathProvider $PathProvider -Http $Http -Crypto $Crypto -Environment $Environment
 
-    Launches the UI using the AppConfiguration and ServiceContainer objects.
+    Launches the UI using the AppConfiguration and injected services.
 
 .NOTES
     This function runs in an interactive loop until the user chooses to quit (Q).
@@ -27,43 +45,57 @@
     - Interactive menu operations require direct host communication
     - PSAvoidUsingWriteHost is intentionally used for this purpose
 
-    BREAKING CHANGE (v0.2.0): Replaced individual service parameters with -ServiceContainer parameter.
+    BREAKING CHANGE (v0.2.0): Added mandatory -FatalErrorUi parameter to avoid resolving FatalErrorUi from ServiceContainer.
 #>
 
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
-
-if (-not (Get-Command -Name Get-PSmmUiConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\\Private') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
-}
 
 function Invoke-PSmmUI {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        [object]$Config,
+        [AppConfiguration]$Config,
 
         [Parameter(Mandatory)]
         [ValidateNotNull()]
-        $ServiceContainer
+        $FatalErrorUi,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider
+
+        ,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment
     )
 
-    # Resolve services from container
-    $Process = $ServiceContainer.Resolve('Process')
-    $FileSystem = $ServiceContainer.Resolve('FileSystem')
-    $PathProvider = $ServiceContainer.Resolve('PathProvider')
+    if (-not (Get-Command -Name Get-PSmmUiConfigMemberValue -ErrorAction SilentlyContinue)) {
+        $FatalErrorUi.InvokeFatal('UI', 'Required UI config helper Get-PSmmUiConfigMemberValue is not available.', $null, 1, $false)
+    }
 
-    # Normalize config shape early so downstream UI functions can rely on AppConfiguration
-    try {
-        $Config = [AppConfiguration]::FromObject($Config)
-    }
-    catch {
-        throw [System.InvalidOperationException]::new("Invoke-PSmmUI requires a valid AppConfiguration-compatible object. Failed to normalize Config: $($_.Exception.Message)")
-    }
+    $fatal = $FatalErrorUi
+
+    # Services are injected (service-first UI)
 
     function Test-UiDebugOrDev([object]$UiConfig) {
         $parametersSource = Get-PSmmUiConfigMemberValue -Object $UiConfig -Name 'Parameters'
@@ -125,47 +157,24 @@ function Invoke-PSmmUI {
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $storageGroupCount" -File
                 $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
                 if (-not $uiProjectsIndexType) {
-                    $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
-                    if (Test-Path -LiteralPath $psmmManifestPath) {
-                        try {
-                            Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
-                        }
-                        catch {
-                            Write-Verbose "Import-Module failed for '$psmmManifestPath' (continuing). $($_.Exception.Message)"
-                        }
-                    }
-                    $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
+                    $fatal.InvokeFatal('UI', 'Unable to resolve required type [UiProjectsIndex]. Ensure PSmm is loaded before PSmm.UI.', $null, 1, $false)
                 }
 
-                if (-not $uiProjectsIndexType) {
-                    throw 'Unable to resolve type [UiProjectsIndex].'
-                }
-
-                $loopProjects = $uiProjectsIndexType::FromObject((Get-PSmmProjects -Config $Config -ServiceContainer $ServiceContainer))
+                $loopProjects = $uiProjectsIndexType::FromObject((Get-PSmmProjects -Config $Config -FileSystem $FileSystem))
                 $masterCount = if ($null -ne $loopProjects.Master) { $loopProjects.Master.Count } else { 0 }
                 $backupCount = if ($null -ne $loopProjects.Backup) { $loopProjects.Backup.Count } else { 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Projects loaded. Master drives: $masterCount, Backup drives: $backupCount" -File
             }
             catch {
-                Write-PSmmLog -Level ERROR -Context 'Invoke-PSmmUI' -Message "Project retrieval failed: $_" -ErrorRecord $_ -File
-                $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
-                if (-not $uiProjectsIndexType) {
-                    $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\\..\\PSmm\\PSmm.psd1'
-                    if (Test-Path -LiteralPath $psmmManifestPath) {
-                        try {
-                            Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
-                        }
-                        catch {
-                            Write-Verbose "Import-Module failed for '$psmmManifestPath' (continuing). $($_.Exception.Message)"
-                        }
-                    }
-                    $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
+                if ($_.Exception -is [PSmmFatalException]) {
+                    throw
                 }
-                $loopProjects = if ($uiProjectsIndexType) { $uiProjectsIndexType::new() } else { $null }
+                Write-PSmmLog -Level ERROR -Context 'Invoke-PSmmUI' -Message "Project retrieval failed: $_" -ErrorRecord $_ -File
+                $fatal.InvokeFatal('UI', 'Project retrieval failed and UI cannot continue.', $_, 1, $false)
             }
 
             try {
-                Show-MenuMain -Config $Config -StorageGroup $SelectedStorageGroup -Projects $loopProjects
+                Show-MenuMain -Config $Config -FileSystem $FileSystem -StorageGroup $SelectedStorageGroup -Projects $loopProjects
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message 'Show-MenuMain completed successfully' -File
             }
             catch {
@@ -434,7 +443,7 @@ function Invoke-PSmmUI {
 
                             if ($SelectedProject) {
                                 # Select the project, passing the SerialNumber to ensure correct disk selection
-                                Select-PSmmProject -Config $Config -pName $SelectedProject.Name -SerialNumber $SelectedProject.SerialNumber -FileSystem $FileSystem -PathProvider $PathProvider
+                                Select-PSmmProject -Config $Config -pName $SelectedProject.Name -SerialNumber $SelectedProject.SerialNumber -FileSystem $FileSystem -PathProvider $PathProvider -Http $Http -Crypto $Crypto -Environment $Environment -Process $Process
 
                                 # Display the project menu
                                 $projectMenuResult = Invoke-ProjectMenu -Config $Config

@@ -6,10 +6,7 @@
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
+    throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before loading plugin definitions."
 }
 
 #region ########## PRIVATE ##########
@@ -18,37 +15,34 @@ function Get-CurrentVersion-MKVToolNix {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
-    )
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
 
-    # Resolve FileSystem from ServiceContainer if available
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
+    )
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'MKVToolNix' }
 
-    if ($FileSystem) {
-        $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
-    }
-    else {
-        $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
-    }
+    $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
 
     if ($InstallPath) {
         $commandPath = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'CommandPath')
         $command = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Command')
         $bin = Join-Path -Path $InstallPath -ChildPath $commandPath -AdditionalChildPath $command
-        $CurrentVersion = (& $bin --version)
-        return $CurrentVersion.Split(' ')[1].Substring(1)
+        $result = $Process.StartProcess($bin, @('--version'))
+        if ($result -and -not $result.Success) {
+            throw [System.Exception]::new("Failed to execute $bin (--version). ExitCode=$($result.ExitCode)")
+        }
+
+        $currentVersionText = [string]$result.StdOut
+        if ([string]::IsNullOrWhiteSpace($currentVersionText)) { $currentVersionText = [string]$result.StdErr }
+        $firstLine = ($currentVersionText -split "`r?`n" | Select-Object -First 1)
+        return $firstLine.Split(' ')[1].Substring(1)
     }
     else {
         return ''
@@ -59,12 +53,34 @@ function Get-LatestUrlFromUrl-MKVToolNix {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
-    $null = $Paths, $ServiceContainer
+    $null = $Paths, $Http, $Crypto, $FileSystem, $Environment, $PathProvider, $Process
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $versionUrl = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
-    $Response = Invoke-WebRequest -Uri $versionUrl
+    $Response = $Http.InvokeWebRequest($versionUrl, 'GET', $null, 0)
     # Get the latest version
     if ($Response.Links) {
         # Extract version numbers from the links
@@ -74,8 +90,7 @@ function Get-LatestUrlFromUrl-MKVToolNix {
             $LatestVersion = $Versions[0]
         }
         else {
-            Write-Error 'No valid versions found.'
-            exit
+            throw 'No valid versions found.'
         }
     }
     # Ensure State exists
@@ -100,21 +115,12 @@ function Invoke-Installer-MKVToolNix {
         [hashtable]$Plugin,
         [hashtable]$Paths,
         [string]$InstallerPath,
-        $ServiceContainer
+        $Process,
+        $FileSystem,
+        $Environment,
+        $PathProvider
     )
-
-    # Resolve Process and FileSystem from ServiceContainer if available
-    $Process = $null
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $Process = $ServiceContainer.Resolve('Process')
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve services from ServiceContainer: $_"
-        }
-    }
+    $null = $Environment, $PathProvider
 
     try {
         $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
@@ -130,23 +136,16 @@ function Invoke-Installer-MKVToolNix {
             New-Item -Path $ExtractPath -ItemType Directory -Force | Out-Null
         }
 
+        if ($null -eq $Process) {
+            throw [System.InvalidOperationException]::new('Process service is required to extract MKVToolNix archive')
+        }
+
         # Use 7z.exe to extract the archive
-        if ($Process) {
-            $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
-        }
-        else {
-            $sevenZipCmd = '7z'
-        }
+        $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
 
         # Extract archive
-        $result = if ($Process) {
-            $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$ExtractPath", '-y'))
-        }
-        else {
-            & $sevenZipCmd x $InstallerPath "-o$ExtractPath" -y
-        }
-
-        if ($Process -and -not $result.Success) {
+        $result = $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$ExtractPath", '-y'))
+        if ($result -and -not $result.Success) {
             $ex = [System.Exception]::new("7z extraction failed with exit code: $($result.ExitCode)")
             throw $ex
         }

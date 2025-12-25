@@ -80,6 +80,10 @@ class IFileSystemService {
     [object] GetItemProperty([string]$path) {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
+
+    [void] ExtractZip([string]$zipPath, [string]$destinationPath, [bool]$overwrite) {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
 }
 
 <#
@@ -136,6 +140,10 @@ class IEnvironmentService {
 #>
 class IHttpService {
     [object] InvokeRequest([string]$uri, [hashtable]$headers) {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+
+    [object] InvokeWebRequest([string]$uri, [string]$method, [hashtable]$headers, [int]$timeoutSec) {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 
@@ -346,3 +354,30 @@ class ServiceContainer {
 }
 
 #endregion Dependency Injection Container
+
+#region UI / Application Termination Services
+
+<#{
+.SYNOPSIS
+    Interface for handling fatal errors.
+
+.DESCRIPTION
+    This service is the only component allowed to:
+    - emit final, user-facing fatal output
+    - decide whether to throw (test-safe) or exit (runtime)
+
+    Implementations should be idempotent (only act once).
+#>
+class IFatalErrorUiService {
+    [void] InvokeFatal(
+        [string]$Context,
+        [string]$Message,
+        [object]$Error,
+        [int]$ExitCode,
+        [bool]$NonInteractive
+    ) {
+        throw [NotImplementedException]::new('Method must be implemented by derived class')
+    }
+}
+
+#endregion UI / Application Termination Services

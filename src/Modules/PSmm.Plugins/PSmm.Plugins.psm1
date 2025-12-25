@@ -10,42 +10,35 @@
 #>
 
 #Requires -Version 7.5.4
-using module ..\PSmm\PSmm.psd1
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Service-aware path helpers (optional - check ServiceContainer variable existence first to avoid StrictMode errors)
-$serviceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ErrorAction SilentlyContinue
-$hasServiceContainer = ($null -ne $serviceContainer) -and ($null -ne $serviceContainer.Value)
-$pathProvider = $null
-$fileSystem   = $null
+# Module paths (loader-first: do not depend on DI or globals during import)
+$publicPath  = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
+$privatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
 
-if ($hasServiceContainer) {
-    try {
-        $pathProvider = $serviceContainer.Value.Resolve('PathProvider')
-        $fileSystem   = $serviceContainer.Value.Resolve('FileSystem')
-    }
-    catch {
-        Write-Verbose "Failed to resolve services from ServiceContainer: $_"
-    }
-}
-$parentRoot = Split-Path -Parent $PSScriptRoot
-
-# Import required classes from PSmm module
-$psmmModulePath = if ($pathProvider) { $pathProvider.CombinePath(@($parentRoot,'PSmm')) } else { Join-Path -Path $parentRoot -ChildPath 'PSmm' }
-$exceptionsPath = if ($pathProvider) { $pathProvider.CombinePath(@($psmmModulePath,'Classes','Exceptions.ps1')) } else { Join-Path -Path $psmmModulePath -ChildPath 'Classes/Exceptions.ps1' }
-if ((($fileSystem) -and $fileSystem.TestPath($exceptionsPath)) -or (-not $fileSystem -and (Test-Path -LiteralPath $exceptionsPath))) {
-    . $exceptionsPath
+if (-not (Test-Path -LiteralPath $publicPath)) {
+    throw "Public functions path not found: $publicPath"
 }
 
-$publicPath  = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Public')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Public' }
-$privatePath = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Private')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Private' }
+if (-not (Test-Path -LiteralPath $privatePath)) {
+    throw "Private functions path not found: $privatePath"
+}
+
+# Load required helpers first (break fast)
+$configHelpers = Join-Path -Path $privatePath -ChildPath 'ConfigMemberAccessHelpers.ps1'
+if (-not (Test-Path -LiteralPath $configHelpers)) {
+    throw "Required helper not found: $configHelpers"
+}
+
+try {
+    . $configHelpers
+}
+catch {
+    throw "Failed to import required helper '$configHelpers': $_"
+}
 
 foreach ($scriptPath in @($publicPath, $privatePath)) {
-    if (-not ((($fileSystem) -and $fileSystem.TestPath($scriptPath)) -or (-not $fileSystem -and (Test-Path -LiteralPath $scriptPath)))) {
-        continue
-    }
-
     Get-ChildItem -LiteralPath $scriptPath -Filter '*.ps1' -File -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
         $item = $_
         $itemType = if ($null -ne $item) { $item.GetType().FullName } else { '<null>' }

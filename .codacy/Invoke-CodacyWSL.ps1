@@ -57,12 +57,49 @@ if (-not (Test-Path -Path $cliPath -PathType Leaf)) {
     throw "Codacy CLI wrapper not found at $cliPath"
 }
 
+function Invoke-WslExe {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [switch]$AllowNonZero
+    )
+
+    $stdoutPath = [System.IO.Path]::GetTempFileName()
+    $stderrPath = [System.IO.Path]::GetTempFileName()
+
+    try {
+        $proc = Start-Process -FilePath 'wsl.exe' -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+
+        $stdout = ''
+        $stderr = ''
+        if (Test-Path -LiteralPath $stdoutPath) { $stdout = Get-Content -LiteralPath $stdoutPath -Raw }
+        if (Test-Path -LiteralPath $stderrPath) { $stderr = Get-Content -LiteralPath $stderrPath -Raw }
+
+        if (-not $AllowNonZero -and $proc.ExitCode -ne 0) {
+            $trimmed = ($stderr ?? '').Trim()
+            $suffix = if ($trimmed) { ": $trimmed" } else { '' }
+            throw "wsl.exe failed with exit code $($proc.ExitCode)$suffix"
+        }
+
+        return [pscustomobject]@{
+            ExitCode = $proc.ExitCode
+            StdOut = $stdout
+            StdErr = $stderr
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Resolve a friendly distribution name for diagnostics
 $resolvedDistributionName = $Distribution
 if (-not $resolvedDistributionName) {
     try {
-        $listVerbose = & wsl.exe --list --verbose 2>$null
-        if ($LASTEXITCODE -eq 0 -and $listVerbose) {
+        $listVerboseResult = Invoke-WslExe -Arguments @('--list', '--verbose') -AllowNonZero
+        if ($listVerboseResult.ExitCode -eq 0 -and $listVerboseResult.StdOut) {
+            $listVerbose = $listVerboseResult.StdOut
             # Look for the line starting with '*'
             $defaultLine = ($listVerbose -split "`r?`n") | Where-Object { $_.TrimStart().StartsWith('*') } | Select-Object -First 1
             if ($defaultLine) {
@@ -71,8 +108,9 @@ if (-not $resolvedDistributionName) {
             }
         }
         if (-not $resolvedDistributionName) {
-            $list = & wsl.exe --list 2>$null
-            if ($LASTEXITCODE -eq 0 -and $list) {
+            $listResult = Invoke-WslExe -Arguments @('--list') -AllowNonZero
+            if ($listResult.ExitCode -eq 0 -and $listResult.StdOut) {
+                $list = $listResult.StdOut
                 # Older format marks default with "(Default)"
                 $defaultLine = ($list -split "`r?`n") | Where-Object { $_ -match '\(Default\)' } | Select-Object -First 1
                 if ($defaultLine) {
@@ -102,16 +140,19 @@ function Invoke-WslCommand {
     $arguments += @('--', 'bash', '-lc', $Command)
 
     Write-Verbose "wsl.exe $($arguments -join ' ')"
-    & wsl.exe @arguments
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) {
-        throw "WSL command failed with exit code $exitCode"
+    $result = Invoke-WslExe -Arguments $arguments -AllowNonZero
+    if ($result.StdOut) {
+        Write-Output $result.StdOut
+    }
+    if ($result.ExitCode -ne 0) {
+        throw "WSL command failed with exit code $($result.ExitCode)"
     }
 }
 
 function Assert-WslDistribution {
-    $output = & wsl.exe --list --quiet 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $output) {
+    $result = Invoke-WslExe -Arguments @('--list', '--quiet') -AllowNonZero
+    $output = $result.StdOut
+    if ($result.ExitCode -ne 0 -or -not $output) {
         throw "No WSL distributions are registered. Install a distribution with `wsl --install`."
     }
 

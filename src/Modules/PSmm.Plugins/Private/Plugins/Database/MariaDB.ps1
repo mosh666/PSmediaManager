@@ -6,10 +6,7 @@
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
+    throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before loading plugin definitions."
 }
 
 #region ########## PRIVATE ##########
@@ -18,30 +15,16 @@ function Get-CurrentVersion-MariaDB {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
     )
-
-    # Resolve FileSystem from ServiceContainer if available
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'MariaDB' }
 
-    if ($FileSystem) {
-        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
-    }
-    else {
-        $CurrentVersion = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
-    }
+    $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
 
     if ($CurrentVersion) {
         return $CurrentVersion.BaseName.Split('-')[1]
@@ -55,9 +38,31 @@ function Get-LatestUrlFromUrl-MariaDB {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
-    $null = $Paths, $ServiceContainer
+    $null = $Paths, $Http, $Crypto, $FileSystem, $Environment, $PathProvider, $Process
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $versionUrl = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'VersionUrl')
@@ -65,9 +70,9 @@ function Get-LatestUrlFromUrl-MariaDB {
         throw [System.InvalidOperationException]::new('Plugin config is missing VersionUrl')
     }
 
-    $MajorReleases = Invoke-RestMethod -Uri $versionUrl
+    $MajorReleases = $Http.InvokeRestMethod($versionUrl, 'GET', $null, $null)
     $LatestMajorReleaseId = $MajorReleases.major_releases | Where-Object release_status -EQ 'Stable' | Where-Object release_support_type -EQ 'Long Term Support' | Sort-Object -Property release_id -Descending | Select-Object -First 1 -ExpandProperty release_id
-    $PointReleases = Invoke-RestMethod -Uri ("$versionUrl$LatestMajorReleaseId/")
+    $PointReleases = $Http.InvokeRestMethod("$versionUrl$LatestMajorReleaseId/", 'GET', $null, $null)
     $LatestPointReleaseId = ($PointReleases.releases | Get-Member -MemberType NoteProperty | Sort-Object -Descending | Select-Object -First 1).Name
 
     $state = Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'State'
@@ -78,7 +83,7 @@ function Get-LatestUrlFromUrl-MariaDB {
 
     Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestVersion' -Value $LatestPointReleaseId
 
-    $Files = Invoke-RestMethod -Uri "$versionUrl$latestPointReleaseId/"
+    $Files = $Http.InvokeRestMethod("$versionUrl$latestPointReleaseId/", 'GET', $null, $null)
     $File = $Files.release_data.$LatestPointReleaseId.files | Where-Object { $_.file_name -like '*winx64.zip' } | Select-Object -First 1
     Set-PSmmPluginsConfigMemberValue -Object $state -Name 'LatestInstaller' -Value $File.file_name
     $Url = $File.file_download_url
@@ -97,27 +102,12 @@ function Invoke-Installer-MariaDB {
         [Parameter(Mandatory)]
         [string]$InstallerPath,
 
-        $ServiceContainer
+        $Process,
+        $FileSystem,
+        $Environment,
+        $PathProvider
     )
-
-    # Resolve optional services for IO and process execution
-    $FileSystem = $null
-    $Process = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-
-        try {
-            $Process = $ServiceContainer.Resolve('Process')
-        }
-        catch {
-            Write-Verbose "Failed to resolve Process from ServiceContainer: $_"
-        }
-    }
+    $null = $Environment, $PathProvider
 
     $destinationRoot = $Paths.Root
 
@@ -145,7 +135,7 @@ function Invoke-Installer-MariaDB {
             $targetVersion = (Split-Path -Path $InstallerPath -LeafBase) -replace '^mariadb-', ''
         }
 
-        $currentVersion = Get-CurrentVersion-MariaDB -Plugin $Plugin -Paths $Paths -ServiceContainer $ServiceContainer
+        $currentVersion = Get-CurrentVersion-MariaDB -Plugin $Plugin -Paths $Paths -FileSystem $FileSystem
         if ($currentVersion -and $targetVersion -and $currentVersion -eq $targetVersion) {
             Write-PSmmLog -Level INFO -Context "Install $pluginName" -Message "MariaDB $targetVersion already installed" -Console -File
             return
@@ -172,7 +162,11 @@ function Invoke-Installer-MariaDB {
         }
 
         if (-not $extracted) {
-            Expand-Archive -Path $InstallerPath -DestinationPath $destinationRoot -Force
+            if ($null -eq $FileSystem) {
+                throw [System.InvalidOperationException]::new('FileSystem service is required to extract MariaDB zip')
+            }
+
+            $FileSystem.ExtractZip($InstallerPath, $destinationRoot, $true)
             $extracted = $true
         }
 
@@ -183,5 +177,6 @@ function Invoke-Installer-MariaDB {
         throw
     }
 }
+
 
 #endregion ########## PRIVATE ##########

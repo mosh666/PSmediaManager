@@ -47,7 +47,7 @@ function Test-ConfigurationExports {
 
     try {
         if ($null -eq $FileSystem) {
-            $FileSystem = [FileSystemService]::new()
+            throw [ValidationException]::new('FileSystem service is required for configuration export validation', 'FileSystem', $null)
         }
 
         if ([string]::IsNullOrWhiteSpace($exportPath)) {
@@ -126,9 +126,8 @@ function Test-SecretsSecurity {
             return $false
         }
 
-        # Create service instance if not provided
         if ($null -eq $FileSystem) {
-            $FileSystem = [FileSystemService]::new()
+            throw [ValidationException]::new('FileSystem service is required for secrets security validation', 'FileSystem', $null)
         }
 
         $allChecksPassed = $true
@@ -220,9 +219,8 @@ function Test-VaultPermissions {
     )
 
     try {
-        # Create service instance if not provided
         if ($null -eq $FileSystem) {
-            $FileSystem = [FileSystemService]::new()
+            throw [ValidationException]::new('FileSystem service is required for vault permission validation', 'FileSystem', $null)
         }
 
         if (-not $FileSystem.TestPath($VaultPath)) {

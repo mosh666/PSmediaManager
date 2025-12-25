@@ -1,13 +1,6 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
-if (-not (Get-Command -Name Get-PSmmPluginsConfigNestedValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\Private') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
-}
-
 function Install-KeePassXC {
     [CmdletBinding()]
     [OutputType([hashtable])]

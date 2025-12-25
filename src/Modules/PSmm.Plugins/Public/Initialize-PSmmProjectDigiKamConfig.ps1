@@ -61,9 +61,11 @@ function Initialize-PSmmProjectDigiKamConfig {
         [string]$ProjectName,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         $FileSystem,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         $PathProvider,
 
         [Parameter()]
@@ -74,14 +76,22 @@ function Initialize-PSmmProjectDigiKamConfig {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
 
-        if (
-            (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) -or
-            (-not (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue))
-        ) {
-            $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Private\ConfigMemberAccessHelpers.ps1'
-            if (Test-Path -Path $configHelpersPath) {
-                . $configHelpersPath
-            }
+        if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
+            throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before calling Initialize-PSmmProjectDigiKamConfig."
+        }
+
+        if (-not (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue)) {
+            throw "Test-PSmmPluginsConfigMember is not available. Ensure PSmm.Plugins is imported before calling Initialize-PSmmProjectDigiKamConfig."
+        }
+
+        # Break-fast: PathProvider must be explicitly provided by DI.
+        $pathProviderType = 'PathProvider' -as [type]
+        $iPathProviderType = 'IPathProvider' -as [type]
+        if ($null -eq $PathProvider) {
+            throw 'PathProvider is required for Initialize-PSmmProjectDigiKamConfig (pass DI service).'
+        }
+        if ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+            $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
         }
 
         Write-Verbose "Initializing digiKam configuration for project: $ProjectName"
@@ -89,46 +99,6 @@ function Initialize-PSmmProjectDigiKamConfig {
 
     process {
         try {
-            # Ensure PathProvider is available, preferring DI/global instance, otherwise wrap Config.Paths when possible.
-            $pathProviderType = 'PathProvider' -as [type]
-            $iPathProviderType = 'IPathProvider' -as [type]
-            if ($null -eq $PathProvider) {
-                $resolved = $null
-
-                try {
-                    $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
-                    if ($null -ne $globalServiceContainer) {
-                        try {
-                            $resolved = $globalServiceContainer.Resolve('PathProvider')
-                        }
-                        catch {
-                            $resolved = $null
-                        }
-                    }
-                }
-                catch {
-                    $resolved = $null
-                }
-
-                if ($null -ne $resolved) {
-                    $PathProvider = $resolved
-                }
-                elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType) {
-                    $pathsCandidate = $null
-                    try { $pathsCandidate = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths' } catch { $pathsCandidate = $null }
-                    if ($null -ne $pathsCandidate -and $pathsCandidate -is $iPathProviderType) {
-                        $PathProvider = $pathProviderType::new([IPathProvider]$pathsCandidate)
-                    }
-                }
-
-                if ($null -eq $PathProvider -and $null -ne $pathProviderType) {
-                    $PathProvider = $pathProviderType::new()
-                }
-            }
-            elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
-                $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
-            }
-
             # Confirm the action with ShouldProcess
             if (-not $PSCmdlet.ShouldProcess($ProjectName, 'Initialize digiKam configuration')) {
                 Write-Verbose 'Initialize digiKam configuration operation cancelled by user'

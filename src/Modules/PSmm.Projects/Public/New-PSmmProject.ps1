@@ -44,9 +44,11 @@ function New-PSmmProject {
         [object]$Config,  # Uses [object] instead of [AppConfiguration] to avoid type resolution issues when module is loaded
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         $FileSystem,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         $PathProvider
     )
 
@@ -92,42 +94,13 @@ function New-PSmmProject {
         return $null
     }
 
-    # Ensure PathProvider is available, preferring DI/global instance, otherwise wrap Config.Paths when possible.
+    # Break-fast: PathProvider must be explicitly provided by DI.
     $pathProviderType = 'PathProvider' -as [type]
     $iPathProviderType = 'IPathProvider' -as [type]
     if ($null -eq $PathProvider) {
-        $resolved = $null
-
-        try {
-            $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
-            if ($null -ne $globalServiceContainer) {
-                try {
-                    $resolved = $globalServiceContainer.Resolve('PathProvider')
-                }
-                catch {
-                    $resolved = $null
-                }
-            }
-        }
-        catch {
-            $resolved = $null
-        }
-
-        if ($null -ne $resolved) {
-            $PathProvider = $resolved
-        }
-        elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType) {
-            $configPaths = Get-RootConfigPath -RootConfig $Config
-            if ($null -ne $configPaths -and $configPaths -is $iPathProviderType) {
-                $PathProvider = $pathProviderType::new([IPathProvider]$configPaths)
-            }
-        }
-
-        if ($null -eq $PathProvider -and $null -ne $pathProviderType) {
-            $PathProvider = $pathProviderType::new()
-        }
+        throw 'PathProvider is required for New-PSmmProject (pass DI service).'
     }
-    elseif ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+    if ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
         $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
     }
 

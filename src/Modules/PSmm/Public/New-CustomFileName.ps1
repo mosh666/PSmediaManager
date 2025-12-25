@@ -75,7 +75,7 @@ function New-CustomFileName {
             $userName = $env:USERNAME
             if ([string]::IsNullOrWhiteSpace($userName)) { $userName = $env:USER }
             if ([string]::IsNullOrWhiteSpace($userName)) {
-                try { $userName = (& whoami) } catch { $userName = $null }
+                try { $userName = [System.Environment]::UserName } catch { $userName = $null }
             }
 
             $computerName = $env:COMPUTERNAME

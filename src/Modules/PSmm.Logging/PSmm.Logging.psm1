@@ -50,34 +50,14 @@ $ErrorActionPreference = 'Stop'
     Format      = $null
 }
 
-# Get module paths (service-aware - check ServiceContainer variable existence first to avoid StrictMode errors)
-$serviceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ErrorAction SilentlyContinue
-$hasServiceContainer = ($null -ne $serviceContainer) -and ($null -ne $serviceContainer.Value)
-$pathProvider = $null
-$fileSystem   = $null
-
-if ($hasServiceContainer) {
-    try {
-        $pathProvider = $serviceContainer.Value.Resolve('PathProvider')
-        $fileSystem   = $serviceContainer.Value.Resolve('FileSystem')
-    }
-    catch {
-        Write-Verbose "Failed to resolve services from ServiceContainer: $_"
-    }
-}
-
-if ($pathProvider) {
-    $PublicPath  = $pathProvider.CombinePath(@($PSScriptRoot,'Public'))
-    $PrivatePath = $pathProvider.CombinePath(@($PSScriptRoot,'Private'))
-} else {
-    $PublicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
-    $PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
-}
+# Get module paths (loader-first: do not depend on DI or globals during import)
+$PublicPath  = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
+$PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
 
 # Import all public and private functions
 try {
     # Import public functions
-    if ((($fileSystem) -and $fileSystem.TestPath($PublicPath)) -or (-not $fileSystem -and (Test-Path $PublicPath))) {
+    if (Test-Path -Path $PublicPath) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PublicFunctions.Count -gt 0) {
@@ -101,7 +81,7 @@ try {
     }
 
     # Import private functions
-    if ((($fileSystem) -and $fileSystem.TestPath($PrivatePath)) -or (-not $fileSystem -and (Test-Path $PrivatePath))) {
+    if (Test-Path -Path $PrivatePath) {
         $PrivateFunctions = @(Get-ChildItem -Path "$PrivatePath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PrivateFunctions.Count -gt 0) {

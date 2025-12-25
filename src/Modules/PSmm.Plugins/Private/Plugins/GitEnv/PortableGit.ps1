@@ -6,10 +6,7 @@
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
+    throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before loading plugin definitions."
 }
 
 #region ########## PRIVATE ##########
@@ -18,30 +15,20 @@ function Get-CurrentVersion-PortableGit {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
-    )
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
 
-    # Resolve FileSystem from ServiceContainer if available
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
+    )
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = 'PortableGit' }
 
-    if ($FileSystem) {
-        $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
-    }
-    else {
-        $InstallPath = Get-ChildItem -Path $Paths.Root -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$pluginName*" }
-    }
+    $InstallPath = @($FileSystem.GetChildItem($Paths.Root, "$pluginName*", 'Directory')) | Select-Object -First 1
 
     if ($InstallPath) {
         $commandPath = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'CommandPath')
@@ -51,8 +38,14 @@ function Get-CurrentVersion-PortableGit {
         }
 
         $bin = Join-Path -Path $InstallPath -ChildPath $commandPath -AdditionalChildPath $command
-        $CurrentVersion = (& $bin --version)
-        return 'v' + $CurrentVersion.Split(' ')[2]
+        $result = $Process.StartProcess($bin, @('--version'))
+        if ($result -and -not $result.Success) {
+            throw [System.Exception]::new("Failed to execute $bin (--version). ExitCode=$($result.ExitCode)")
+        }
+
+        $text = [string]$result.StdOut
+        $firstLine = ($text -split "`r?`n" | Select-Object -First 1)
+        return 'v' + $firstLine.Split(' ')[2]
     }
     else {
         return ''
@@ -70,22 +63,12 @@ function Invoke-Installer-PortableGit {
         [Parameter(Mandatory)]
         [string]$InstallerPath,
 
-        [Parameter(Mandatory)]
-        $ServiceContainer
+        $Process,
+        $FileSystem,
+        $Environment,
+        $PathProvider
     )
-
-    # Resolve Process and FileSystem from ServiceContainer if available
-    $Process = $null
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $Process = $ServiceContainer.Resolve('Process')
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve services from ServiceContainer: $_"
-        }
-    }
+    $null = $Environment, $PathProvider
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
@@ -94,7 +77,14 @@ function Invoke-Installer-PortableGit {
     try {
         $ExtractPath = Join-Path -Path $Paths.Root -ChildPath (Split-Path $InstallerPath -LeafBase).Substring(0, (Split-Path $InstallerPath -LeafBase).Length - 3)
         $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
-        Start-Process -FilePath $sevenZipCmd -ArgumentList "x `"$InstallerPath`" -o`"$ExtractPath`"" -Wait
+        if ($null -eq $Process) {
+            throw [System.InvalidOperationException]::new('Process service is required to extract PortableGit')
+        }
+
+        $result = $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$ExtractPath", '-y'))
+        if ($result -and -not $result.Success) {
+            throw [System.Exception]::new("7z extraction failed with exit code $($result.ExitCode)")
+        }
         Write-PSmmLog -Level SUCCESS -Context "Install $pluginName" -Message "Installation completed for $($InstallerPath)" -Console -File
     }
     catch {

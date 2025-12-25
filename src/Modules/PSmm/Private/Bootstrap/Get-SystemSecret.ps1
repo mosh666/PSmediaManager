@@ -609,29 +609,38 @@ function Get-SystemSecretMetadata {
 
         if ($AttributeName) {
             # Get specific attribute
-            $result = & keepassxc-cli.exe show -s -a "$AttributeName" "$dbPath" "$entry" 2>&1
+            $procResult = $Process.InvokeCommand('keepassxc-cli.exe', @(
+                    'show',
+                    '-s',
+                    '-a',
+                    "$AttributeName",
+                    "$dbPath",
+                    "$entry"
+                ))
 
-            if ($LASTEXITCODE -eq 0) {
-                return $result
+            if ($procResult.Success) {
+                return $procResult.Output
             }
-            else {
-                $ex = [ProcessException]::new("Failed to retrieve attribute '$AttributeName'", "keepassxc-cli.exe")
-                $ex.SetExitCode($LASTEXITCODE)
-                throw $ex
-            }
+
+            $ex = [ProcessException]::new("Failed to retrieve attribute '$AttributeName'", 'keepassxc-cli.exe')
+            $ex.SetExitCode([int]$procResult.ExitCode)
+            throw $ex
         }
         else {
             # List all attributes
-            $result = & keepassxc-cli.exe show "$dbPath" "$entry" 2>&1
+            $procResult = $Process.InvokeCommand('keepassxc-cli.exe', @(
+                    'show',
+                    "$dbPath",
+                    "$entry"
+                ))
 
-            if ($LASTEXITCODE -eq 0) {
-                return $result
+            if ($procResult.Success) {
+                return $procResult.Output
             }
-            else {
-                $ex = [ProcessException]::new("Failed to retrieve entry information", "keepassxc-cli.exe")
-                $ex.SetExitCode($LASTEXITCODE)
-                throw $ex
-            }
+
+            $ex = [ProcessException]::new('Failed to retrieve entry information', 'keepassxc-cli.exe')
+            $ex.SetExitCode([int]$procResult.ExitCode)
+            throw $ex
         }
     }
     catch {

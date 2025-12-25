@@ -26,21 +26,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Service-aware path helpers (optional - check ServiceContainer variable existence first to avoid StrictMode errors)
-$serviceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ErrorAction SilentlyContinue
-$hasServiceContainer = ($null -ne $serviceContainer) -and ($null -ne $serviceContainer.Value)
+# Module paths (loader-first: do not depend on DI or globals during import)
 $pathProvider = $null
 $fileSystem   = $null
-
-if ($hasServiceContainer) {
-    try {
-        $pathProvider = $serviceContainer.Value.Resolve('PathProvider')
-        $fileSystem   = $serviceContainer.Value.Resolve('FileSystem')
-    }
-    catch {
-        Write-Verbose "Failed to resolve services from ServiceContainer: $_"
-    }
-}
 
 # Ensure the PSmm module is loaded (for IFileSystemService and other shared classes)
 # NOTE: Module dependencies are handled by PSmediaManager.ps1 bootstrap - no need to force re-import here
@@ -71,14 +59,14 @@ if ($hasServiceContainer) {
 # }
 
 # Get module paths
-$ClassesPath = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Classes')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Classes' }
-$PublicPath  = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Public')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Public' }
-$PrivatePath = if ($pathProvider) { $pathProvider.CombinePath(@($PSScriptRoot,'Private')) } else { Join-Path -Path $PSScriptRoot -ChildPath 'Private' }
+$ClassesPath = Join-Path -Path $PSScriptRoot -ChildPath 'Classes'
+$PublicPath  = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
+$PrivatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
 
 # Import all public and private functions
 try {
     # Import class/type definitions first (so public functions can reference them)
-    if ((($fileSystem) -and $fileSystem.TestPath($ClassesPath)) -or (-not $fileSystem -and (Test-Path $ClassesPath))) {
+    if (Test-Path -Path $ClassesPath) {
         $ClassFiles = @(Get-ChildItem -Path "$ClassesPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
         foreach ($File in $ClassFiles) {
             try {
@@ -92,7 +80,7 @@ try {
     }
 
     # Import public functions
-    if ((($fileSystem) -and $fileSystem.TestPath($PublicPath)) -or (-not $fileSystem -and (Test-Path $PublicPath))) {
+    if (Test-Path -Path $PublicPath) {
         $PublicFunctions = @(Get-ChildItem -Path "$PublicPath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PublicFunctions.Count -gt 0) {
@@ -116,7 +104,7 @@ try {
     }
 
     # Import private functions
-    if ((($fileSystem) -and $fileSystem.TestPath($PrivatePath)) -or (-not $fileSystem -and (Test-Path $PrivatePath))) {
+    if (Test-Path -Path $PrivatePath) {
         $PrivateFunctions = @(Get-ChildItem -Path "$PrivatePath\*.ps1" -Recurse -ErrorAction SilentlyContinue)
 
         if ($PrivateFunctions.Count -gt 0) {

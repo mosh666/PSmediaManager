@@ -212,6 +212,14 @@ class AppPaths : IPathProvider {
     }
 
     [void] EnsureDirectoriesExist() {
+        throw [ValidationException]::new('FileSystem service is required for EnsureDirectoriesExist. Call EnsureDirectoriesExist($FileSystem).', 'FileSystem', $null)
+    }
+
+    [void] EnsureDirectoriesExist([object]$FileSystem) {
+        if ($null -eq $FileSystem) {
+            throw [ValidationException]::new('FileSystem service is required for EnsureDirectoriesExist.', 'FileSystem', $null)
+        }
+
         $paths = @(
             $this.Root,
             $this.Log,
@@ -226,9 +234,9 @@ class AppPaths : IPathProvider {
         )
 
         foreach ($path in $paths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
-            if (-not ([FileSystemService]::new().TestPath($path))) {
+            if (-not $FileSystem.TestPath($path)) {
                 try {
-                    $null = ([FileSystemService]::new()).NewItem($path, 'Directory')
+                    $null = $FileSystem.NewItem($path, 'Directory')
                 }
                 catch {
                     throw [StorageException]::new("Failed to create directory: $path", $path)
@@ -281,18 +289,25 @@ class AppPaths : IPathProvider {
     }
 
     [bool] Validate() {
+        throw [ValidationException]::new('FileSystem service is required for Validate. Call Validate($FileSystem).', 'FileSystem', $null)
+    }
+
+    [bool] Validate([object]$FileSystem) {
         try {
+            if ($null -eq $FileSystem) {
+                return $false
+            }
+
             # Validate root exists and is writable
-            if (-not (Test-Path -Path $this.Root)) {
+            if (-not $FileSystem.TestPath($this.Root)) {
                 return $false
             }
 
             # Test write access
             $testFile = [Path]::Combine($this.Root, ".write_test_$(Get-Random)")
             try {
-                $fs = [FileSystemService]::new()
-                [void]($fs.NewItem($testFile, 'File'))
-                $fs.RemoveItem($testFile)
+                [void]($FileSystem.NewItem($testFile, 'File'))
+                $FileSystem.RemoveItem($testFile)
                 return $true
             }
             catch {
@@ -516,46 +531,46 @@ class LoggingConfiguration {
             try { return $source.$name } catch { return $null }
         }
 
-        $v = & $getValue $obj 'Path'
+        $v = $getValue.InvokeReturnAsIs($obj, 'Path')
         if ($null -ne $v) { $cfg.Path = [string]$v }
 
-        $v = & $getValue $obj 'Level'
+        $v = $getValue.InvokeReturnAsIs($obj, 'Level')
         if ($null -ne $v) { $cfg.Level = [string]$v }
 
-        $v = & $getValue $obj 'DefaultLevel'
+        $v = $getValue.InvokeReturnAsIs($obj, 'DefaultLevel')
         if ($null -ne $v) { $cfg.DefaultLevel = [string]$v }
 
-        $v = & $getValue $obj 'Format'
+        $v = $getValue.InvokeReturnAsIs($obj, 'Format')
         if ($null -ne $v) { $cfg.Format = [string]$v }
 
-        $v = & $getValue $obj 'EnableConsole'
+        $v = $getValue.InvokeReturnAsIs($obj, 'EnableConsole')
         if ($null -ne $v) { $cfg.EnableConsole = [bool]$v }
 
-        $v = & $getValue $obj 'EnableFile'
+        $v = $getValue.InvokeReturnAsIs($obj, 'EnableFile')
         if ($null -ne $v) { $cfg.EnableFile = [bool]$v }
 
-        $v = & $getValue $obj 'MaxFileSizeMB'
+        $v = $getValue.InvokeReturnAsIs($obj, 'MaxFileSizeMB')
         if ($null -ne $v) { $cfg.MaxFileSizeMB = [int]$v }
 
-        $v = & $getValue $obj 'MaxLogFiles'
+        $v = $getValue.InvokeReturnAsIs($obj, 'MaxLogFiles')
         if ($null -ne $v) { $cfg.MaxLogFiles = [int]$v }
 
-        $v = & $getValue $obj 'PrintBody'
+        $v = $getValue.InvokeReturnAsIs($obj, 'PrintBody')
         if ($null -ne $v) { $cfg.PrintBody = [bool]$v }
 
-        $v = & $getValue $obj 'Append'
+        $v = $getValue.InvokeReturnAsIs($obj, 'Append')
         if ($null -ne $v) { $cfg.Append = [bool]$v }
 
-        $v = & $getValue $obj 'Encoding'
+        $v = $getValue.InvokeReturnAsIs($obj, 'Encoding')
         if ($null -ne $v) { $cfg.Encoding = [string]$v }
 
-        $v = & $getValue $obj 'PrintException'
+        $v = $getValue.InvokeReturnAsIs($obj, 'PrintException')
         if ($null -ne $v) { $cfg.PrintException = [bool]$v }
 
-        $v = & $getValue $obj 'ShortLevel'
+        $v = $getValue.InvokeReturnAsIs($obj, 'ShortLevel')
         if ($null -ne $v) { $cfg.ShortLevel = [bool]$v }
 
-        $v = & $getValue $obj 'OnlyColorizeLevel'
+        $v = $getValue.InvokeReturnAsIs($obj, 'OnlyColorizeLevel')
         if ($null -ne $v) { $cfg.OnlyColorizeLevel = [bool]$v }
 
         return $cfg
@@ -646,19 +661,19 @@ class RuntimeParameters {
             try { return $source.$name } catch { return $null }
         }
 
-        $v = & $getValue $obj 'Debug'
+        $v = $getValue.InvokeReturnAsIs($obj, 'Debug')
         if ($null -ne $v) { $cfg.Debug = [bool]$v }
 
-        $v = & $getValue $obj 'Verbose'
+        $v = $getValue.InvokeReturnAsIs($obj, 'Verbose')
         if ($null -ne $v) { $cfg.Verbose = [bool]$v }
 
-        $v = & $getValue $obj 'Dev'
+        $v = $getValue.InvokeReturnAsIs($obj, 'Dev')
         if ($null -ne $v) { $cfg.Dev = [bool]$v }
 
-        $v = & $getValue $obj 'Update'
+        $v = $getValue.InvokeReturnAsIs($obj, 'Update')
         if ($null -ne $v) { $cfg.Update = [bool]$v }
 
-        $v = & $getValue $obj 'NonInteractive'
+        $v = $getValue.InvokeReturnAsIs($obj, 'NonInteractive')
         if ($null -ne $v) { $cfg.NonInteractive = [bool]$v }
 
         return $cfg
@@ -1038,8 +1053,12 @@ class AppConfiguration {
     }
 
     [void] Initialize() {
+        if ($null -eq $this.FileSystem) {
+            throw [ValidationException]::new('FileSystem service is required to initialize configuration directories', 'FileSystem', $null)
+        }
+
         # Ensure all directories exist
-        $this.Paths.EnsureDirectoriesExist()
+        $this.Paths.EnsureDirectoriesExist($this.FileSystem)
 
         # Note: Secrets are loaded separately after logging is initialized
         # to avoid trying to write log messages before the logging system is ready

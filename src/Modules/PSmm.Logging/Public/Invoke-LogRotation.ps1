@@ -18,17 +18,20 @@
 .PARAMETER MaxFiles
     Maximum number of log files to keep. Oldest files beyond this limit will be deleted.
 
+.PARAMETER FileSystem
+    A FileSystem service instance (service-first DI). This is required; no filesystem shim/fallback is used.
+
 .PARAMETER WhatIf
     Shows what would be deleted without actually deleting files.
 
 .EXAMPLE
-    Invoke-LogRotation -Path "C:\Logs" -MaxAgeDays 30
+    Invoke-LogRotation -Path "C:\Logs" -MaxAgeDays 30 -FileSystem $fileSystemService
 
 .EXAMPLE
-    Invoke-LogRotation -Path "C:\Logs" -MaxFiles 10 -WhatIf
+    Invoke-LogRotation -Path "C:\Logs" -MaxFiles 10 -FileSystem $fileSystemService -WhatIf
 
 .EXAMPLE
-    Invoke-LogRotation -Path "C:\Logs" -MaxAgeDays 30 -MaxFiles 20
+    Invoke-LogRotation -Path "C:\Logs" -MaxAgeDays 30 -MaxFiles 20 -FileSystem $fileSystemService
 
 .NOTES
     Function Name: Invoke-LogRotation
@@ -58,14 +61,18 @@ function Invoke-LogRotation {
         [ValidateRange(1, 1000)]
         [int]$MaxFiles,
 
-        [Parameter()]
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
         [object]$FileSystem
     )
 
     try {
-        # Create FileSystemService if not provided
-        if ($null -eq $FileSystem) {
-            $FileSystem = New-FileSystemService
+        $requiredFsMethods = @('TestPath', 'GetChildItem', 'RemoveItem')
+        foreach ($methodName in $requiredFsMethods) {
+            $hasMethod = $null -ne ($FileSystem | Get-Member -Name $methodName -MemberType Method -ErrorAction SilentlyContinue)
+            if (-not $hasMethod) {
+                throw "FileSystem is missing required method '$methodName'. Invoke-LogRotation requires an injected FileSystem service implementing: $($requiredFsMethods -join ', ')."
+            }
         }
 
         # Validate path using FileSystem service

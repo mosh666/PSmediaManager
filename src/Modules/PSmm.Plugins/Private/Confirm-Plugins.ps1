@@ -68,14 +68,60 @@ function Test-PluginFunction {
     }
 }
 
+function Invoke-PluginFunction {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
+
+        [Parameter()]
+        [hashtable]$Parameters
+    )
+
+    $cmd = $ExecutionContext.SessionState.InvokeCommand.GetCommand(
+        $Name,
+        [System.Management.Automation.CommandTypes]::Function
+    )
+
+    if ($null -eq $cmd) {
+        throw [PluginRequirementException]::new("Plugin helper function not found: $Name", $Name)
+    }
+
+    $ps = [System.Management.Automation.PowerShell]::Create()
+    $ps.Runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace
+
+    $null = $ps.AddCommand($Name)
+
+    if ($null -ne $Parameters) {
+        foreach ($kv in $Parameters.GetEnumerator()) {
+            $null = $ps.AddParameter([string]$kv.Key, $kv.Value)
+        }
+    }
+
+    # Force break-fast for advanced functions
+    $null = $ps.AddParameter('ErrorAction', 'Stop')
+
+    $result = $ps.Invoke()
+
+    if ($ps.HadErrors -and $ps.Streams.Error.Count -gt 0) {
+        $e = $ps.Streams.Error[0]
+        if ($null -ne $e.Exception) {
+            throw $e.Exception
+        }
+        throw "Plugin helper invocation failed: $($e | Out-String)"
+    }
+
+    if ($null -eq $result -or $result.Count -eq 0) { return $null }
+    if ($result.Count -eq 1) { return $result[0] }
+    return @($result)
+}
+
 if (
     (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) -or
     (-not (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue))
 ) {
-    $configHelpersPath = Join-Path -Path $PSScriptRoot -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
+    throw "PSmm.Plugins config helper commands are not available. Ensure PSmm.Plugins is imported before calling plugin functions."
 }
 
 function Resolve-PluginNameSafe {
@@ -464,10 +510,12 @@ function New-PSmmServiceInstance {
             return
         }
 
-        # Use & with script block defined in global scope
-        $global:__tempConstructor = [scriptblock]::Create("[$TypeName]::new()")
-        $instance = & $global:__tempConstructor
-        Remove-Variable -Name __tempConstructor -Scope Global -ErrorAction SilentlyContinue
+        $type = $TypeName -as [type]
+        if (-not $type) {
+            throw [ModuleLoadException]::new("Unable to resolve type [$TypeName] (PSmm module not loaded or type not exported)", $TypeName)
+        }
+
+        $instance = [System.Activator]::CreateInstance($type)
 
         if ($null -eq $instance) {
             throw [ProcessException]::new("Constructor returned null for type instantiation")
@@ -498,20 +546,6 @@ function Resolve-PluginsConfig {
     }
 
     $pluginsConfigType = 'PluginsConfig' -as [type]
-    if (-not $pluginsConfigType) {
-        $psmmManifestPath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSmm\PSmm.psd1'
-        if (Test-Path -LiteralPath $psmmManifestPath) {
-            try {
-                Import-Module -Name $psmmManifestPath -Force -ErrorAction Stop | Out-Null
-            }
-            catch {
-                Write-Verbose "Resolve-PluginsConfig: failed importing PSmm module '$psmmManifestPath': $($_.Exception.Message)"
-                # ignore - handled below
-            }
-        }
-        $pluginsConfigType = 'PluginsConfig' -as [type]
-    }
-
     if (-not $pluginsConfigType) {
         throw [ConfigurationException]::new('Unable to resolve PluginsConfig type (PSmm module not loaded)', 'Plugins')
     }
@@ -552,14 +586,6 @@ function Resolve-PluginsConfig {
             }
         }
 
-        if (Get-Command -Name Test-PSmmPluginsConfigMember -ErrorAction SilentlyContinue) {
-            if (Test-PSmmPluginsConfigMember -Object $Manifest -Name 'Plugins') {
-                try { return Get-PSmmPluginsConfigMemberValue -Object $Manifest -Name 'Plugins' }
-                catch {
-                    Write-Verbose "_UnwrapPluginsManifest: failed reading 'Plugins' member: $($_.Exception.Message)"
-                }
-            }
-        }
         return $Manifest
     }
 
@@ -576,30 +602,9 @@ function Resolve-PluginsConfig {
 
     $projectManifest = $null
 
-    # Use already-loaded project manifest when present
+    # Use already-loaded project manifest when present (no auto-loading)
     if ($pluginsBag.Project) {
         $projectManifest = _UnwrapPluginsManifest -Manifest $pluginsBag.Project
-    }
-    else {
-        # Attempt to auto-load project plugins manifest if a project is selected
-        $candidateProjectPath = $null
-        try {
-            $currentPathObj = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Projects', 'Current', 'Path')
-            $currentPath = if ($null -ne $currentPathObj) { [string]$currentPathObj } else { '' }
-            if (-not [string]::IsNullOrWhiteSpace($currentPath)) {
-                $candidateProjectPath = Join-Path -Path $currentPath -ChildPath 'Config/PSmm/PSmm.Plugins.psd1'
-            }
-        } catch { Write-Debug "Failed to construct project plugin path: $_" }
-
-        if ($candidateProjectPath -and (Test-Path -Path $candidateProjectPath)) {
-            $projectPath = $candidateProjectPath
-            $projectManifestRaw = Import-PowerShellDataFile -Path $candidateProjectPath -ErrorAction Stop
-            $projectManifest = _UnwrapPluginsManifest -Manifest $projectManifestRaw
-            $pluginsBag.Project = $projectManifest
-        }
-        elseif ($candidateProjectPath) {
-            $projectPath = $candidateProjectPath
-        }
     }
 
     $previousResolved = $pluginsBag.Resolved
@@ -609,16 +614,35 @@ function Resolve-PluginsConfig {
         $resolved[$groupName] = @{}
         foreach ($pluginKey in ($globalManifest[$groupName].Keys | Sort-Object)) {
             $source = $globalManifest[$groupName][$pluginKey]
+            if ($null -eq $source -or -not ($source -is [System.Collections.IDictionary])) {
+                $msg = "Plugin '$pluginKey' in group '$groupName' must be an object/hashtable of settings. Global: $globalPath"
+                throw [ConfigurationException]::new($msg, $globalPath)
+            }
+
             $clone = @{}
             foreach ($prop in $source.Keys) {
                 $clone[$prop] = $source[$prop]
             }
 
-            if (-not $clone.ContainsKey('Mandatory')) { $clone.Mandatory = $false }
+            if (-not $clone.ContainsKey('Mandatory')) {
+                $msg = "Plugin '$pluginKey' in group '$groupName' is missing required field 'Mandatory'. Global: $globalPath"
+                throw [ConfigurationException]::new($msg, $globalPath)
+            }
             $clone.Mandatory = [bool]$clone.Mandatory
 
-            if (-not $clone.ContainsKey('Enabled')) { $clone.Enabled = $clone.Mandatory }
-            else { $clone.Enabled = [bool]$clone.Enabled -or $clone.Mandatory }
+            if (-not $clone.ContainsKey('Enabled')) {
+                $msg = "Plugin '$pluginKey' in group '$groupName' is missing required field 'Enabled'. Global: $globalPath"
+                throw [ConfigurationException]::new($msg, $globalPath)
+            }
+            $clone.Enabled = [bool]$clone.Enabled
+
+            if ($clone.Mandatory -and -not $clone.Enabled) {
+                $pluginNameCandidate = $null
+                try { $pluginNameCandidate = [string]$clone.Name } catch { $pluginNameCandidate = $null }
+                if ([string]::IsNullOrWhiteSpace($pluginNameCandidate)) { $pluginNameCandidate = $pluginKey }
+                $msg = "Mandatory plugin '$pluginNameCandidate' must be enabled in global manifest. Global: $globalPath"
+                throw [ConfigurationException]::new($msg, $globalPath)
+            }
 
             $prevGroup = $null
             if ($previousResolved) {
@@ -694,17 +718,18 @@ function Resolve-PluginsConfig {
                     throw [ConfigurationException]::new($msg, $projectPath)
                 }
 
-                $projectEnabled = $true
-                $projectEnabledValue = Get-PSmmPluginsConfigMemberValue -Object $projectEntry -Name 'Enabled'
+                $projectEnabledValue = $null
+                try { $projectEnabledValue = Get-PSmmPluginsConfigMemberValue -Object $projectEntry -Name 'Enabled' } catch { $projectEnabledValue = $null }
                 if ($null -ne $projectEnabledValue) {
                     $projectEnabled = [bool]$projectEnabledValue
-                }
+                    if ($target.Mandatory -and -not $projectEnabled) {
+                        $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $target -Name 'Name')
+                        if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = $pluginKey }
+                        $msg = "Project manifest cannot disable mandatory plugin '$pluginName'. Global: $globalPath; Project: $projectPath"
+                        throw [ConfigurationException]::new($msg, $projectPath)
+                    }
 
-                if ($target.Mandatory -and -not $projectEnabled) {
-                    $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $target -Name 'Name')
-                    if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = $pluginKey }
-                    $msg = "Project manifest cannot disable mandatory plugin '$pluginName'. Global: $globalPath; Project: $projectPath"
-                    throw [ConfigurationException]::new($msg, $projectPath)
+                    $target.Enabled = $projectEnabled
                 }
 
                 $projectState = Get-PSmmPluginsConfigMemberValue -Object $projectEntry -Name 'State'
@@ -712,9 +737,6 @@ function Resolve-PluginsConfig {
                     $target.State = $projectState
                 }
 
-                if ($projectEnabled) {
-                    $target.Enabled = $true
-                }
             }
         }
     }
@@ -757,7 +779,7 @@ function Resolve-PluginsConfig {
     Process service for executing plugin version checks.
 
 .EXAMPLE
-    Confirm-Plugins -Config $appConfig
+    Confirm-Plugins -Config $appConfig -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
     Validates plugins using modern AppConfiguration object.
 
 
@@ -771,7 +793,28 @@ function Confirm-Plugins {
         $Config,
 
         [Parameter(Mandatory)]
-        $ServiceContainer
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
 
     $resolvedPlugins = Resolve-PluginsConfig -Config $Config
@@ -821,43 +864,14 @@ function Confirm-Plugins {
         }
     }
 
-    # Resolve services needed across confirmation flow
-    $FileSystem = $null
-    $Environment = $null
-    $PathProvider = $null
-    if ($null -ne $ServiceContainer) {
-        try { $FileSystem = $ServiceContainer.Resolve('FileSystem') } catch { Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_" }
-        try { $Environment = $ServiceContainer.Resolve('Environment') } catch { Write-Verbose "Failed to resolve Environment from ServiceContainer: $_" }
-        try { $PathProvider = $ServiceContainer.Resolve('PathProvider') } catch { Write-Verbose "Failed to resolve PathProvider from ServiceContainer: $_" }
-    }
-
+    # Break-fast: PathProvider must come from DI; adapt wrapper types when needed.
+    $pathProviderType = 'PathProvider' -as [type]
+    $iPathProviderType = 'IPathProvider' -as [type]
     if ($null -eq $PathProvider) {
-        # Prefer the canonical AppPaths behavior when available on Config.Paths
-        try {
-            $pathsCandidate = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths'
-            if ($null -ne $pathsCandidate -and ($pathsCandidate -is [IPathProvider])) {
-                $PathProvider = [PathProvider]::new([IPathProvider]$pathsCandidate)
-            }
-        }
-        catch {
-            Write-Verbose "Failed to bind PathProvider from Config.Paths: $($_.Exception.Message)"
-        }
+        throw 'PathProvider is required for Confirm-Plugins (pass DI service).'
     }
-
-    if ($null -eq $PathProvider) {
-        # Fallback to global service container when available (host app bootstrap)
-        try {
-            $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
-            $PathProvider = $globalServiceContainer.Resolve('PathProvider')
-        }
-        catch {
-            Write-Verbose "Failed to resolve PathProvider from global ServiceContainer: $($_.Exception.Message)"
-        }
-    }
-
-    if ($null -eq $PathProvider) {
-        # Minimal fallback for standalone/test scenarios
-        $PathProvider = [PathProvider]::new()
+    if ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+        $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
     }
 
     try {
@@ -921,7 +935,7 @@ function Confirm-Plugins {
                 }
 
                 Invoke-PluginConfirmation -Config $Config -Plugin $plugin -Paths $paths -Run $Run -ScopeName $scopeName -UpdateMode $updateMode `
-                    -ServiceContainer $ServiceContainer
+                    -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
             }
         }
 
@@ -1013,7 +1027,28 @@ function Invoke-PluginConfirmation {
         [bool]$UpdateMode,
 
         [Parameter(Mandatory)]
-        $ServiceContainer
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
 
     $hasPaths = $false
@@ -1042,20 +1077,6 @@ function Invoke-PluginConfirmation {
         throw [ValidationException]::new('Invoke-PluginConfirmation requires a configuration object exposing Paths', 'Config')
     }
 
-    # Resolve services from ServiceContainer
-    $FileSystem = $null
-    $Process = $null
-
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-            $Process = $ServiceContainer.Resolve('Process')
-        }
-        catch {
-            Write-Verbose "Failed to resolve services from ServiceContainer: $_"
-        }
-    }
-
     $pluginName = Resolve-PluginNameSafe -PluginOrConfig $Plugin
     Write-PSmmLog -Level INFO -Context "Confirm $ScopeName" `
         -Message "Confirming $pluginName" -Console -File
@@ -1078,7 +1099,7 @@ function Invoke-PluginConfirmation {
     if ([string]::IsNullOrEmpty($state.CurrentVersion)) {
         Write-PSmmLog -Level NOTICE -Context "Check $pluginName" `
             -Message "$pluginName is not installed (installing now)" -Console -File
-        Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -ServiceContainer $ServiceContainer
+        Install-Plugin -Plugin $Plugin -Paths $Paths -Config $Config -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
     }
     else {
         Write-PSmmLog -Level SUCCESS -Context "Check $pluginName" `
@@ -1190,7 +1211,17 @@ function Get-InstallState {
 
         if (Test-PluginFunction -Name $versionFunctionName) {
             Write-Verbose "Using custom version detection function: $versionFunctionName"
-            $state.CurrentVersion = & $versionFunctionName -Plugin $Plugin -Paths $Paths -FileSystem $FileSystem
+            if ($null -eq $Process) {
+                Write-Verbose "No Process service provided; skipping version detection via $versionFunctionName"
+            }
+            else {
+                $state.CurrentVersion = Invoke-PluginFunction -Name $versionFunctionName -Parameters @{
+                    Plugin = $Plugin
+                    Paths = $Paths
+                    FileSystem = $FileSystem
+                    Process = $Process
+                }
+            }
         }
         elseif ($installPath) {
             # Fall back to directory name as version
@@ -1253,56 +1284,39 @@ function Get-LatestDownloadUrl {
         [SecureString]$Token,
 
         [Parameter(Mandatory)]
-        $ServiceContainer
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
 
     try {
-        # Resolve services from ServiceContainer
-        $Http = $null
-        $Crypto = $null
-        $FileSystem = $null
-        $Environment = $null
-        $PathProvider = $null
-        $Process = $null
-
-        if ($null -ne $ServiceContainer) {
-            try {
-                $Http = $ServiceContainer.Resolve('Http')
-                $Crypto = $ServiceContainer.Resolve('Crypto')
-                $FileSystem = $ServiceContainer.Resolve('FileSystem')
-                $Environment = $ServiceContainer.Resolve('Environment')
-                $PathProvider = $ServiceContainer.Resolve('PathProvider')
-                $Process = $ServiceContainer.Resolve('Process')
-            }
-            catch {
-                Write-Verbose "Failed to resolve services from ServiceContainer: $_"
-            }
-        }
-
+        # Break-fast: PathProvider must come from DI; adapt wrapper types when needed.
+        $pathProviderType = 'PathProvider' -as [type]
+        $iPathProviderType = 'IPathProvider' -as [type]
         if ($null -eq $PathProvider) {
-            try {
-                $pathsCandidate = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths'
-                if ($null -ne $pathsCandidate -and ($pathsCandidate -is [IPathProvider])) {
-                    $PathProvider = [PathProvider]::new([IPathProvider]$pathsCandidate)
-                }
-            }
-            catch {
-                Write-Verbose "Failed to bind PathProvider from Config.Paths: $($_.Exception.Message)"
-            }
+            throw 'PathProvider is required for Get-LatestDownloadUrl (pass DI service).'
         }
-
-        if ($null -eq $PathProvider) {
-            try {
-                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
-                $PathProvider = $globalServiceContainer.Resolve('PathProvider')
-            }
-            catch {
-                Write-Verbose "Failed to resolve PathProvider from global ServiceContainer: $($_.Exception.Message)"
-            }
-        }
-
-        if ($null -eq $PathProvider) {
-            $PathProvider = [PathProvider]::new()
+        if ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+            $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
         }
 
         # Ensure Config bucket exists before accessing nested members
@@ -1441,7 +1455,16 @@ function Get-LatestDownloadUrl {
 
                 if (Test-PluginFunction -Name $urlFunctionName) {
                     Write-PSmmLog -Level INFO -Context "Check $pluginName" -Message "Using custom URL function: $urlFunctionName" -Console -File
-                    $url = & $urlFunctionName -Plugin $Plugin -Paths $Paths -ServiceContainer $ServiceContainer
+                    $url = Invoke-PluginFunction -Name $urlFunctionName -Parameters @{
+                        Plugin = $Plugin
+                        Paths = $Paths
+                        Http = $Http
+                        Crypto = $Crypto
+                        FileSystem = $FileSystem
+                        Environment = $Environment
+                        PathProvider = $PathProvider
+                        Process = $Process
+                    }
                 }
                 else {
                     Write-Warning "No custom URL function found: $urlFunctionName"
@@ -1635,9 +1658,7 @@ function Invoke-Installer {
                     $FileSystem.NewItem($extractPath, 'Directory')
                 }
 
-                # Use Expand-Archive via PowerShell process
-                # PowerShell 7+ includes compression APIs; no explicit Add-Type required
-                [System.IO.Compression.ZipFile]::ExtractToDirectory($InstallerPath, $extractPath, $true)
+                $FileSystem.ExtractZip($InstallerPath, $extractPath, $true)
             }
             '.7z' {
                 $extractPath = Join-Path -Path $Paths.Root -ChildPath (Split-Path $InstallerPath -LeafBase)
@@ -1729,58 +1750,42 @@ function Install-Plugin {
         $Config,
 
         [Parameter(Mandatory)]
-        $ServiceContainer
+        [ValidateNotNull()]
+        $Http,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Crypto,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Environment,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $PathProvider,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $Process
     )
 
     try {
         $pluginName = Resolve-PluginNameSafe -PluginOrConfig $Plugin
         Write-Verbose "Starting installation process for: $pluginName"
 
-        # Resolve services from ServiceContainer
-        $Http = $null
-        $FileSystem = $null
-        $Environment = $null
-        $PathProvider = $null
-        $Process = $null
-
-        if ($null -ne $ServiceContainer) {
-            try {
-                $Http = $ServiceContainer.Resolve('Http')
-                $null = $ServiceContainer.Resolve('Crypto')
-                $FileSystem = $ServiceContainer.Resolve('FileSystem')
-                $Environment = $ServiceContainer.Resolve('Environment')
-                $PathProvider = $ServiceContainer.Resolve('PathProvider')
-                $Process = $ServiceContainer.Resolve('Process')
-            }
-            catch {
-                Write-Verbose "Failed to resolve services from ServiceContainer: $_"
-            }
-        }
-
+        # Break-fast: PathProvider must come from DI; adapt wrapper types when needed.
+        $pathProviderType = 'PathProvider' -as [type]
+        $iPathProviderType = 'IPathProvider' -as [type]
         if ($null -eq $PathProvider) {
-            try {
-                $pathsCandidate = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Paths'
-                if ($null -ne $pathsCandidate -and ($pathsCandidate -is [IPathProvider])) {
-                    $PathProvider = [PathProvider]::new([IPathProvider]$pathsCandidate)
-                }
-            }
-            catch {
-                Write-Verbose "Failed to bind PathProvider from Config.Paths: $($_.Exception.Message)"
-            }
+            throw 'PathProvider is required for Install-Plugin (pass DI service).'
         }
-
-        if ($null -eq $PathProvider) {
-            try {
-                $globalServiceContainer = Get-Variable -Name 'PSmmServiceContainer' -Scope Global -ValueOnly -ErrorAction Stop
-                $PathProvider = $globalServiceContainer.Resolve('PathProvider')
-            }
-            catch {
-                Write-Verbose "Failed to resolve PathProvider from global ServiceContainer: $($_.Exception.Message)"
-            }
-        }
-
-        if ($null -eq $PathProvider) {
-            $PathProvider = [PathProvider]::new()
+        if ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
+            $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
         }
 
         # Prefer an already-secure token if available; otherwise build SecureString safely
@@ -1836,7 +1841,7 @@ function Install-Plugin {
         }
 
         # Get latest download URL
-        $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -ServiceContainer $ServiceContainer
+        $url = Get-LatestDownloadUrl -Plugin $Plugin -Paths $Paths -Token $token -Http $Http -Crypto $Crypto -FileSystem $FileSystem -Environment $Environment -PathProvider $PathProvider -Process $Process
 
         if (-not $url) {
             Write-Warning "Could not determine download URL for: $pluginName"
@@ -1848,10 +1853,20 @@ function Install-Plugin {
 
         if (Test-PluginFunction -Name $installerFunctionName) {
             Write-Verbose "Using custom installer download function: $installerFunctionName"
-            $installerPath = & $installerFunctionName -Url $url -Plugin $Plugin -Paths $Paths -ServiceContainer $ServiceContainer
+            $installerPath = Invoke-PluginFunction -Name $installerFunctionName -Parameters @{
+                Url = $url
+                Plugin = $Plugin
+                Paths = $Paths
+                Http = $Http
+                Crypto = $Crypto
+                FileSystem = $FileSystem
+                Environment = $Environment
+                PathProvider = $PathProvider
+                Process = $Process
+            }
         }
         else {
-            $installerPath = Get-Installer -Url $url -Plugin $Plugin -Paths $Paths -Http $Http -FileSystem $FileSystem
+            $installerPath = Get-Installer -Url $url -Plugin $Plugin -Paths $Paths -Http $Http -FileSystem $FileSystem -Process $Process
         }
 
         if (-not $installerPath) {
@@ -1864,7 +1879,15 @@ function Install-Plugin {
 
         if (Test-PluginFunction -Name $installFunctionName) {
             Write-Verbose "Using custom installation function: $installFunctionName"
-            & $installFunctionName -Plugin $Plugin -Paths $Paths -InstallerPath $installerPath -ServiceContainer $ServiceContainer
+            $null = Invoke-PluginFunction -Name $installFunctionName -Parameters @{
+                Plugin = $Plugin
+                Paths = $Paths
+                InstallerPath = $installerPath
+                Process = $Process
+                FileSystem = $FileSystem
+                Environment = $Environment
+                PathProvider = $PathProvider
+            }
         }
         else {
             Invoke-Installer -Plugin $Plugin -Paths $Paths -InstallerPath $installerPath -Process $Process -FileSystem $FileSystem

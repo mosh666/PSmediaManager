@@ -126,7 +126,17 @@ if ($boundParameters.ContainsKey('Debug') -and $boundParameters['Debug']) { $Spl
 
 # Invoke the main script directly (not in a subprocess)
 # This allows proper module resolution and $PSScriptRoot handling
-& $MainScript @SplatParams
+
+$invokeMain = {
+    param(
+        [Parameter(Mandatory)][string]$ScriptPath,
+        [Parameter(Mandatory)][hashtable]$Params
+    )
+
+    . $ScriptPath @Params
+}
+
+$invokeMain.InvokeReturnAsIs($MainScript, $SplatParams)
 
 # Propagate exit code
 exit $LASTEXITCODE

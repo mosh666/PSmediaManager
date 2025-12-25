@@ -357,9 +357,9 @@ class AppConfigurationBuilder {
             }
 
             # Merge configuration data
-            $appData = & $getMember $configData 'App'
+            $appData = $getMember.InvokeReturnAsIs($configData, 'App')
             if ($null -ne $appData) {
-                $storageRoot = & $getMember $appData 'Storage'
+                $storageRoot = $getMember.InvokeReturnAsIs($appData, 'Storage')
                 if ($storageRoot -is [System.Collections.IDictionary]) {
                     foreach ($key in $storageRoot.Keys) {
                         $storageData = $storageRoot[$key]
@@ -367,12 +367,12 @@ class AppConfigurationBuilder {
                     }
                 }
 
-                $uiRoot = & $getMember $appData 'UI'
+                $uiRoot = $getMember.InvokeReturnAsIs($appData, 'UI')
                 if ($null -ne $uiRoot) {
                     $this._config.UI = [UIConfig]::FromObject($uiRoot)
                 }
 
-                $loggingRoot = & $getMember $appData 'Logging'
+                $loggingRoot = $getMember.InvokeReturnAsIs($appData, 'Logging')
                 if ($null -ne $loggingRoot) {
                     $existingLogPath = $null
                     if ($null -ne $this._config.Logging) { $existingLogPath = $this._config.Logging.Path }
@@ -384,7 +384,7 @@ class AppConfigurationBuilder {
                 }
             }
 
-            $projectsRoot = & $getMember $configData 'Projects'
+            $projectsRoot = $getMember.InvokeReturnAsIs($configData, 'Projects')
             if ($null -ne $projectsRoot) {
                 $this._config.Projects = [ProjectsConfig]::FromObject($projectsRoot)
             }
@@ -551,7 +551,10 @@ class AppConfigurationBuilder {
 
     [AppConfigurationBuilder] InitializeDirectories() {
         $this.EnsureNotBuilt()
-        $this._config.Paths.EnsureDirectoriesExist()
+        if ($null -eq $this._fileSystem) {
+            throw [ConfigurationException]::new('FileSystem service is required to initialize directories. Call WithServices() before InitializeDirectories().', 'FileSystem')
+        }
+        $this._config.Paths.EnsureDirectoriesExist($this._fileSystem)
         return $this
     }
 
@@ -784,6 +787,14 @@ class AppConfigurationBuilder {
         the configuration to the specified path in .psd1 format.
     #>
     static [void] WriteStorageFile([string]$storagePath, [hashtable]$storageHashtable) {
+        throw [ValidationException]::new('FileSystem service is required for WriteStorageFile. Call WriteStorageFile($storagePath, $storageHashtable, $FileSystem).', 'FileSystem', $null)
+    }
+
+    static [void] WriteStorageFile([string]$storagePath, [hashtable]$storageHashtable, [object]$FileSystem) {
+        if ($null -eq $FileSystem) {
+            throw [ValidationException]::new('FileSystem service is required for WriteStorageFile.', 'FileSystem', $null)
+        }
+
         # Renumber groups sequentially
         $renumbered = @{}
         $numericKeys = @()
@@ -804,13 +815,12 @@ class AppConfigurationBuilder {
 
         # Ensure directory exists via FileSystem service
         $configRoot = Split-Path -Path $storagePath -Parent
-        $fs = [FileSystemService]::new()
-        if (-not $fs.TestPath($configRoot)) {
-            $null = $fs.NewItem($configRoot, 'Directory')
+        if (-not $FileSystem.TestPath($configRoot)) {
+            $null = $FileSystem.NewItem($configRoot, 'Directory')
         }
 
         # Write to file via FileSystem service
-        $fs.SetContent($storagePath, $psd1Content)
+        $FileSystem.SetContent($storagePath, $psd1Content)
     }
 
     <#
@@ -854,7 +864,7 @@ class AppConfigurationBuilder {
             if ($null -eq $Object) { return $null }
 
             if ($Object -is [System.Collections.IDictionary]) {
-                if (& $mapHasKey $Object $Name) {
+                if ($mapHasKey.InvokeReturnAsIs($Object, $Name)) {
                     return $Object[$Name]
                 }
                 return $null
@@ -876,7 +886,7 @@ class AppConfigurationBuilder {
         else {
             foreach ($groupId in ($storageHashtable.Keys | Sort-Object {[int]$_})) {
                 $group = $storageHashtable[$groupId]
-                $displayNameValue = & $getMember $group 'DisplayName'
+                $displayNameValue = $getMember.InvokeReturnAsIs($group, 'DisplayName')
                 $displayName = if ($null -ne $displayNameValue) { [string]$displayNameValue } else { "Storage Group $groupId" }
                 # Escape single quotes in display name
                 $displayName = $displayName -replace "'", "''"
@@ -884,16 +894,16 @@ class AppConfigurationBuilder {
                 $lines += "        '$groupId' = @{"
                 $lines += "            DisplayName = '$displayName'"
 
-                $master = & $getMember $group 'Master'
+                $master = $getMember.InvokeReturnAsIs($group, 'Master')
                 if ($null -ne $master) {
-                    $mLabelValue = & $getMember $master 'Label'
-                    $mSerialValue = & $getMember $master 'SerialNumber'
+                    $mLabelValue = $getMember.InvokeReturnAsIs($master, 'Label')
+                    $mSerialValue = $getMember.InvokeReturnAsIs($master, 'SerialNumber')
                     $mLabel = if ($null -ne $mLabelValue) { ([string]$mLabelValue) -replace "'", "''" } else { '' }
                     $mSerial = if ($null -ne $mSerialValue) { ([string]$mSerialValue) -replace "'", "''" } else { '' }
                     $lines += "            Master      = @{ Label = '$mLabel'; SerialNumber = '$mSerial' }"
                 }
 
-                $backup = & $getMember $group 'Backup'
+                $backup = $getMember.InvokeReturnAsIs($group, 'Backup')
                 $backupMap = $null
                 if ($backup -is [System.Collections.IDictionary]) {
                     $backupMap = $backup
@@ -914,8 +924,8 @@ class AppConfigurationBuilder {
                     $lines += '            Backup      = @{'
                     foreach ($bKey in ($backupMap.Keys | Sort-Object {[int]$_})) {
                         $b = $backupMap[$bKey]
-                        $bLabelValue = & $getMember $b 'Label'
-                        $bSerialValue = & $getMember $b 'SerialNumber'
+                        $bLabelValue = $getMember.InvokeReturnAsIs($b, 'Label')
+                        $bSerialValue = $getMember.InvokeReturnAsIs($b, 'SerialNumber')
                         $bLabel = if ($null -ne $bLabelValue) { ([string]$bLabelValue) -replace "'", "''" } else { '' }
                         $bSerial = if ($null -ne $bSerialValue) { ([string]$bSerialValue) -replace "'", "''" } else { '' }
                         $lines += "                '$bKey' = @{ Label = '$bLabel'; SerialNumber = '$bSerial' }"

@@ -6,10 +6,7 @@
 Set-StrictMode -Version Latest
 
 if (-not (Get-Command -Name Get-PSmmPluginsConfigMemberValue -ErrorAction SilentlyContinue)) {
-    $configHelpersPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..\..') -ChildPath 'ConfigMemberAccessHelpers.ps1'
-    if (Test-Path -Path $configHelpersPath) {
-        . $configHelpersPath
-    }
+    throw "Get-PSmmPluginsConfigMemberValue is not available. Ensure PSmm.Plugins is imported before loading plugin definitions."
 }
 
 #region ########## PRIVATE ##########
@@ -18,19 +15,10 @@ function Get-CurrentVersion-7z {
     param(
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        $ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
     )
-
-    # Resolve FileSystem from ServiceContainer if available
-    $FileSystem = $null
-    if ($null -ne $ServiceContainer) {
-        try {
-            $FileSystem = $ServiceContainer.Resolve('FileSystem')
-        }
-        catch {
-            Write-Verbose "Failed to resolve FileSystem from ServiceContainer: $_"
-        }
-    }
 
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
@@ -39,12 +27,7 @@ function Get-CurrentVersion-7z {
     $command = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Command')
     if ([string]::IsNullOrWhiteSpace($command)) { return '' }
 
-    if ($FileSystem) {
-        $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, $command, 'File', $true)) | Select-Object -First 1
-    }
-    else {
-        $CurrentVersion = Get-ChildItem -Path $Paths.Root -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like $command }
-    }
+    $CurrentVersion = @($FileSystem.GetChildItem($Paths.Root, $command, 'File', $true)) | Select-Object -First 1
 
     if ($CurrentVersion) {
         return $CurrentVersion.VersionInfo.FileVersion
@@ -58,16 +41,27 @@ function Invoke-Installer-7z {
     param (
         [hashtable]$Plugin,
         [hashtable]$Paths,
-        [string]$InstallerPath
+        [string]$InstallerPath,
+        $Process,
+        $FileSystem,
+        $Environment,
+        $PathProvider
     )
+    $null = $FileSystem, $Environment, $PathProvider
     $pluginConfig = Get-PSmmPluginsConfigMemberValue -Object $Plugin -Name 'Config'
     $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $pluginConfig -Name 'Name')
     if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = '7-Zip' }
 
     try {
         $ExtractPath = Join-Path -Path $Paths.Root -ChildPath (Split-Path $InstallerPath -LeafBase)
-        $process = Start-Process -FilePath $InstallerPath -ArgumentList "/S /D=$($ExtractPath)\" -Wait -PassThru
-        $process | Out-Null
+        if ($null -eq $Process) {
+            throw [System.InvalidOperationException]::new('Process service is required to install 7-Zip')
+        }
+
+        $result = $Process.StartProcess($InstallerPath, @('/S', "/D=$($ExtractPath)\"))
+        if ($result -and -not $result.Success) {
+            throw [System.Exception]::new("Installer exited with code $($result.ExitCode). StdErr: $($result.StdErr)")
+        }
         Write-PSmmLog -Level SUCCESS -Context "Install $pluginName" -Message "Installation completed for $($InstallerPath)" -Console -File
     }
     catch {

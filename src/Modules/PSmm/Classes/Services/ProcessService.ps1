@@ -88,7 +88,11 @@ class ProcessService : IProcessService {
         }
 
         $result = Get-Command -Name $command -ErrorAction SilentlyContinue
-        return $null -ne $result
+        if ($null -eq $result) {
+            return $false
+        }
+
+        return $result.CommandType -eq 'Application'
     }
 
     <#
@@ -100,19 +104,35 @@ class ProcessService : IProcessService {
             throw [ArgumentException]::new("Command cannot be empty", "command")
         }
 
-        # Check if command exists
-        if (-not $this.TestCommand($command)) {
+        $cmd = Get-Command -Name $command -ErrorAction SilentlyContinue
+        if ($null -eq $cmd) {
             throw [InvalidOperationException]::new("Command not found: $command")
         }
 
+        if ($cmd.CommandType -ne 'Application') {
+            throw [InvalidOperationException]::new("InvokeCommand only supports external applications. '$command' resolved to $($cmd.CommandType).")
+        }
+
         try {
-            $output = & $command @arguments 2>&1
-            $exitCode = $LASTEXITCODE
+            $result = $this.StartProcess([string]$cmd.Source, $arguments)
+
+            $combined = ''
+            if (-not [string]::IsNullOrEmpty([string]$result.StdOut)) {
+                $combined = [string]$result.StdOut
+            }
+            if (-not [string]::IsNullOrEmpty([string]$result.StdErr)) {
+                if (-not [string]::IsNullOrEmpty($combined)) {
+                    $combined += [Environment]::NewLine
+                }
+                $combined += [string]$result.StdErr
+            }
 
             return [PSCustomObject]@{
-                ExitCode = $exitCode
-                Output = $output
-                Success = $exitCode -eq 0
+                ExitCode = [int]$result.ExitCode
+                Output = $combined
+                Success = [bool]$result.Success
+                StdOut = [string]$result.StdOut
+                StdErr = [string]$result.StdErr
             }
         }
         catch {

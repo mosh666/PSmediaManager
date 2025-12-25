@@ -13,10 +13,10 @@ indent_style = space
 indent_size = 4
 
 [*.{ps1,psm1,psd1}]
-# PowerShell files: prefer Windows line endings on Windows systems,
-# keep trailing whitespace off for alignment-sensitive constructs,
-# and ensure UTF-8 encoding.
-end_of_line = crlf
+# PowerShell files: keep consistent LF line endings for cross-platform
+# development and CI stability. Preserve trailing whitespace to avoid
+# breaking alignment-sensitive constructs in console UIs.
+end_of_line = lf
 trim_trailing_whitespace = false
 charset = utf-8
 indent_style = space

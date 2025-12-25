@@ -20,11 +20,11 @@
 .PARAMETER Path
     Destination .psd1 file path. Parent directory will be created if missing.
 
-.PARAMETER ServiceContainer
-    ServiceContainer instance for accessing FileSystem service. If omitted, falls back to native cmdlets.
+.PARAMETER FileSystem
+    FileSystem service used to create directories and write the output file.
 
 .EXAMPLE
-    Export-SafeConfiguration -Configuration $appConfig -Path (Join-Path -Path $appConfig.Paths.Log -ChildPath 'PSmediaManager-Run.psd1') -ServiceContainer $ServiceContainer
+    Export-SafeConfiguration -Configuration $appConfig -Path (Join-Path -Path $appConfig.Paths.Log -ChildPath 'PSmediaManager-Run.psd1') -FileSystem $FileSystem
 
 .OUTPUTS
     String (path) - Returns the path written on success.
@@ -33,7 +33,7 @@
     This function intentionally does NOT round-trip the full configuration. It is a diagnostic artifact.
     If shape changes, extend the sanitization helper instead of writing raw object.
 
-    BREAKING CHANGE (v0.2.0): Replaced -FileSystem parameter with -ServiceContainer parameter.
+    BREAKING CHANGE: Requires injected -FileSystem (service-first DI); does not resolve FileSystem from ServiceContainer and does not fall back to native cmdlets.
 #>
 
 #Requires -Version 7.5.4
@@ -52,8 +52,9 @@ function Export-SafeConfiguration {
         [ValidateNotNullOrEmpty()]
         [string]$Path,
 
-        [Parameter()]
-        [object]$ServiceContainer
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        $FileSystem
     )
 
     try {
@@ -238,7 +239,7 @@ function Export-SafeConfiguration {
             function _DictToHash([object]$dict, [scriptblock]$projector) {
                 $h = @{}
                 if ($null -eq $dict) { return $h }
-                foreach ($k in $dict.Keys) { $h[$k] = & $projector $dict[$k] }
+                foreach ($k in $dict.Keys) { $h[$k] = $projector.InvokeReturnAsIs($dict[$k]) }
                 return $h
             }
 
@@ -1207,7 +1208,7 @@ function Export-SafeConfiguration {
             }
 
             # String masking
-            if ($Data -is [string]) { return & $maskString $Data }
+            if ($Data -is [string]) { return $maskString.InvokeReturnAsIs($Data) }
 
             # Primitive
             return $Data
@@ -1693,66 +1694,23 @@ function Export-SafeConfiguration {
         $content = _ToPsd1 -Data $stringified
         if (-not $content) { throw 'Export produced empty content.' }
 
-        # Resolve FileSystem service from container if available
-        $fileSystem = $null
-        if ($null -ne $ServiceContainer) {
-            try {
-                $fileSystem = $ServiceContainer.Resolve('FileSystem')
-            }
-            catch {
-                Write-Verbose "[SafeExport] ServiceContainer.Resolve('FileSystem') failed: $_"
-            }
-        }
-
-        # Ensure directory exists (use FileSystem service or fallback to native cmdlets)
+        # Ensure directory exists
         $parent = Split-Path -Parent $Path
         if (-not [string]::IsNullOrWhiteSpace($parent)) {
-            $handled = $false
-            if ($null -ne $fileSystem) {
-                try {
-                    if (-not $fileSystem.TestPath($parent)) { $null = $fileSystem.NewItem($parent, 'Directory') }
-                    $handled = $true
-                }
-                catch {
-                    $handled = $false
-                }
+            try {
+                if (-not $FileSystem.TestPath($parent)) { $null = $FileSystem.NewItem($parent, 'Directory') }
             }
-
-            if (-not $handled) {
-                # Fallback to native PowerShell cmdlets
-                if (-not (Test-Path -Path $parent)) {
-                    $null = New-Item -Path $parent -ItemType Directory -Force -ErrorAction Stop
-                }
+            catch {
+                throw "[SafeExport] Failed to ensure output directory exists: $_"
             }
         }
 
-        # Write using file system service or fallback to native Set-Content
-        $wroteWithService = $false
-        if ($null -ne $fileSystem) {
-            try {
-                $fileSystem.SetContent($Path, $content)
-                $wroteWithService = $true
-            }
-            catch {
-                $msg = $null
-                try { $msg = $_.Exception.Message } catch { $msg = $null }
-                if ($msg -and ($msg -match "method named 'SetContent'")) {
-                    $wroteWithService = $false
-                }
-                else {
-                    throw "[SafeExport] FileSystem.SetContent failed: $_"
-                }
-            }
+        # Write using injected file system service
+        try {
+            $FileSystem.SetContent($Path, $content)
         }
-
-        if (-not $wroteWithService) {
-            # Fallback to native PowerShell Set-Content
-            try {
-                Set-Content -Path $Path -Value $content -Encoding UTF8 -Force -ErrorAction Stop
-            }
-            catch {
-                throw "[SafeExport] Set-Content failed: $_"
-            }
+        catch {
+            throw "[SafeExport] FileSystem.SetContent failed: $_"
         }
 
         Write-Verbose "[SafeExport] OK (${([System.Text.Encoding]::UTF8.GetByteCount($content))} bytes)"
