@@ -13,7 +13,7 @@ function Invoke-PSmmFatal {
         [string]$Message,
 
         [Parameter()]
-        [object]$Error,
+        [object]$ErrorObject,
 
         [Parameter()]
         [int]$ExitCode = 1,
@@ -34,7 +34,7 @@ function Invoke-PSmmFatal {
         }
     }
     catch {
-        # fall through to Get-Member check
+        Write-Verbose "[Invoke-PSmmFatal] PSObject method inspection failed: $($_.Exception.Message)"
     }
 
     if (-not $hasInvokeFatal) {
@@ -48,5 +48,5 @@ function Invoke-PSmmFatal {
         throw "FatalErrorUi must provide an InvokeFatal(...) method."
     }
 
-    $FatalErrorUi.InvokeFatal($Context, $Message, $Error, $ExitCode, $NonInteractive)
+    $FatalErrorUi.InvokeFatal($Context, $Message, $ErrorObject, $ExitCode, $NonInteractive)
 }

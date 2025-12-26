@@ -126,12 +126,11 @@ function Initialize-Logging {
             throw $ex
         }
 
-        $nonInteractive = $false
-        if ($parametersSource -is [System.Collections.IDictionary]) {
-            try { $nonInteractive = [bool]$parametersSource['NonInteractive'] } catch { $nonInteractive = $false }
+        $null = if ($parametersSource -is [System.Collections.IDictionary]) {
+            try { [bool]$parametersSource['NonInteractive'] } catch { $false }
         }
         else {
-            $nonInteractive = [bool]([ConfigMemberAccess]::GetMemberValue($parametersSource, 'NonInteractive'))
+            [bool]([ConfigMemberAccess]::GetMemberValue($parametersSource, 'NonInteractive'))
         }
 
         # Initialize script-level logging context

@@ -18,7 +18,7 @@ class FatalErrorUiService : IFatalErrorUiService {
     [void] InvokeFatal(
         [string]$Context,
         [string]$Message,
-        [object]$Error,
+        [object]$ErrorObject,
         [int]$ExitCode,
         [bool]$NonInteractive
     ) {
@@ -33,14 +33,14 @@ class FatalErrorUiService : IFatalErrorUiService {
 
         $detail = $null
         try {
-            if ($Error -is [System.Management.Automation.ErrorRecord]) {
-                $detail = $Error.Exception.Message
+            if ($ErrorObject -is [System.Management.Automation.ErrorRecord]) {
+                $detail = $ErrorObject.Exception.Message
             }
-            elseif ($Error -is [System.Exception]) {
-                $detail = $Error.Message
+            elseif ($ErrorObject -is [System.Exception]) {
+                $detail = $ErrorObject.Message
             }
-            elseif ($null -ne $Error) {
-                $detail = [string]$Error
+            elseif ($null -ne $ErrorObject) {
+                $detail = [string]$ErrorObject
             }
         }
         catch {
@@ -58,7 +58,7 @@ class FatalErrorUiService : IFatalErrorUiService {
             }
         }
         catch {
-            # Never let logging failure block fatal handling
+            Write-Verbose "[FatalErrorUiService] Logging failed: $($_.Exception.Message)"
         }
 
         try {
@@ -73,7 +73,7 @@ class FatalErrorUiService : IFatalErrorUiService {
             Write-Host ''
         }
         catch {
-            # ignore host write failures
+            Write-Verbose "[FatalErrorUiService] Host output failed: $($_.Exception.Message)"
         }
 
         if ($this.IsTestMode()) {

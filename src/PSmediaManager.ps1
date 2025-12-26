@@ -255,7 +255,7 @@ catch {
     if ($_.Exception -is [PSmmFatalException]) {
         throw
     }
-    Invoke-PSmmFatal -Context 'Config' -Message 'Failed to initialize runtime configuration' -Error $_ -ExitCode 1 -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
+    Invoke-PSmmFatal -Context 'Config' -Message 'Failed to initialize runtime configuration' -ErrorObject $_ -ExitCode 1 -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
 }
 
 #endregion ===== Runtime Configuration Initialization =====
@@ -408,7 +408,7 @@ catch {
         "Failed to bootstrap application: $_"
     }
 
-    Invoke-PSmmFatal -Context 'Bootstrap' -Message $errorMessage -Error $_ -ExitCode 1 -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
+    Invoke-PSmmFatal -Context 'Bootstrap' -Message $errorMessage -ErrorObject $_ -ExitCode 1 -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
 }
 
 #endregion ===== Application Bootstrap =====
@@ -505,7 +505,7 @@ catch {
     if ($_.Exception -is [PSmmFatalException]) {
         throw
     }
-    Invoke-PSmmFatal -Context 'ServiceHealth' -Message 'Service health verification failed' -Error $_ -ExitCode 1 -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
+    Invoke-PSmmFatal -Context 'ServiceHealth' -Message 'Service health verification failed' -ErrorObject $_ -ExitCode 1 -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
 }
 
 #endregion ===== Service Health Checks =====
@@ -560,7 +560,7 @@ catch {
         "UI error: $_"
     }
 
-    Invoke-PSmmFatal -Context 'UI' -Message $errorMessage -Error $_ -ExitCode $exitCode -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
+    Invoke-PSmmFatal -Context 'UI' -Message $errorMessage -ErrorObject $_ -ExitCode $exitCode -NonInteractive:([bool]$NonInteractive.IsPresent) -FatalErrorUi $script:ServiceContainer.Resolve('FatalErrorUi')
 }
 finally {
     #region Application Cleanup

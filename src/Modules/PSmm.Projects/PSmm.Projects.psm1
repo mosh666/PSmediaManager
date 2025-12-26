@@ -27,7 +27,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Module paths (loader-first: do not depend on DI or globals during import)
-$pathProvider = $null
 $fileSystem   = $null
 
 # Ensure the PSmm module is loaded (for IFileSystemService and other shared classes)

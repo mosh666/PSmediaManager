@@ -372,7 +372,7 @@ class IFatalErrorUiService {
     [void] InvokeFatal(
         [string]$Context,
         [string]$Message,
-        [object]$Error,
+        [object]$ErrorObject,
         [int]$ExitCode,
         [bool]$NonInteractive
     ) {

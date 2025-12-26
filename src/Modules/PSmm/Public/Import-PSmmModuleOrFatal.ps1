@@ -29,6 +29,6 @@ function Import-PSmmModuleOrFatal {
         Import-Module -Name $ManifestPath -Force -Global -ErrorAction Stop -Verbose:($VerbosePreference -eq 'Continue')
     }
     catch {
-        Invoke-PSmmFatal -Context 'ModuleImport' -Message "Failed to import module '$ModuleName'" -Error $_ -ExitCode 1 -NonInteractive:$NonInteractive -FatalErrorUi $FatalErrorUi
+        Invoke-PSmmFatal -Context 'ModuleImport' -Message "Failed to import module '$ModuleName'" -ErrorObject $_ -ExitCode 1 -NonInteractive:$NonInteractive -FatalErrorUi $FatalErrorUi
     }
 }
