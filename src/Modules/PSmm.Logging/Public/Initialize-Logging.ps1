@@ -342,6 +342,91 @@ function Initialize-Logging {
                 throw "PSLogs dependency is missing. Ensure PSLogs is installed and imported before calling Initialize-Logging. (Module loading is owned by PSmm bootstrap.)"
             }
             Write-Verbose 'DEBUG: PSLogs dependency is available'
+
+            # PSLogs uses a private helper named Format-Pattern for target formatting.
+            # Some environments/modules do not export it, and PSLogs can attempt to invoke it from a worker scope.
+            # Provide a minimal global fallback to prevent runtime logging failures.
+            if (-not (Get-Command -Name 'Format-Pattern' -ErrorAction SilentlyContinue)) {
+                function global:Format-Pattern {
+                    [CmdletBinding()]
+                    [OutputType([string])]
+                    param(
+                        [Parameter(Mandatory)]
+                        [ValidateNotNullOrEmpty()]
+                        [string]$Pattern,
+
+                        [Parameter()]
+                        [AllowNull()]
+                        [object]$Source,
+
+                        [Parameter()]
+                        [switch]$Wildcard
+                    )
+
+                    $src = $Source
+
+                    $getValue = {
+                        param([string]$key)
+
+                        if ($null -eq $src) { return $null }
+
+                        if ($src -is [System.Collections.IDictionary]) {
+                            if ($src.ContainsKey($key)) { return $src[$key] }
+                            if ($src.Contains($key)) { return $src[$key] }
+                            return $null
+                        }
+
+                        try {
+                            $p = $src.PSObject.Properties[$key]
+                            if ($null -ne $p) { return $p.Value }
+                        }
+                        catch {
+                            return $null
+                        }
+
+                        return $null
+                    }
+
+                    return ([regex]::Replace(
+                        $Pattern,
+                        '%\{(?<key>[A-Za-z0-9_]+)(?::(?<fmt>[^}]+))?\}',
+                        {
+                            param($m)
+                            $key = $m.Groups['key'].Value
+                            $fmt = $m.Groups['fmt'].Value
+
+                            if ($Wildcard) {
+                                return '*'
+                            }
+
+                            $val = $getValue.Invoke($key)
+                            if ($null -eq $val) { return '' }
+
+                            # Date/time formatting: %{timestamp:+yyyyMMdd HHmmss.fff}
+                            if ($val -is [datetime] -and $fmt -and $fmt.StartsWith('+')) {
+                                try { return $val.ToString($fmt.Substring(1)) } catch { return $val.ToString() }
+                            }
+
+                            # Alignment formatting: %{level:-9}
+                            if ($fmt -and ($fmt -match '^-?\d+$')) {
+                                try {
+                                    $align = [int]$fmt
+                                    return ('{0,' + $align + '}' -f ([string]$val))
+                                }
+                                catch {
+                                    return [string]$val
+                                }
+                            }
+
+                            if ($val -is [System.Collections.IDictionary] -or $val -is [System.Collections.IEnumerable] -and $val -isnot [string]) {
+                                try { return ($val | ConvertTo-Json -Compress -Depth 10) } catch { return [string]$val }
+                            }
+
+                            return [string]$val
+                        }
+                    ))
+                }
+            }
         }
         else {
             Write-Verbose 'DEBUG: Skipping PSLogs dependency validation per -SkipPsLogsInit flag'

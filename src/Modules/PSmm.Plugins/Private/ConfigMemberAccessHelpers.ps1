@@ -1,6 +1,104 @@
 #Requires -Version 7.5.4
 Set-StrictMode -Version Latest
 
+function Get-PSmmPluginsType {
+    [CmdletBinding()]
+    [OutputType([type])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$TypeName
+    )
+
+    return ($TypeName -as [type])
+}
+
+function Test-PSmmPluginsTryGetMemberValue {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][AllowNull()][object]$Object,
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name,
+        [Parameter(Mandatory)][ref]$Value
+    )
+
+    if ($null -eq $Object) {
+        return $false
+    }
+
+    # 1) Use PSmm's ConfigMemberAccess when available
+    $cmaType = Get-PSmmPluginsType -TypeName 'ConfigMemberAccess'
+    if ($cmaType) {
+        try {
+            return [bool]$cmaType::TryGetMemberValue($Object, $Name, [ref]$Value.Value)
+        }
+        catch {
+            Write-Verbose "Test-PSmmPluginsTryGetMemberValue: ConfigMemberAccess.TryGetMemberValue failed: $($_.Exception.Message)"
+        }
+    }
+
+    # 2) IDictionary/hashtable access
+    if ($Object -is [System.Collections.IDictionary]) {
+        try {
+            if ($Object.ContainsKey($Name)) {
+                $Value.Value = $Object[$Name]
+                return $true
+            }
+        }
+        catch {
+            Write-Verbose "Test-PSmmPluginsTryGetMemberValue: IDictionary.ContainsKey failed: $($_.Exception.Message)"
+        }
+
+        try {
+            if ($Object.Contains($Name)) {
+                $Value.Value = $Object[$Name]
+                return $true
+            }
+        }
+        catch {
+            Write-Verbose "Test-PSmmPluginsTryGetMemberValue: IDictionary.Contains failed: $($_.Exception.Message)"
+        }
+
+        return $false
+    }
+
+    # 3) Generic PSObject property access
+    try {
+        $prop = $Object.PSObject.Properties[$Name]
+        if ($null -ne $prop) {
+            $Value.Value = $prop.Value
+            return $true
+        }
+    }
+    catch {
+        Write-Verbose "Test-PSmmPluginsTryGetMemberValue: PSObject property lookup failed: $($_.Exception.Message)"
+    }
+
+    return $false
+}
+
+function Set-PSmmPluginsMemberValueFallback {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][ValidateNotNull()][object]$Object,
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name,
+        [Parameter()][AllowNull()][object]$Value
+    )
+
+    if ($Object -is [System.Collections.IDictionary]) {
+        $Object[$Name] = $Value
+        return
+    }
+
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -ne $prop) {
+        $prop.Value = $Value
+        return
+    }
+
+    $null = Add-Member -InputObject $Object -MemberType NoteProperty -Name $Name -Value $Value -Force
+}
+
 function Get-PSmmPluginsConfigMemberValue {
     [CmdletBinding()]
     param(
@@ -19,7 +117,7 @@ function Get-PSmmPluginsConfigMemberValue {
 
     try {
         $tmp = $null
-        if ([ConfigMemberAccess]::TryGetMemberValue($Object, $Name, [ref]$tmp)) {
+        if (Test-PSmmPluginsTryGetMemberValue -Object $Object -Name $Name -Value ([ref]$tmp)) {
             return $tmp
         }
     }
@@ -49,7 +147,7 @@ function Test-PSmmPluginsConfigMember {
 
     try {
         $tmp = $null
-        return [ConfigMemberAccess]::TryGetMemberValue($Object, $Name, [ref]$tmp)
+        return Test-PSmmPluginsTryGetMemberValue -Object $Object -Name $Name -Value ([ref]$tmp)
     }
     catch {
         Write-Verbose "Test-PSmmPluginsConfigMember failed for '$Name'. $($_.Exception.Message)"
@@ -80,7 +178,13 @@ function Set-PSmmPluginsConfigMemberValue {
     }
 
     try {
-        $null = [ConfigMemberAccess]::SetMemberValue($Object, $Name, $Value)
+        $cmaType = Get-PSmmPluginsType -TypeName 'ConfigMemberAccess'
+        if ($cmaType) {
+            $null = $cmaType::SetMemberValue($Object, $Name, $Value)
+            return
+        }
+
+        Set-PSmmPluginsMemberValueFallback -Object $Object -Name $Name -Value $Value
     }
     catch {
         Write-Verbose "Set-PSmmPluginsConfigMemberValue failed for '$Name'. $($_.Exception.Message)"
