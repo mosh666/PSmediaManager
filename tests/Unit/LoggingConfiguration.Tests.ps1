@@ -6,7 +6,10 @@ BeforeAll {
 
     $moduleRoot = (Resolve-Path -Path "$PSScriptRoot\..\..\src\Modules\PSmm").Path
     . (Join-Path -Path $moduleRoot -ChildPath 'Classes\Interfaces.ps1')
+    . (Join-Path -Path $moduleRoot -ChildPath 'Classes\ConfigMemberAccess.ps1')
     . (Join-Path -Path $moduleRoot -ChildPath 'Classes\Exceptions.ps1')
+    . (Join-Path -Path $moduleRoot -ChildPath 'Classes\UiModels.ps1')
+    . (Join-Path -Path $moduleRoot -ChildPath 'Classes\ProjectModels.ps1')
     . (Join-Path -Path $moduleRoot -ChildPath 'Classes\AppConfiguration.ps1')
 }
 

@@ -110,6 +110,14 @@ Alternatively, use the full path:
 # Determine the path to the main application script
 $MainScript = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath 'src') -ChildPath 'PSmediaManager.ps1'
 
+# Import core module first so PSmm functions (and any supporting script-module setup) are available.
+$psmmManifestPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath 'src') -ChildPath 'Modules\PSmm\PSmm.psd1'
+if (-not (Test-Path -LiteralPath $psmmManifestPath)) {
+    throw "PSmm module manifest not found: $psmmManifestPath"
+}
+
+Import-Module -Name $psmmManifestPath -Force -Global -ErrorAction Stop -Verbose:($VerbosePreference -eq 'Continue')
+
 # Verify the main script exists
 if (-not (Test-Path $MainScript -PathType Leaf)) {
     Write-Error "Main application script not found at: $MainScript" -ErrorAction Stop
@@ -124,19 +132,14 @@ $boundParameters = $PSCmdlet.MyInvocation.BoundParameters
 if ($boundParameters.ContainsKey('Verbose') -and $boundParameters['Verbose']) { $SplatParams['Verbose'] = $true }
 if ($boundParameters.ContainsKey('Debug') -and $boundParameters['Debug']) { $SplatParams['Debug'] = $true }
 
-# Invoke the main script directly (not in a subprocess)
-# This allows proper module resolution and $PSScriptRoot handling
-
-$invokeMain = {
-    param(
-        [Parameter(Mandatory)][string]$ScriptPath,
-        [Parameter(Mandatory)][hashtable]$Params
-    )
-
-    . $ScriptPath @Params
+Push-Location -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath 'src')
+try {
+    # Invoke the entrypoint directly (no '&', no dot-sourcing)
+    .\PSmediaManager.ps1 @SplatParams
 }
-
-$invokeMain.InvokeReturnAsIs($MainScript, $SplatParams)
+finally {
+    Pop-Location
+}
 
 # Propagate exit code
 exit $LASTEXITCODE

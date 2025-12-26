@@ -124,6 +124,80 @@ if (
     throw "PSmm.Plugins config helper commands are not available. Ensure PSmm.Plugins is imported before calling plugin functions."
 }
 
+function Get-PSmmTypeInstance {
+    [CmdletBinding()]
+    [OutputType([object])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$TypeName,
+
+        [Parameter()]
+        [AllowNull()]
+        [object[]]$ArgumentList
+    )
+
+    $type = $TypeName -as [type]
+    if (-not $type) {
+        return $null
+    }
+
+    if ($null -eq $ArgumentList) { $ArgumentList = @() }
+    return [System.Activator]::CreateInstance($type, $ArgumentList)
+}
+
+function Get-PSmmExceptionInstance {
+    [CmdletBinding()]
+    [OutputType([System.Exception])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$TypeName,
+
+        [Parameter()]
+        [AllowNull()]
+        [object[]]$ArgumentList
+    )
+
+    $instance = Get-PSmmTypeInstance -TypeName $TypeName -ArgumentList $ArgumentList
+    if ($instance -is [System.Exception]) { return $instance }
+    return $null
+}
+
+function Invoke-PSmmThrowException {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$TypeName,
+
+        [Parameter()]
+        [AllowNull()]
+        [object[]]$ArgumentList,
+
+        [Parameter()]
+        [AllowNull()]
+        [string]$FallbackMessage
+    )
+
+    try {
+        $ex = Get-PSmmExceptionInstance -TypeName $TypeName -ArgumentList $ArgumentList
+        if ($null -ne $ex) {
+            throw $ex
+        }
+    }
+    catch {
+        # If the type exists but instantiation failed, preserve the original error.
+        throw
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FallbackMessage)) {
+        $FallbackMessage = "Unable to find type [$TypeName]. Ensure the PSmm module is loaded before PSmm.Plugins runs."
+    }
+
+    throw [System.InvalidOperationException]::new($FallbackMessage)
+}
+
 function Resolve-PluginNameSafe {
     [CmdletBinding()]
     [OutputType([string])]
@@ -512,13 +586,18 @@ function New-PSmmServiceInstance {
 
         $type = $TypeName -as [type]
         if (-not $type) {
-            throw [ModuleLoadException]::new("Unable to resolve type [$TypeName] (PSmm module not loaded or type not exported)", $TypeName)
+            Invoke-PSmmThrowException -TypeName 'ModuleLoadException' -ArgumentList @(
+                "Unable to resolve type [$TypeName] (PSmm module not loaded or type not exported)",
+                $TypeName
+            ) -FallbackMessage "Unable to resolve type [$TypeName] (PSmm module not loaded or type not exported)"
         }
 
         $instance = [System.Activator]::CreateInstance($type)
 
         if ($null -eq $instance) {
-            throw [ProcessException]::new("Constructor returned null for type instantiation")
+            Invoke-PSmmThrowException -TypeName 'ProcessException' -ArgumentList @(
+                'Constructor returned null for type instantiation'
+            ) -FallbackMessage 'Constructor returned null for type instantiation'
         }
 
         return $instance
@@ -526,7 +605,15 @@ function New-PSmmServiceInstance {
     catch {
         $psmmInfo = Get-Module -Name 'PSmm'
         $psmmStatus = if ($psmmInfo) { "loaded v$($psmmInfo.Version)" } else { "not loaded" }
-        $ex = [ModuleLoadException]::new("Unable to instantiate [$TypeName]. PSmm module is $psmmStatus", $TypeName, $_.Exception)
+        $msg = "Unable to instantiate [$TypeName]. PSmm module is $psmmStatus"
+        $ex = Get-PSmmExceptionInstance -TypeName 'ModuleLoadException' -ArgumentList @(
+            $msg,
+            $TypeName,
+            $_.Exception
+        )
+        if ($null -eq $ex) {
+            $ex = [System.Exception]::new($msg, $_.Exception)
+        }
         throw $ex
     }
 }
@@ -542,12 +629,18 @@ function Resolve-PluginsConfig {
 
     $pluginsSource = Get-PSmmPluginsConfigMemberValue -Object $Config -Name 'Plugins'
     if (-not $pluginsSource) {
-        throw [ConfigurationException]::new('Plugin manifest not loaded in configuration', 'Plugins')
+        Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @(
+            'Plugin manifest not loaded in configuration',
+            'Plugins'
+        ) -FallbackMessage 'Plugin manifest not loaded in configuration'
     }
 
     $pluginsConfigType = 'PluginsConfig' -as [type]
     if (-not $pluginsConfigType) {
-        throw [ConfigurationException]::new('Unable to resolve PluginsConfig type (PSmm module not loaded)', 'Plugins')
+        Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @(
+            'Unable to resolve PluginsConfig type (PSmm module not loaded)',
+            'Plugins'
+        ) -FallbackMessage 'Unable to resolve PluginsConfig type (PSmm module not loaded)'
     }
 
     $pluginsBag = $pluginsConfigType::FromObject($pluginsSource)
@@ -597,7 +690,10 @@ function Resolve-PluginsConfig {
     $globalManifest = _UnwrapPluginsManifest -Manifest $pluginsBag.Global
 
     if (-not $globalManifest) {
-        throw [ConfigurationException]::new('Global plugin manifest is missing or invalid', $globalPath)
+        Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @(
+            'Global plugin manifest is missing or invalid',
+            $globalPath
+        ) -FallbackMessage 'Global plugin manifest is missing or invalid'
     }
 
     $projectManifest = $null
@@ -616,7 +712,7 @@ function Resolve-PluginsConfig {
             $source = $globalManifest[$groupName][$pluginKey]
             if ($null -eq $source -or -not ($source -is [System.Collections.IDictionary])) {
                 $msg = "Plugin '$pluginKey' in group '$groupName' must be an object/hashtable of settings. Global: $globalPath"
-                throw [ConfigurationException]::new($msg, $globalPath)
+                Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @($msg, $globalPath) -FallbackMessage $msg
             }
 
             $clone = @{}
@@ -626,13 +722,13 @@ function Resolve-PluginsConfig {
 
             if (-not $clone.ContainsKey('Mandatory')) {
                 $msg = "Plugin '$pluginKey' in group '$groupName' is missing required field 'Mandatory'. Global: $globalPath"
-                throw [ConfigurationException]::new($msg, $globalPath)
+                Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @($msg, $globalPath) -FallbackMessage $msg
             }
             $clone.Mandatory = [bool]$clone.Mandatory
 
             if (-not $clone.ContainsKey('Enabled')) {
                 $msg = "Plugin '$pluginKey' in group '$groupName' is missing required field 'Enabled'. Global: $globalPath"
-                throw [ConfigurationException]::new($msg, $globalPath)
+                Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @($msg, $globalPath) -FallbackMessage $msg
             }
             $clone.Enabled = [bool]$clone.Enabled
 
@@ -641,7 +737,7 @@ function Resolve-PluginsConfig {
                 try { $pluginNameCandidate = [string]$clone.Name } catch { $pluginNameCandidate = $null }
                 if ([string]::IsNullOrWhiteSpace($pluginNameCandidate)) { $pluginNameCandidate = $pluginKey }
                 $msg = "Mandatory plugin '$pluginNameCandidate' must be enabled in global manifest. Global: $globalPath"
-                throw [ConfigurationException]::new($msg, $globalPath)
+                Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @($msg, $globalPath) -FallbackMessage $msg
             }
 
             $prevGroup = $null
@@ -666,7 +762,7 @@ function Resolve-PluginsConfig {
             foreach ($pluginKey in ($projectManifest[$groupName].Keys | Sort-Object)) {
                 if (-not $resolved.ContainsKey($groupName) -or -not $resolved[$groupName].ContainsKey($pluginKey)) {
                     $msg = "Plugin '$pluginKey' in group '$groupName' is not defined in global manifest. (Global: $globalPath; Project: $projectPath)"
-                    throw [ConfigurationException]::new($msg, $projectPath)
+                    Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @($msg, $projectPath) -FallbackMessage $msg
                 }
 
                 $target = $resolved[$groupName][$pluginKey]
@@ -715,7 +811,7 @@ function Resolve-PluginsConfig {
                 if ($conflicts.Count -gt 0) {
                     $fields = ($conflicts -join ', ')
                     $msg = "Plugin '$pluginKey' has conflicting definitions for field(s): $fields. Global: $globalPath; Project: $projectPath"
-                    throw [ConfigurationException]::new($msg, $projectPath)
+                    Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @($msg, $projectPath) -FallbackMessage $msg
                 }
 
                 $projectEnabledValue = $null
@@ -726,7 +822,7 @@ function Resolve-PluginsConfig {
                         $pluginName = [string](Get-PSmmPluginsConfigMemberValue -Object $target -Name 'Name')
                         if ([string]::IsNullOrWhiteSpace($pluginName)) { $pluginName = $pluginKey }
                         $msg = "Project manifest cannot disable mandatory plugin '$pluginName'. Global: $globalPath; Project: $projectPath"
-                        throw [ConfigurationException]::new($msg, $projectPath)
+                        Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @($msg, $projectPath) -FallbackMessage $msg
                     }
 
                     $target.Enabled = $projectEnabled
@@ -826,16 +922,28 @@ function Confirm-Plugins {
     $updateMode = Get-PSmmPluginsConfigNestedValue -Object $Config -Path @('Parameters', 'Update')
 
     if ([string]::IsNullOrWhiteSpace([string]$pluginRoot)) {
-        throw [ValidationException]::new('Config.Paths.App.Plugins.Root is required for plugin confirmation', 'Paths.App.Plugins.Root')
+        Invoke-PSmmThrowException -TypeName 'ValidationException' -ArgumentList @(
+            'Config.Paths.App.Plugins.Root is required for plugin confirmation',
+            'Paths.App.Plugins.Root'
+        ) -FallbackMessage 'Config.Paths.App.Plugins.Root is required for plugin confirmation'
     }
     if ([string]::IsNullOrWhiteSpace([string]$pluginDownloads)) {
-        throw [ValidationException]::new('Config.Paths.App.Plugins.Downloads is required for plugin confirmation', 'Paths.App.Plugins.Downloads')
+        Invoke-PSmmThrowException -TypeName 'ValidationException' -ArgumentList @(
+            'Config.Paths.App.Plugins.Downloads is required for plugin confirmation',
+            'Paths.App.Plugins.Downloads'
+        ) -FallbackMessage 'Config.Paths.App.Plugins.Downloads is required for plugin confirmation'
     }
     if ([string]::IsNullOrWhiteSpace([string]$pluginTemp)) {
-        throw [ValidationException]::new('Config.Paths.App.Plugins.Temp is required for plugin confirmation', 'Paths.App.Plugins.Temp')
+        Invoke-PSmmThrowException -TypeName 'ValidationException' -ArgumentList @(
+            'Config.Paths.App.Plugins.Temp is required for plugin confirmation',
+            'Paths.App.Plugins.Temp'
+        ) -FallbackMessage 'Config.Paths.App.Plugins.Temp is required for plugin confirmation'
     }
     if ([string]::IsNullOrWhiteSpace([string]$vaultPath)) {
-        throw [ValidationException]::new('Config.Paths.App.Vault is required for plugin confirmation', 'Paths.App.Vault')
+        Invoke-PSmmThrowException -TypeName 'ValidationException' -ArgumentList @(
+            'Config.Paths.App.Vault is required for plugin confirmation',
+            'Paths.App.Vault'
+        ) -FallbackMessage 'Config.Paths.App.Vault is required for plugin confirmation'
     }
 
     # Adapt typed Config into internal hashtable for helper reuse
@@ -1074,7 +1182,10 @@ function Invoke-PluginConfirmation {
     }
 
     if (-not $hasPaths) {
-        throw [ValidationException]::new('Invoke-PluginConfirmation requires a configuration object exposing Paths', 'Config')
+        Invoke-PSmmThrowException -TypeName 'ValidationException' -ArgumentList @(
+            'Invoke-PluginConfirmation requires a configuration object exposing Paths',
+            'Config'
+        ) -FallbackMessage 'Invoke-PluginConfirmation requires a configuration object exposing Paths'
     }
 
     $pluginName = Resolve-PluginNameSafe -PluginOrConfig $Plugin
@@ -1635,18 +1746,33 @@ function Invoke-Installer {
                 Write-Verbose 'Launching MSI installer...'
                 $result = $Process.StartProcess('msiexec.exe', @('/i', "`"$InstallerPath`""))
                 if (-not $result.Success) {
-                    $ex = [ProcessException]::new("MSI installer failed", "msiexec.exe")
-                    $ex.SetExitCode($result.ExitCode)
-                    throw $ex
+                    $ex = Get-PSmmExceptionInstance -TypeName 'ProcessException' -ArgumentList @(
+                        'MSI installer failed',
+                        'msiexec.exe'
+                    )
+                    if ($null -ne $ex -and ($ex | Get-Member -Name 'SetExitCode' -MemberType Method -ErrorAction SilentlyContinue)) {
+                        $ex.SetExitCode($result.ExitCode)
+                        throw $ex
+                    }
+
+                    throw [System.Exception]::new("MSI installer failed (ExitCode: $($result.ExitCode))")
                 }
             }
             '.exe' {
                 Write-Verbose 'Launching EXE installer...'
                 $result = $Process.StartProcess($InstallerPath, @())
                 if (-not $result.Success) {
-                    $ex = [ProcessException]::new("EXE installer failed", [System.IO.Path]::GetFileNameWithoutExtension($InstallerPath))
-                    $ex.SetExitCode($result.ExitCode)
-                    throw $ex
+                    $exeName = [System.IO.Path]::GetFileNameWithoutExtension($InstallerPath)
+                    $ex = Get-PSmmExceptionInstance -TypeName 'ProcessException' -ArgumentList @(
+                        'EXE installer failed',
+                        $exeName
+                    )
+                    if ($null -ne $ex -and ($ex | Get-Member -Name 'SetExitCode' -MemberType Method -ErrorAction SilentlyContinue)) {
+                        $ex.SetExitCode($result.ExitCode)
+                        throw $ex
+                    }
+
+                    throw [System.Exception]::new("EXE installer failed (ExitCode: $($result.ExitCode))")
                 }
             }
             '.zip' {
@@ -1679,17 +1805,33 @@ function Invoke-Installer {
                 # First, test archive integrity for clearer diagnostics (let PowerShell handle quoting)
                 $testResult = $Process.InvokeCommand($sevenZipCmd, @('t', $InstallerPath))
                 if (-not $testResult.Success) {
-                    $ex = [ProcessException]::new("7z archive test failed", "7z", $_.Exception)
-                    $ex.SetExitCode($testResult.ExitCode)
-                    throw $ex
+                    $ex = Get-PSmmExceptionInstance -TypeName 'ProcessException' -ArgumentList @(
+                        '7z archive test failed',
+                        '7z',
+                        $_.Exception
+                    )
+                    if ($null -ne $ex -and ($ex | Get-Member -Name 'SetExitCode' -MemberType Method -ErrorAction SilentlyContinue)) {
+                        $ex.SetExitCode($testResult.ExitCode)
+                        throw $ex
+                    }
+
+                    throw [System.Exception]::new("7z archive test failed (ExitCode: $($testResult.ExitCode))")
                 }
 
                 # Extract archive
                 $result = $Process.InvokeCommand($sevenZipCmd, @('x', $InstallerPath, "-o$extractPath", '-y'))
                 if (-not $result.Success) {
-                    $ex = [ProcessException]::new("7z extraction failed", "7z", $_.Exception)
-                    $ex.SetExitCode($result.ExitCode)
-                    throw $ex
+                    $ex = Get-PSmmExceptionInstance -TypeName 'ProcessException' -ArgumentList @(
+                        '7z extraction failed',
+                        '7z',
+                        $_.Exception
+                    )
+                    if ($null -ne $ex -and ($ex | Get-Member -Name 'SetExitCode' -MemberType Method -ErrorAction SilentlyContinue)) {
+                        $ex.SetExitCode($result.ExitCode)
+                        throw $ex
+                    }
+
+                    throw [System.Exception]::new("7z extraction failed (ExitCode: $($result.ExitCode))")
                 }
             }
             default {

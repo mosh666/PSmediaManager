@@ -55,7 +55,8 @@ function Initialize-Logging {
 
         if (
             (-not (Get-Command -Name 'Get-PSmmLoggingConfigMemberValue' -ErrorAction SilentlyContinue)) -or
-            (-not (Get-Command -Name 'Test-PSmmLoggingConfigMember' -ErrorAction SilentlyContinue))
+            (-not (Get-Command -Name 'Test-PSmmLoggingConfigMember' -ErrorAction SilentlyContinue)) -or
+            (-not (Get-Command -Name 'Get-PSmmLoggingExceptionInstance' -ErrorAction SilentlyContinue))
         ) {
             try {
                 $helpersPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Private\ConfigMemberAccessHelpers.ps1'
@@ -73,7 +74,7 @@ function Initialize-Logging {
 
         if ($null -eq $PathProvider -and $null -ne $pathProviderType -and $null -ne $iPathProviderType) {
             try {
-                $pathsCandidate = [ConfigMemberAccess]::GetMemberValue($Config, 'Paths')
+                $pathsCandidate = Get-PSmmLoggingConfigMemberValue -Object $Config -Name 'Paths'
                 if ($null -ne $pathsCandidate -and $pathsCandidate -is $iPathProviderType) {
                     $PathProvider = $pathProviderType::new($pathsCandidate)
                 }
@@ -107,8 +108,10 @@ function Initialize-Logging {
         $loggingSource = $null
         $hasParameters = $false
         $hasLogging = $false
-        try { $hasParameters = [ConfigMemberAccess]::TryGetMemberValue($Config, 'Parameters', [ref]$parametersSource) } catch { $hasParameters = $false }
-        try { $hasLogging = [ConfigMemberAccess]::TryGetMemberValue($Config, 'Logging', [ref]$loggingSource) } catch { $hasLogging = $false }
+        try { $parametersSource = Get-PSmmLoggingConfigMemberValue -Object $Config -Name 'Parameters' } catch { $parametersSource = $null }
+        try { $loggingSource = Get-PSmmLoggingConfigMemberValue -Object $Config -Name 'Logging' } catch { $loggingSource = $null }
+        $hasParameters = $null -ne $parametersSource
+        $hasLogging = $null -ne $loggingSource
 
         if (-not $hasParameters -or -not $hasLogging) {
             $available = @(
@@ -117,12 +120,16 @@ function Initialize-Logging {
                     Select-Object -ExpandProperty Name
             )
             $availableText = if ($available) { ($available -join ', ') } else { '<none>' }
-            $ex = [ConfigurationException]::new("Invalid configuration object: missing 'Parameters' or 'Logging' members. Available members: $availableText")
+            $msg = "Invalid configuration object: missing 'Parameters' or 'Logging' members. Available members: $availableText"
+            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
 
         if ($null -eq $parametersSource) {
-            $ex = [ConfigurationException]::new("Invalid configuration object: 'Parameters' is null")
+            $msg = "Invalid configuration object: 'Parameters' is null"
+            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
 
@@ -130,14 +137,16 @@ function Initialize-Logging {
             try { [bool]$parametersSource['NonInteractive'] } catch { $false }
         }
         else {
-            [bool]([ConfigMemberAccess]::GetMemberValue($parametersSource, 'NonInteractive'))
+            [bool](Get-PSmmLoggingConfigMemberValue -Object $parametersSource -Name 'NonInteractive' -Default $false)
         }
 
         # Initialize script-level logging context
         $script:Context = @{ Context = $null }
 
         if ($null -eq $loggingSource) {
-            $ex = [ConfigurationException]::new("Logging configuration is null. Run.App.Logging was not properly initialized.")
+            $msg = "Logging configuration is null. Run.App.Logging was not properly initialized."
+            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
 
@@ -149,7 +158,9 @@ function Initialize-Logging {
         }
         elseif ($loggingSource -is [string] -or $loggingSource.GetType().IsValueType) {
             $sourceTypeName = $loggingSource.GetType().FullName
-            $ex = [ConfigurationException]::new("Logging configuration is not a hashtable. Type: $sourceTypeName")
+            $msg = "Logging configuration is not a hashtable. Type: $sourceTypeName"
+            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
         else {
@@ -195,7 +206,9 @@ function Initialize-Logging {
 
         if ($null -eq $loggingSettings) {
             $sourceTypeName = $loggingSource.GetType().FullName
-            $ex = [ConfigurationException]::new("Failed to convert logging configuration to hashtable. Source type: $sourceTypeName")
+            $msg = "Failed to convert logging configuration to hashtable. Source type: $sourceTypeName"
+            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
 
@@ -211,7 +224,9 @@ function Initialize-Logging {
             Write-Verbose 'DEBUG: Assigned logging settings to script:Logging'
         }
         catch {
-                $ex = [ConfigurationException]::new("Failed assigning logging settings to script:Logging: $_")
+                $msg = "Failed assigning logging settings to script:Logging: $_"
+                $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+                if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
 
@@ -236,13 +251,17 @@ function Initialize-Logging {
         }
 
         if ($null -eq $script:Logging) {
-            $ex = [ConfigurationException]::new("Logging configuration could not be initialized - settings are null after processing.")
+            $msg = "Logging configuration could not be initialized - settings are null after processing."
+            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
 
             if ($script:Logging -isnot [System.Collections.IDictionary]) {
                 $scriptLoggingType = $script:Logging.GetType().FullName
-                $ex = [ConfigurationException]::new("Logging configuration is not a hashtable after conversion. Type: $scriptLoggingType")
+                $msg = "Logging configuration is not a hashtable after conversion. Type: $scriptLoggingType"
+                $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+                if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
                 throw $ex
             }
 
@@ -264,12 +283,16 @@ function Initialize-Logging {
         if (-not $containsPath) {
             $keysCount = @($script:Logging.Keys).Count
             $loggingKeys = if ($script:Logging.Keys -and $keysCount -gt 0) { $script:Logging.Keys -join ', ' } else { '(no keys)' }
-            $ex = [ConfigurationException]::new("Logging configuration is missing required 'Path' property. Available keys: $loggingKeys.")
+            $msg = "Logging configuration is missing required 'Path' property. Available keys: $loggingKeys."
+            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
 
         if ([string]::IsNullOrWhiteSpace($script:Logging.Path)) {
-            $ex = [ConfigurationException]::new("Logging Path property is empty or whitespace. Value: '$($script:Logging.Path)'")
+            $msg = "Logging Path property is empty or whitespace. Value: '$($script:Logging.Path)'"
+            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
 

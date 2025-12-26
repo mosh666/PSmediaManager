@@ -133,7 +133,45 @@ try {
         throw "PSmm module manifest not found: $psmmManifestPath"
     }
 
-    Import-Module -Name $psmmManifestPath -Force -Global -ErrorAction Stop -Verbose:($VerbosePreference -eq 'Continue')
+    if (-not (Get-Module -Name 'PSmm' -ErrorAction SilentlyContinue)) {
+        Import-Module -Name $psmmManifestPath -Force -Global -ErrorAction Stop -Verbose:($VerbosePreference -eq 'Continue')
+    }
+
+    # Ensure PSmm classes are available in this script scope.
+    # Script-module classes are not reliably usable from other scripts via Import-Module alone.
+    $classesAvailable = $true
+    try { $null = [ServiceContainer] } catch { $classesAvailable = $false }
+    if (-not $classesAvailable) {
+        $psmmClassesPath = Join-Path -Path (Join-Path -Path $modulesPath -ChildPath 'PSmm') -ChildPath 'Classes'
+        $classFiles = @(
+            'Interfaces.ps1',
+            'ConfigMemberAccess.ps1',
+            'Exceptions.ps1',
+            'UiModels.ps1',
+            'ProjectModels.ps1',
+            'Services\FileSystemService.ps1',
+            'Services\EnvironmentService.ps1',
+            'Services\PathProvider.ps1',
+            'Services\ProcessService.ps1',
+            'Services\HttpService.ps1',
+            'Services\CimService.ps1',
+            'Services\GitService.ps1',
+            'Services\CryptoService.ps1',
+            'Services\StorageService.ps1',
+            'Services\FatalErrorUiService.ps1',
+            'AppConfiguration.ps1',
+            'ConfigValidator.ps1',
+            'AppConfigurationBuilder.ps1'
+        )
+
+        foreach ($classFile in $classFiles) {
+            $classPath = Join-Path -Path $psmmClassesPath -ChildPath $classFile
+            if (-not (Test-Path -LiteralPath $classPath)) {
+                throw "Required PSmm class file not found: $classPath"
+            }
+            . $classPath
+        }
+    }
 
     # 2) Create DI container and register core services (service-first runtime)
     $script:ServiceContainer = [ServiceContainer]::new()
