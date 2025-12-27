@@ -124,25 +124,62 @@ function New-UiColumn {
     )
 
     $uiColumnType = 'UiColumn' -as [type]
-    if (-not $uiColumnType) {
-        throw 'Unable to resolve required type [UiColumn]. Ensure PSmm is loaded before PSmm.UI.'
+    if ($uiColumnType) {
+        $col = $uiColumnType::new()
+        $col.Text = $Text
+        $col.Width = $Width
+        $col.Alignment = $Alignment
+        $col.Padding = $Padding
+        $col.TextColor = $TextColor
+        $col.BackgroundColor = $BackgroundColor
+        $col.Bold = $Bold.IsPresent
+        $col.Italic = $Italic.IsPresent
+        $col.Underline = $Underline.IsPresent
+        $col.Dim = $Dim.IsPresent
+        $col.Blink = $Blink.IsPresent
+        $col.Strikethrough = $Strikethrough.IsPresent
+        $col.MinWidth = $MinWidth
+        $col.MaxWidth = $MaxWidth
+        return $col
     }
 
-    $col = $uiColumnType::new()
-    $col.Text = $Text
-    $col.Width = $Width
-    $col.Alignment = $Alignment
-    $col.Padding = $Padding
-    $col.TextColor = $TextColor
-    $col.BackgroundColor = $BackgroundColor
-    $col.Bold = $Bold.IsPresent
-    $col.Italic = $Italic.IsPresent
-    $col.Underline = $Underline.IsPresent
-    $col.Dim = $Dim.IsPresent
-    $col.Blink = $Blink.IsPresent
-    $col.Strikethrough = $Strikethrough.IsPresent
-    $col.MinWidth = $MinWidth
-    $col.MaxWidth = $MaxWidth
+    $col = [pscustomobject]@{
+        Text           = $Text
+        Width          = $Width
+        Alignment      = $Alignment
+        Padding        = $Padding
+        TextColor      = $TextColor
+        BackgroundColor = $BackgroundColor
+        Bold           = $Bold.IsPresent
+        Italic         = $Italic.IsPresent
+        Underline      = $Underline.IsPresent
+        Dim            = $Dim.IsPresent
+        Blink          = $Blink.IsPresent
+        Strikethrough  = $Strikethrough.IsPresent
+        MinWidth       = $MinWidth
+        MaxWidth       = $MaxWidth
+    }
+
+    $col.PSObject.TypeNames.Insert(0, 'UiColumn')
+    $col | Add-Member -MemberType ScriptMethod -Name ToHashtable -Force -Value {
+        return @{
+            Text            = $this.Text
+            Width           = $this.Width
+            Alignment       = $this.Alignment
+            Padding         = $this.Padding
+            TextColor       = $this.TextColor
+            BackgroundColor = $this.BackgroundColor
+            Bold            = $this.Bold
+            Italic          = $this.Italic
+            Underline       = $this.Underline
+            Dim             = $this.Dim
+            Blink           = $this.Blink
+            Strikethrough   = $this.Strikethrough
+            MinWidth        = $this.MinWidth
+            MaxWidth        = $this.MaxWidth
+        }
+    }
+
     return $col
 }
 
@@ -162,11 +199,25 @@ function New-UiKeyValueItem {
     )
 
     $uiKeyValueItemType = 'UiKeyValueItem' -as [type]
-    if (-not $uiKeyValueItemType) {
-        throw 'Unable to resolve required type [UiKeyValueItem]. Ensure PSmm is loaded before PSmm.UI.'
+    if ($uiKeyValueItemType) {
+        return $uiKeyValueItemType::new($Key, $Value, $Color)
     }
 
-    return $uiKeyValueItemType::new($Key, $Value, $Color)
+    $item = [pscustomobject]@{
+        Key   = $Key
+        Value = $Value
+        Color = $Color
+    }
+    $item.PSObject.TypeNames.Insert(0, 'UiKeyValueItem')
+    $item | Add-Member -MemberType ScriptMethod -Name ToHashtable -Force -Value {
+        return @{
+            Key   = $this.Key
+            Value = $this.Value
+            Color = $this.Color
+        }
+    }
+
+    return $item
 }
 
 function Format-UI {

@@ -111,12 +111,7 @@ function Show-Header {
     # Display error messages if enabled
     if ($ShowStorageErrors) {
         $internalErrorsSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'InternalErrorMessages'
-        $uiErrorCatalogType = 'UiErrorCatalog' -as [type]
-        if (-not $uiErrorCatalogType) {
-            throw 'Unable to resolve required type [UiErrorCatalog]. Ensure PSmm is loaded before PSmm.UI.'
-        }
-
-        $errorCatalog = $uiErrorCatalogType::FromObject($internalErrorsSource)
+        $errorCatalog = ConvertTo-PSmmUiErrorCatalog -Object $internalErrorsSource
         if (-not [string]::IsNullOrWhiteSpace($StorageGroupFilter)) {
             $errorCatalog = $errorCatalog.FilterStorageGroup($StorageGroupFilter)
         }
@@ -137,8 +132,8 @@ function Show-Header {
     $projects = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Projects'
     $currentProjectSource = Get-PSmmUiConfigMemberValue -Object $projects -Name 'Current'
     if ($ShowProject -and $null -ne $currentProjectSource) {
-        $currentProject = [ProjectCurrentConfig]::FromObject($currentProjectSource)
-        if ([string]::IsNullOrWhiteSpace($currentProject.Name)) {
+        $currentProject = ConvertTo-PSmmUiProjectCurrentConfig -Object $currentProjectSource
+        if ($null -eq $currentProject -or [string]::IsNullOrWhiteSpace($currentProject.Name)) {
             return
         }
         Write-PSmmHost ''
@@ -373,12 +368,7 @@ function Show-MenuMain {
         $Projects = Get-PSmmProjects -Config $Config -FileSystem $FileSystem
     }
 
-    $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
-    if (-not $uiProjectsIndexType) {
-        throw 'Unable to resolve required type [UiProjectsIndex]. Ensure PSmm is loaded before PSmm.UI.'
-    }
-
-    $projectsIndex = $uiProjectsIndexType::FromObject($Projects)
+    $projectsIndex = ConvertTo-PSmmUiProjectsIndex -Object $Projects
 
     if ($isDebugOrDev) {
         $masterTotal = ($projectsIndex.Master.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
@@ -424,7 +414,7 @@ function Show-MenuMain {
         }
 
         # Collect all drives (Master and Backup) for this storage group
-        $AllDrivesInGroup = [System.Collections.Generic.Dictionary[string, UiDriveProjectsInfo]]::new()
+        $AllDrivesInGroup = [System.Collections.Generic.Dictionary[string, object]]::new()
 
         # Add Master drives
         if ($null -ne $projectsIndex.Master -and $projectsIndex.Master.Count -gt 0) {
@@ -434,7 +424,7 @@ function Show-MenuMain {
                     $firstProject = $driveProjects | Select-Object -First 1
                     if ($firstProject -and (Get-Member -InputObject $firstProject -Name 'StorageGroup' -MemberType Properties)) {
                         if ($firstProject.StorageGroup -eq $storageGroupKey) {
-                            $AllDrivesInGroup[$driveLabel] = [UiDriveProjectsInfo]::new([object[]]$driveProjects, 'Master Drive', '', $null, $false)
+                            $AllDrivesInGroup[$driveLabel] = New-PSmmUiDriveProjectsInfo -Projects ([object[]]$driveProjects) -DriveType 'Master Drive' -Prefix '' -BackupNumber $null -IsFallback $false
                         }
                     }
                 }
@@ -451,7 +441,7 @@ function Show-MenuMain {
                         if ($firstProject.StorageGroup -eq $storageGroupKey) {
                             # Use BackupId from the project object instead of a counter
                             $backupId = if ($firstProject.BackupId) { [int]$firstProject.BackupId } else { 1 }
-                            $AllDrivesInGroup[$driveLabel] = [UiDriveProjectsInfo]::new([object[]]$driveProjects, 'Backup Drive', ("B$backupId"), [Nullable[int]]$backupId, $false)
+                            $AllDrivesInGroup[$driveLabel] = New-PSmmUiDriveProjectsInfo -Projects ([object[]]$driveProjects) -DriveType 'Backup Drive' -Prefix ("B$backupId") -BackupNumber ([Nullable[int]]$backupId) -IsFallback $false
                         }
                     }
                 }
@@ -849,7 +839,7 @@ function Show-Menu_Project {
     $currentProjectSource = Get-PSmmUiConfigMemberValue -Object $projects -Name 'Current'
 
     if ($null -ne $currentProjectSource) {
-        $currentProject = [ProjectCurrentConfig]::FromObject($currentProjectSource)
+        $currentProject = ConvertTo-PSmmUiProjectCurrentConfig -Object $currentProjectSource
 
         if (-not [string]::IsNullOrWhiteSpace($currentProject.Databases)) {
             $allMariaDB = $Process.GetProcess('mariadbd')

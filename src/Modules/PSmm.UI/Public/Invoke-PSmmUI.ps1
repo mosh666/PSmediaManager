@@ -122,6 +122,21 @@ function Invoke-PSmmUI {
 
         # Track selected storage group (default to Storage Group 1)
         $SelectedStorageGroup = '1'
+        try {
+            $storageSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Storage'
+            $storageKeys = @()
+            try { $storageKeys = @($storageSource.Keys) } catch { $storageKeys = @() }
+
+            if ($storageKeys.Count -eq 0) {
+                $SelectedStorageGroup = ''
+            }
+            elseif (-not ($storageKeys -contains '1')) {
+                $SelectedStorageGroup = [string]($storageKeys | Select-Object -First 1)
+            }
+        }
+        catch {
+            # Leave default as-is
+        }
 
         do {
             # Display main menu
@@ -155,22 +170,24 @@ function Invoke-PSmmUI {
                 $storageGroupCount = 0
                 try { $storageGroupCount = @($storageSource.Keys).Count } catch { $storageGroupCount = 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Loading projects. Storage groups: $storageGroupCount" -File
-                $uiProjectsIndexType = 'UiProjectsIndex' -as [type]
-                if (-not $uiProjectsIndexType) {
-                    $fatal.InvokeFatal('UI', 'Unable to resolve required type [UiProjectsIndex]. Ensure PSmm is loaded before PSmm.UI.', $null, 1, $false)
-                }
-
-                $loopProjects = $uiProjectsIndexType::FromObject((Get-PSmmProjects -Config $Config -FileSystem $FileSystem))
+                $loopProjects = ConvertTo-PSmmUiProjectsIndex -Object (Get-PSmmProjects -Config $Config -FileSystem $FileSystem)
                 $masterCount = if ($null -ne $loopProjects.Master) { $loopProjects.Master.Count } else { 0 }
                 $backupCount = if ($null -ne $loopProjects.Backup) { $loopProjects.Backup.Count } else { 0 }
                 Write-PSmmLog -Level DEBUG -Context 'Invoke-PSmmUI' -Message "Projects loaded. Master drives: $masterCount, Backup drives: $backupCount" -File
             }
             catch {
-                if ($_.Exception -is [PSmmFatalException]) {
-                    throw
+                # Avoid hard type literals (PSmmFatalException may not be visible here)
+                $t = $null
+                try { $t = $_.Exception.GetType() } catch { $t = $null }
+                while ($null -ne $t) {
+                    if ($t.Name -eq 'PSmmFatalException') {
+                        throw
+                    }
+                    $t = $t.BaseType
                 }
-                Write-PSmmLog -Level ERROR -Context 'Invoke-PSmmUI' -Message "Project retrieval failed: $_" -ErrorRecord $_ -File
-                $fatal.InvokeFatal('UI', 'Project retrieval failed and UI cannot continue.', $_, 1, $false)
+
+                Write-PSmmLog -Level ERROR -Context 'Invoke-PSmmUI' -Message "Project retrieval failed (continuing with empty project list): $_" -ErrorRecord $_ -File
+                $loopProjects = ConvertTo-PSmmUiProjectsIndex -Object $null
             }
 
             try {
@@ -603,7 +620,7 @@ function Invoke-ProjectMenu {
         $projectsSource = Get-PSmmUiConfigMemberValue -Object $Config -Name 'Projects'
         $currentSource = Get-PSmmUiConfigMemberValue -Object $projectsSource -Name 'Current'
         if ($null -ne $currentSource) {
-            $currentProject = [ProjectCurrentConfig]::FromObject($currentSource)
+            $currentProject = ConvertTo-PSmmUiProjectCurrentConfig -Object $currentSource
         }
 
         if ($null -ne $currentProject -and -not [string]::IsNullOrWhiteSpace($currentProject.Databases)) {

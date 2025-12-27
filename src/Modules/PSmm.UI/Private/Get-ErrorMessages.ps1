@@ -67,6 +67,15 @@ function Get-ErrorMessages {
             return [string[]]$msgs
         }
 
+        # Fallback: catalog-like object with GetAllMessages() method
+        if ($ErrorHashtable -and $ErrorHashtable.PSObject -and $ErrorHashtable.PSObject.Methods -and $ErrorHashtable.PSObject.Methods.Match('GetAllMessages').Count -gt 0) {
+            $msgs = $ErrorHashtable.GetAllMessages()
+            if ($null -eq $msgs) {
+                return [string[]]@()
+            }
+            return [string[]]$msgs
+        }
+
         # Recursively collect error messages (legacy hashtable shape)
         if ($ErrorHashtable -is [hashtable]) {
             if ($ErrorHashtable.Count -eq 0) {
