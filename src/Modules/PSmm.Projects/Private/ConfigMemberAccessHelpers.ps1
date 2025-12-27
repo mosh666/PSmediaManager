@@ -19,8 +19,19 @@ function Get-PSmmProjectsConfigMemberValue {
 
     try {
         $tmp = $null
-        if ([ConfigMemberAccess]::TryGetMemberValue($Object, $Name, [ref]$tmp)) {
-            return $tmp
+        $cmaType = ('ConfigMemberAccess' -as [type])
+        if ($cmaType) {
+            if ($cmaType::TryGetMemberValue($Object, $Name, [ref]$tmp)) {
+                return $tmp
+            }
+        }
+        elseif ($Object -is [System.Collections.IDictionary]) {
+            if ($Object.Contains($Name)) { return $Object[$Name] }
+            if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+        }
+        else {
+            $prop = $Object.PSObject.Properties[$Name]
+            if ($prop) { return $prop.Value }
         }
     }
     catch {
@@ -49,7 +60,16 @@ function Test-PSmmProjectsConfigMember {
 
     try {
         $tmp = $null
-        return [ConfigMemberAccess]::TryGetMemberValue($Object, $Name, [ref]$tmp)
+        $cmaType = ('ConfigMemberAccess' -as [type])
+        if ($cmaType) {
+            return $cmaType::TryGetMemberValue($Object, $Name, [ref]$tmp)
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+            return ($Object.Contains($Name) -or $Object.ContainsKey($Name))
+        }
+
+        return ($null -ne $Object.PSObject.Properties[$Name])
     }
     catch {
         Write-Verbose "[Get-PSmmProjects] TestMember failed for '$Name': $_"
@@ -98,7 +118,22 @@ function Set-PSmmProjectsConfigMemberValue {
     }
 
     try {
-        [void][ConfigMemberAccess]::SetMemberValue($Object, $Name, $Value)
+        $cmaType = ('ConfigMemberAccess' -as [type])
+        if ($cmaType) {
+            [void]$cmaType::SetMemberValue($Object, $Name, $Value)
+        }
+        elseif ($Object -is [System.Collections.IDictionary]) {
+            $Object[$Name] = $Value
+        }
+        else {
+            $prop = $Object.PSObject.Properties[$Name]
+            if ($prop) {
+                $prop.Value = $Value
+            }
+            else {
+                $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+            }
+        }
     }
     catch {
         Write-Verbose "[Get-PSmmProjects] SetMemberValue failed for '$Name': $_"

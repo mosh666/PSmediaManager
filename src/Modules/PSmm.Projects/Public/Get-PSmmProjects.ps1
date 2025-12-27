@@ -272,10 +272,10 @@ function Get-PSmmProjects {
         }
 
         if (-not $hasProjects -or $null -eq $Config['Projects']) {
-            $Config['Projects'] = [ProjectsConfig]::FromObject($null)
+            $Config['Projects'] = ConvertTo-PSmmProjectsConfig -Object $null
         }
         else {
-            $Config['Projects'] = [ProjectsConfig]::FromObject($Config['Projects'])
+            $Config['Projects'] = ConvertTo-PSmmProjectsConfig -Object $Config['Projects']
         }
 
         $hasStorage = $false
@@ -306,12 +306,22 @@ function Get-PSmmProjects {
     # Ensure Projects.Registry exists on Config
     $projectsConfig = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects'
     if ($null -eq $projectsConfig) {
-        $projectsConfig = [ProjectsConfig]::FromObject($null)
+        $projectsConfig = ConvertTo-PSmmProjectsConfig -Object $null
         Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
     }
-    elseif ($projectsConfig -isnot [ProjectsConfig]) {
-        $projectsConfig = [ProjectsConfig]::FromObject($projectsConfig)
-        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+    else {
+        $projectsConfigType = Resolve-PSmmProjectsType -Name 'ProjectsConfig'
+        if ($projectsConfigType) {
+            if ($projectsConfig -isnot $projectsConfigType) {
+                $projectsConfig = ConvertTo-PSmmProjectsConfig -Object $projectsConfig
+                Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+            }
+        }
+        else {
+            # Normalize to a consistent fallback shape when the typed model isn't available.
+            $projectsConfig = ConvertTo-PSmmProjectsConfig -Object $projectsConfig
+            Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        }
     }
 
     $registry = Get-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry'
@@ -952,7 +962,7 @@ function Get-ProjectsFromDrive {
                 $null = $FileSystem.NewItem($projectsPath, 'Directory')
             }
             else {
-                throw [ValidationException]::new("FileSystem service is required to create Projects folder", "FileSystem service", $projectsPath)
+                throw (New-PSmmProjectsValidationException -Message 'FileSystem service is required to create Projects folder' -Problem 'FileSystem service' -Path $projectsPath)
             }
 
             if (Get-Command Write-PSmmLog -ErrorAction SilentlyContinue) {
@@ -1137,12 +1147,7 @@ function Initialize-GlobalProject {
         # Define Assets folder path using AppConfiguration (or legacy shapes)
         $projectsConfig = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects'
         $pathsSource = if ($null -ne $projectsConfig) { Get-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Paths' } else { $null }
-        $projectsPaths = if ($null -ne $pathsSource) {
-            [ProjectsPathsConfig]::FromObject($pathsSource)
-        }
-        else {
-            [ProjectsPathsConfig]::new()
-        }
+        $projectsPaths = ConvertTo-PSmmProjectsPathsConfig -Object $pathsSource
 
         if (-not [string]::IsNullOrWhiteSpace($projectsPaths.Assets)) {
             $AssetsRelativePath = $projectsPaths.Assets
@@ -1171,7 +1176,7 @@ function Initialize-GlobalProject {
                 $null = $FileSystem.NewItem($AssetsFullPath, 'Directory')
             }
             catch {
-                throw [ValidationException]::new("FileSystem service is required to create Assets folder", "FileSystem service", $AssetsFullPath)
+                throw (New-PSmmProjectsValidationException -Message 'FileSystem service is required to create Assets folder' -Problem 'FileSystem service' -Path $AssetsFullPath)
             }
 
             if (Get-Command -Name Write-PSmmLog -ErrorAction SilentlyContinue) {

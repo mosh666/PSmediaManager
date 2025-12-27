@@ -57,10 +57,10 @@ function Clear-PSmmProjectRegistry {
         }
 
         if (-not $hasProjects -or $null -eq $Config['Projects']) {
-            $Config['Projects'] = [ProjectsConfig]::FromObject($null)
+            $Config['Projects'] = ConvertTo-PSmmProjectsConfig -Object $null
         }
         else {
-            $Config['Projects'] = [ProjectsConfig]::FromObject($Config['Projects'])
+            $Config['Projects'] = ConvertTo-PSmmProjectsConfig -Object $Config['Projects']
         }
         $Config = [pscustomobject]$Config
     }
@@ -72,9 +72,14 @@ function Clear-PSmmProjectRegistry {
             return
         }
 
-        if ($projectsConfig -isnot [ProjectsConfig]) {
-            $projectsConfig = [ProjectsConfig]::FromObject($projectsConfig)
-            Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        $projectsConfigType = Resolve-PSmmProjectsType -Name 'ProjectsConfig'
+        if ($projectsConfigType) {
+            if ($projectsConfig -isnot $projectsConfigType) {
+                $projectsConfig = ConvertTo-PSmmProjectsConfig -Object $projectsConfig
+            }
+        }
+        else {
+            $projectsConfig = ConvertTo-PSmmProjectsConfig -Object $projectsConfig
         }
 
         Write-Verbose 'Clearing project registry cache'

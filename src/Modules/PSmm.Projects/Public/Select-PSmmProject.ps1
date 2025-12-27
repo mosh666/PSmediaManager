@@ -124,7 +124,8 @@ function Select-PSmmProject {
         throw 'PathProvider is required for Select-PSmmProject (pass DI service).'
     }
     if ($null -ne $pathProviderType -and $null -ne $iPathProviderType -and $PathProvider -is $iPathProviderType -and -not ($PathProvider -is $pathProviderType)) {
-        $PathProvider = $pathProviderType::new([IPathProvider]$PathProvider)
+        # Avoid hard type literals (IPathProvider) because PSmm classes may not be visible from this module.
+        $PathProvider = $pathProviderType::new($PathProvider)
     }
 
     # Support legacy dictionary-shaped configs by normalizing key members into typed models
@@ -148,10 +149,10 @@ function Select-PSmmProject {
         }
 
         if (-not $hasProjects -or $null -eq $configMap['Projects']) {
-            $configMap['Projects'] = [ProjectsConfig]::FromObject($null)
+            $configMap['Projects'] = ConvertTo-PSmmProjectsConfig -Object $null
         }
         else {
-            $configMap['Projects'] = [ProjectsConfig]::FromObject($configMap['Projects'])
+            $configMap['Projects'] = ConvertTo-PSmmProjectsConfig -Object $configMap['Projects']
         }
 
         $hasPlugins = $false
@@ -169,10 +170,10 @@ function Select-PSmmProject {
         }
 
         if (-not $hasPlugins -or $null -eq $configMap['Plugins']) {
-            $configMap['Plugins'] = [PluginsConfig]::FromObject($null)
+            $configMap['Plugins'] = ConvertTo-PSmmPluginsConfig -Object $null
         }
         else {
-            $configMap['Plugins'] = [PluginsConfig]::FromObject($configMap['Plugins'])
+            $configMap['Plugins'] = ConvertTo-PSmmPluginsConfig -Object $configMap['Plugins']
         }
 
         $hasStorage = $false
@@ -199,12 +200,21 @@ function Select-PSmmProject {
     # Ensure Projects and Plugins are typed models (or have compatible shapes) before any dot access
     $projectsConfig = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects'
     if ($null -eq $projectsConfig) {
-        $projectsConfig = [ProjectsConfig]::FromObject($null)
+        $projectsConfig = ConvertTo-PSmmProjectsConfig -Object $null
         Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
     }
-    elseif ($projectsConfig -isnot [ProjectsConfig]) {
-        $projectsConfig = [ProjectsConfig]::FromObject($projectsConfig)
-        Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+    else {
+        $projectsConfigType = Resolve-PSmmProjectsType -Name 'ProjectsConfig'
+        if ($projectsConfigType) {
+            if ($projectsConfig -isnot $projectsConfigType) {
+                $projectsConfig = ConvertTo-PSmmProjectsConfig -Object $projectsConfig
+                Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+            }
+        }
+        else {
+            $projectsConfig = ConvertTo-PSmmProjectsConfig -Object $projectsConfig
+            Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
+        }
     }
 
     $projectsRegistry = Get-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Registry'
@@ -220,16 +230,16 @@ function Select-PSmmProject {
     }
 
     $pluginsConfig = Get-PSmmProjectsConfigMemberValue -Object $Config -Name 'Plugins'
-    $pluginsConfig = [PluginsConfig]::FromObject($pluginsConfig)
+    $pluginsConfig = ConvertTo-PSmmPluginsConfig -Object $pluginsConfig
     if ($null -eq $pluginsConfig.Paths) {
-        $pluginsConfig.Paths = [PluginsPathsConfig]::new()
+        $pluginsConfig.Paths = ConvertTo-PSmmPluginsPathsConfig -Object $null
     }
     Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Plugins' -Value $pluginsConfig
 
     # Build internal runtime projection for helpers
     $pathsSource = Get-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Paths'
     $projectPaths = if ($null -ne $pathsSource) {
-        [ProjectsPathsConfig]::FromObject($pathsSource).ToHashtable()
+        (ConvertTo-PSmmProjectsPathsConfig -Object $pathsSource).ToHashtable()
     }
     else {
         @{}
@@ -310,20 +320,20 @@ function Select-PSmmProject {
 
         if (-not $FoundProject) {
             $serialMsg = if (-not [string]::IsNullOrWhiteSpace($SerialNumber)) { " on disk with SerialNumber '$SerialNumber'" } else { "" }
-            throw [ProjectException]::new("Project '$pName' not found in any storage location$serialMsg", "Project lookup failure")
+            throw (New-PSmmProjectException -Message "Project '$pName' not found in any storage location$serialMsg" -Context 'Project lookup failure')
         }
 
         # Get the actual storage drive information
         $storageDrive = Get-StorageDrive | Where-Object { $_.SerialNumber -eq $FoundProject.SerialNumber } | Select-Object -First 1
         if (-not $storageDrive) {
-            throw [StorageException]::new("Storage drive for project '$pName' not found or not mounted", $FoundProject.SerialNumber)
+            throw (New-PSmmStorageException -Message "Storage drive for project '$pName' not found or not mounted" -SerialNumber $FoundProject.SerialNumber)
         }
 
         $projectBasePath = $FoundProject.Path
 
         # Verify project exists
         if (-not $FileSystem.TestPath($projectBasePath)) {
-            throw [ProjectException]::new("Project '$pName' does not exist at: $projectBasePath", $projectBasePath)
+            throw (New-PSmmProjectException -Message "Project '$pName' does not exist at: $projectBasePath" -Context $projectBasePath)
         }
 
         # Set project name
@@ -340,12 +350,11 @@ function Select-PSmmProject {
         $Run.Projects.Current.Log = $PathProvider.CombinePath(@($projectBasePath,'Log'))
 
         # Store storage drive information
-        $Run.Projects.Current.StorageDrive = [ProjectStorageDriveInfo]::new(
-            $storageDrive.Label,
-            $storageDrive.DriveLetter,
-            $storageDrive.SerialNumber,
-            $StorageDriveLabel
-        )
+        $Run.Projects.Current.StorageDrive = New-PSmmProjectStorageDriveInfo \
+            -Label $storageDrive.Label \
+            -DriveLetter $storageDrive.DriveLetter \
+            -SerialNumber $storageDrive.SerialNumber \
+            -StorageDriveLabel $StorageDriveLabel
 
         # Ensure vault exists
         $vaultPath = $Run.Projects.Current.Vault
@@ -363,14 +372,26 @@ function Select-PSmmProject {
             Write-Verbose "Project vault exists at: $vaultPath"
         }
 
-        # Sync Current project back to Config as a typed model (supports legacy consumers via FromObject/ToHashtable)
-        Set-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Current' -Value ([ProjectCurrentConfig]::FromObject($Run.Projects.Current.ToHashtable()))
+        # Sync Current project back to Config (typed when available, fallback otherwise)
+        $currentSource = $Run.Projects.Current
+        $currentHashtable = $null
+        if ($null -ne $currentSource -and ($currentSource | Get-Member -Name 'ToHashtable' -ErrorAction SilentlyContinue)) {
+            $currentHashtable = $currentSource.ToHashtable()
+        }
+        elseif ($null -ne $currentSource -and $currentSource -is [System.Collections.IDictionary]) {
+            $currentHashtable = $currentSource
+        }
+        else {
+            $currentHashtable = @{}
+        }
+
+        Set-PSmmProjectsConfigMemberValue -Object $projectsConfig -Name 'Current' -Value (ConvertTo-PSmmProjectCurrentConfig -Object $currentHashtable)
         Set-PSmmProjectsConfigMemberValue -Object $Config -Name 'Projects' -Value $projectsConfig
 
         # Load project-specific plugin manifest and install enabled optional plugins
-        $pluginsConfig = [PluginsConfig]::FromObject($pluginsConfig)
+        $pluginsConfig = ConvertTo-PSmmPluginsConfig -Object $pluginsConfig
         if ($null -eq $pluginsConfig.Paths) {
-            $pluginsConfig.Paths = [PluginsPathsConfig]::new()
+            $pluginsConfig.Paths = ConvertTo-PSmmPluginsPathsConfig -Object $null
         }
 
         $projectPluginsPath = $PathProvider.CombinePath(@($Run.Projects.Current.Config,'PSmm','PSmm.Plugins.psd1'))
