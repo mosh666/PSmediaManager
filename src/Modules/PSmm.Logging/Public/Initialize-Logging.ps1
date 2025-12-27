@@ -435,6 +435,7 @@ function Initialize-Logging {
                     )
 
                     $src = $Source
+                    $useWildcard = [bool]$Wildcard
 
                     $getValue = {
                         param([string]$key)
@@ -466,7 +467,7 @@ function Initialize-Logging {
                             $key = $m.Groups['key'].Value
                             $fmt = $m.Groups['fmt'].Value
 
-                            if ($Wildcard) {
+                            if ($useWildcard) {
                                 return '*'
                             }
 

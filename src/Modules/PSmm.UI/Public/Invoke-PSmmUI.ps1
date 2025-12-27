@@ -93,8 +93,6 @@ function Invoke-PSmmUI {
         $FatalErrorUi.InvokeFatal('UI', 'Required UI config helper Get-PSmmUiConfigMemberValue is not available.', $null, 1, $false)
     }
 
-    $fatal = $FatalErrorUi
-
     # Services are injected (service-first UI)
 
     function Test-UiDebugOrDev([object]$UiConfig) {
@@ -135,7 +133,7 @@ function Invoke-PSmmUI {
             }
         }
         catch {
-            # Leave default as-is
+            Write-Verbose ("Storage group auto-selection failed; using default: {0}" -f $_.Exception.Message)
         }
 
         do {

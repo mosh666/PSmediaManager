@@ -123,6 +123,7 @@ function ConvertTo-PSmmProjectCurrentConfig {
 }
 
 function New-PSmmProjectsValidationException {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Factory function creates and returns an exception object without modifying system state')]
     [CmdletBinding()]
     [OutputType([System.Exception])]
     param(
@@ -206,6 +207,7 @@ function ConvertTo-PSmmPluginsPathsConfig {
 }
 
 function New-PSmmProjectException {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Factory function creates and returns an exception object without modifying system state')]
     [CmdletBinding()]
     [OutputType([System.Exception])]
     param(
@@ -222,6 +224,7 @@ function New-PSmmProjectException {
 }
 
 function New-PSmmStorageException {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Factory function creates and returns an exception object without modifying system state')]
     [CmdletBinding()]
     [OutputType([System.Exception])]
     param(
@@ -238,6 +241,7 @@ function New-PSmmStorageException {
 }
 
 function New-PSmmProjectStorageDriveInfo {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Factory function creates and returns an in-memory model object without modifying system state')]
     [CmdletBinding()]
     param(
         [Parameter()][AllowNull()][string]$Label,

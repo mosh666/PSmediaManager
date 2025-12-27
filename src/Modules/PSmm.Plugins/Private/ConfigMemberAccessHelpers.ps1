@@ -78,12 +78,16 @@ function Test-PSmmPluginsTryGetMemberValue {
 }
 
 function Set-PSmmPluginsMemberValueFallback {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Low')]
     param(
         [Parameter(Mandatory)][ValidateNotNull()][object]$Object,
         [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name,
         [Parameter()][AllowNull()][object]$Value
     )
+
+    if (-not $PSCmdlet.ShouldProcess('Config object', "Set member '$Name'")) {
+        return
+    }
 
     if ($Object -is [System.Collections.IDictionary]) {
         $Object[$Name] = $Value

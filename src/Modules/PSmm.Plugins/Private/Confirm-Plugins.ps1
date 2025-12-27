@@ -113,7 +113,7 @@ function Invoke-PluginFunction {
             }
         }
         catch {
-            # Ignore and fall back to metadata.
+            Write-Verbose "Get-PluginFunctionParameterOrder: failed to parse definition for '$($Command.Name)': $($_.Exception.Message)"
         }
 
         # Fallback: use parameter metadata (Position) if definition parsing didn't yield an order.
@@ -169,17 +169,17 @@ function Invoke-PluginFunction {
             $result = $scriptBlock.Invoke()
         }
         else {
-            $args = [System.Collections.Generic.List[object]]::new()
+            $invokeArgs = [System.Collections.Generic.List[object]]::new()
             for ($i = 0; $i -le $lastIndex; $i++) {
                 $paramName = $paramNames[$i]
                 if ($Parameters.ContainsKey($paramName)) {
-                    $args.Add($Parameters[$paramName])
+                    $invokeArgs.Add($Parameters[$paramName])
                 }
                 else {
-                    $args.Add($null)
+                    $invokeArgs.Add($null)
                 }
             }
-            $result = $scriptBlock.Invoke($args.ToArray())
+            $result = $scriptBlock.Invoke($invokeArgs.ToArray())
         }
     }
 

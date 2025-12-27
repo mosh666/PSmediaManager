@@ -22,6 +22,7 @@ function ConvertTo-PSmmUiErrorCatalog {
     if ($null -eq $Object) {
         $catalog | Add-Member -MemberType ScriptMethod -Name FilterStorageGroup -Force -Value {
             param([string]$storageGroupFilter)
+            $null = $storageGroupFilter
             return $this
         }
         $catalog | Add-Member -MemberType ScriptMethod -Name GetAllMessages -Force -Value {
@@ -184,6 +185,7 @@ function ConvertTo-PSmmUiProjectCurrentConfig {
 }
 
 function New-PSmmUiDriveProjectsInfo {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Factory function creates an in-memory UI model object and does not modify system state')]
     [CmdletBinding(PositionalBinding = $false)]
     param(
         [Parameter()]
