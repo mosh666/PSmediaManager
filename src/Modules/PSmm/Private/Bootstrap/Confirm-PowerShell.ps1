@@ -202,7 +202,6 @@ function Install-RequiredModule {
 
     $candidate = Get-Module -Name $moduleName -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
     if ($candidate) {
-        Write-Verbose "Module available: $moduleName (Version: $($candidate.Version))"
         return
     }
 
@@ -228,9 +227,17 @@ function Import-RequiredModule {
 
     $moduleName = $ModuleInfo.Name
 
+    $alreadyLoaded = Get-Module -Name $moduleName -ErrorAction SilentlyContinue
+    if ($alreadyLoaded) {
+        Write-Verbose "Module already imported: $moduleName (Version: $($alreadyLoaded.Version))"
+        Write-PSmmLog -Level SUCCESS -Context 'Import PS Modules' `
+            -Message "Imported module: $moduleName" -Console -File
+        return
+    }
+
     try {
         Write-Verbose "Importing module: $moduleName"
-        Import-Module -Name $moduleName -Force -ErrorAction Stop
+        Import-Module -Name $moduleName -ErrorAction Stop
 
         Write-PSmmLog -Level SUCCESS -Context 'Import PS Modules' `
             -Message "Imported module: $moduleName" -Console -File

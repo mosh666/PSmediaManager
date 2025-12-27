@@ -154,6 +154,86 @@ function Export-SafeConfiguration {
             return $result
         }
 
+        function _GetMemberValue {
+            param(
+                [Parameter()][AllowNull()]$InputObject,
+                [Parameter()][ValidateNotNullOrEmpty()][string]$Name
+            )
+
+            if ($null -eq $InputObject) { return $null }
+
+            $value = $null
+            $hasConfigMemberAccess = $false
+            try {
+                $hasConfigMemberAccess = ($null -ne ('ConfigMemberAccess' -as [type]))
+            }
+            catch {
+                $hasConfigMemberAccess = $false
+            }
+
+            if ($hasConfigMemberAccess) {
+                try {
+                    if ([ConfigMemberAccess]::TryGetMemberValue($InputObject, $Name, [ref]$value)) {
+                        return $value
+                    }
+                    return $null
+                }
+                catch {
+                    Write-Verbose "[SafeExport] _GetMemberValue ConfigMemberAccess lookup failed: $($_.Exception.Message)"
+                    return $null
+                }
+            }
+
+            if ($InputObject -is [System.Collections.IDictionary]) {
+                try {
+                    if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
+                }
+                catch {
+                    Write-Verbose "[SafeExport] _GetMemberValue IDictionary.ContainsKey lookup failed: $($_.Exception.Message)"
+                }
+                try {
+                    if ($InputObject.Contains($Name)) { return $InputObject[$Name] }
+                }
+                catch {
+                    Write-Verbose "[SafeExport] _GetMemberValue IDictionary.Contains lookup failed: $($_.Exception.Message)"
+                }
+
+                try {
+                    foreach ($k in $InputObject.Keys) {
+                        if ($k -eq $Name) { return $InputObject[$k] }
+                    }
+                }
+                catch {
+                    Write-Verbose "[SafeExport] _GetMemberValue IDictionary.Keys lookup failed: $($_.Exception.Message)"
+                }
+                return $null
+            }
+
+            # Prefer property access for typed objects/PSCustomObjects
+            try {
+                return $InputObject.$Name
+            }
+            catch {
+                $null = $_
+                # Ignore
+            }
+
+            try {
+                if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
+            }
+            catch {
+                Write-Verbose "[SafeExport] _GetMemberValue ContainsKey lookup failed: $($_.Exception.Message)"
+            }
+            try {
+                return $InputObject[$Name]
+            }
+            catch {
+                Write-Verbose "[SafeExport] _GetMemberValue indexer lookup failed: $($_.Exception.Message)"
+            }
+
+            return $null
+        }
+
         # Build a plain hashtable snapshot from typed AppConfiguration to preserve structure deterministically
         function Build-SafeSnapshot {
             param(
@@ -241,86 +321,6 @@ function Export-SafeConfiguration {
                 if ($null -eq $dict) { return $h }
                 foreach ($k in $dict.Keys) { $h[$k] = $projector.InvokeReturnAsIs($dict[$k]) }
                 return $h
-            }
-
-            function _GetMemberValue {
-                param(
-                    [Parameter()][AllowNull()]$InputObject,
-                    [Parameter()][ValidateNotNullOrEmpty()][string]$Name
-                )
-
-                if ($null -eq $InputObject) { return $null }
-
-                $value = $null
-                $hasConfigMemberAccess = $false
-                try {
-                    $hasConfigMemberAccess = ($null -ne ('ConfigMemberAccess' -as [type]))
-                }
-                catch {
-                    $hasConfigMemberAccess = $false
-                }
-
-                if ($hasConfigMemberAccess) {
-                    try {
-                        if ([ConfigMemberAccess]::TryGetMemberValue($InputObject, $Name, [ref]$value)) {
-                            return $value
-                        }
-                        return $null
-                    }
-                    catch {
-                        Write-Verbose "[SafeExport] _GetMemberValue ConfigMemberAccess lookup failed: $($_.Exception.Message)"
-                        return $null
-                    }
-                }
-
-                if ($InputObject -is [System.Collections.IDictionary]) {
-                    try {
-                        if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
-                    }
-                    catch {
-                        Write-Verbose "[SafeExport] _GetMemberValue IDictionary.ContainsKey lookup failed: $($_.Exception.Message)"
-                    }
-                    try {
-                        if ($InputObject.Contains($Name)) { return $InputObject[$Name] }
-                    }
-                    catch {
-                        Write-Verbose "[SafeExport] _GetMemberValue IDictionary.Contains lookup failed: $($_.Exception.Message)"
-                    }
-
-                    try {
-                        foreach ($k in $InputObject.Keys) {
-                            if ($k -eq $Name) { return $InputObject[$k] }
-                        }
-                    }
-                    catch {
-                        Write-Verbose "[SafeExport] _GetMemberValue IDictionary.Keys lookup failed: $($_.Exception.Message)"
-                    }
-                    return $null
-                }
-
-                # Prefer property access for typed objects/PSCustomObjects
-                try {
-                    return $InputObject.$Name
-                }
-                catch {
-                    $null = $_
-                    # Ignore
-                }
-
-                try {
-                    if ($InputObject.ContainsKey($Name)) { return $InputObject[$Name] }
-                }
-                catch {
-                    Write-Verbose "[SafeExport] _GetMemberValue ContainsKey lookup failed: $($_.Exception.Message)"
-                }
-                try {
-                    return $InputObject[$Name]
-                }
-                catch {
-                    Write-Verbose "[SafeExport] _GetMemberValue indexer lookup failed: $($_.Exception.Message)"
-                }
-
-                return $null
             }
 
             function _HasMember {

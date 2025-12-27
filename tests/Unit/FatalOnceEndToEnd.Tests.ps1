@@ -57,8 +57,14 @@ Describe 'Fatal once semantics (end-to-end)' {
 
             # Create the fatal exception inside the PSmm module scope (types are defined there).
             $ex = $script:psmmModule.NewBoundScriptBlock({
-                [PSmmFatalException]::new($msg, $ctx, $code, $NonInteractive)
-            }).InvokeReturnAsIs()
+                param(
+                    [string]$Message,
+                    [string]$Context,
+                    [int]$ExitCode,
+                    [bool]$NonInteractive
+                )
+                [PSmmFatalException]::new($Message, $Context, $ExitCode, $NonInteractive)
+            }).InvokeReturnAsIs($msg, $ctx, $code, $NonInteractive)
             throw $ex
         } -Force
         $script:container.RegisterSingleton('FatalErrorUi', $script:fatalSpy)

@@ -142,4 +142,10 @@ finally {
 }
 
 # Propagate exit code
-exit $LASTEXITCODE
+$exitCode = 0
+$lastExitVar = Get-Variable -Name 'LASTEXITCODE' -Scope Global -ErrorAction SilentlyContinue
+if ($null -ne $lastExitVar) {
+    try { $exitCode = [int]$lastExitVar.Value } catch { $exitCode = 0 }
+}
+
+exit $exitCode
