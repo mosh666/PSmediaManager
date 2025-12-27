@@ -59,6 +59,9 @@ function Initialize-SystemVault {
         [Parameter(Mandatory)]
         $FileSystem,
 
+        [Parameter(Mandatory)]
+        $Process,
+
         [Parameter()]
         [SecureString]$MasterPassword
     )
@@ -139,20 +142,27 @@ function Initialize-SystemVault {
             $plainMaster = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
             [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 
-            $tempFile = [System.IO.Path]::GetTempFileName()
             try {
-                # Use ASCII (no BOM) to avoid issues; provide twice for confirmation
-                [System.IO.File]::WriteAllText($tempFile, "$plainMaster`n$plainMaster`n", [System.Text.Encoding]::ASCII)
-                $process = Start-Process -FilePath 'keepassxc-cli.exe' -ArgumentList 'db-create', '-p', $dbPath -NoNewWindow -Wait -PassThru -RedirectStandardInput $tempFile
-                if ($process.ExitCode -ne 0) {
-                    $ex = [ProcessException]::new("Failed to create KeePass database", "keepassxc-cli.exe")
-                    $ex.SetExitCode($process.ExitCode)
+                if ($null -eq $Process -or -not ($Process | Get-Member -Name 'StartProcessWithInput' -MemberType Method -ErrorAction SilentlyContinue)) {
+                    throw [System.InvalidOperationException]::new('Process service with StartProcessWithInput is required to create KeePass database')
+                }
+
+                # KeePassXC CLI prompts twice for password confirmation
+                $stdin = "$plainMaster`n$plainMaster`n"
+                $result = $Process.StartProcessWithInput('keepassxc-cli.exe', @('db-create', '-p', $dbPath), $stdin)
+                if ($result.ExitCode -ne 0) {
+                    $details = "ExitCode=$($result.ExitCode)" +
+                        $(if (-not [string]::IsNullOrWhiteSpace([string]$result.StdErr)) { "; StdErr: $($result.StdErr)" } else { '' }) +
+                        $(if (-not [string]::IsNullOrWhiteSpace([string]$result.StdOut)) { "; StdOut: $($result.StdOut)" } else { '' })
+
+                    $ex = [ProcessException]::new("Failed to create KeePass database ($details)", 'keepassxc-cli.exe')
+                    $ex.SetExitCode([int]$result.ExitCode)
                     throw $ex
                 }
             }
             finally {
-                if ($FileSystem.TestPath($tempFile)) { $FileSystem.RemoveItem($tempFile, $false) }
                 $plainMaster = $null
+                $stdin = $null
             }
 
             # Cache password for subsequent first-run secret saves
@@ -315,7 +325,7 @@ function Save-SystemSecret {
             if (-not $FileSystem) {
                 throw [ValidationException]::new("FileSystem service is required to initialize vault", "FileSystem")
             }
-            $initialized = Initialize-SystemVault -VaultPath $VaultPath -FileSystem $FileSystem
+            $initialized = Initialize-SystemVault -VaultPath $VaultPath -FileSystem $FileSystem -Process $Process
             if (-not $initialized) {
                 throw [ConfigurationException]::new("Failed to initialize system vault")
             }

@@ -166,6 +166,10 @@ class IProcessService {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }
 
+    [object] StartProcessWithInput([string]$filePath, [string[]]$argumentList, [string]$standardInput) {
+        throw [NotImplementedException]::new("Method must be implemented by derived class")
+    }
+
     [object] GetProcess([string]$name) {
         throw [NotImplementedException]::new("Method must be implemented by derived class")
     }

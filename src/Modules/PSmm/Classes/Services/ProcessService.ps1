@@ -63,6 +63,52 @@ class ProcessService : IProcessService {
 
     <#
     .SYNOPSIS
+        Starts a process with standard input and returns execution result.
+    #>
+    [object] StartProcessWithInput([string]$filePath, [string[]]$argumentList, [string]$standardInput) {
+        if ([string]::IsNullOrWhiteSpace($filePath)) {
+            throw [ArgumentException]::new("File path cannot be empty", "filePath")
+        }
+
+        $processInfo = [ProcessStartInfo]::new()
+        $processInfo.FileName = $filePath
+        $processInfo.RedirectStandardInput = $true
+        $processInfo.RedirectStandardOutput = $true
+        $processInfo.RedirectStandardError = $true
+        $processInfo.UseShellExecute = $false
+        $processInfo.CreateNoWindow = $true
+
+        if ($null -ne $argumentList -and $argumentList.Count -gt 0) {
+            foreach ($arg in $argumentList) {
+                $processInfo.ArgumentList.Add($arg)
+            }
+        }
+
+        try {
+            $process = [Process]::Start($processInfo)
+            if (-not [string]::IsNullOrEmpty($standardInput)) {
+                $process.StandardInput.Write($standardInput)
+            }
+            $process.StandardInput.Close()
+
+            $stdout = $process.StandardOutput.ReadToEnd()
+            $stderr = $process.StandardError.ReadToEnd()
+            $process.WaitForExit()
+
+            return [PSCustomObject]@{
+                ExitCode = $process.ExitCode
+                StdOut = $stdout
+                StdErr = $stderr
+                Success = $process.ExitCode -eq 0
+            }
+        }
+        catch {
+            throw [InvalidOperationException]::new("Failed to start process $filePath : $_", $_.Exception)
+        }
+    }
+
+    <#
+    .SYNOPSIS
         Gets a running process by name.
     #>
     [object] GetProcess([string]$name) {

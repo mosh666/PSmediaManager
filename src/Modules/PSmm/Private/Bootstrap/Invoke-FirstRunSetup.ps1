@@ -309,7 +309,7 @@ function Invoke-FirstRunSetup {
         Write-PSmmHost ""
 
         # Initialize the vault
-        $vaultCreated = Initialize-SystemVault -VaultPath $VaultPath -FileSystem $FileSystem -ErrorAction Stop
+        $vaultCreated = Initialize-SystemVault -VaultPath $VaultPath -FileSystem $FileSystem -Process $Process -ErrorAction Stop
 
         if (-not $vaultCreated) {
             Write-PSmmHost "❌ Failed to create vault" -ForegroundColor Red
