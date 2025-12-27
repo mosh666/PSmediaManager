@@ -102,35 +102,41 @@ function Initialize-Logging {
         }
 
         # Basic structure validation supporting both typed classes and hashtable inputs.
-        # IMPORTANT: Do not rely on Get-Command visibility of private helper functions;
-        # use ConfigMemberAccess directly so AppConfiguration works reliably.
-        $parametersSource = $null
-        $loggingSource = $null
-        $hasParameters = $false
-        $hasLogging = $false
-        try { $parametersSource = Get-PSmmLoggingConfigMemberValue -Object $Config -Name 'Parameters' } catch { $parametersSource = $null }
-        try { $loggingSource = Get-PSmmLoggingConfigMemberValue -Object $Config -Name 'Logging' } catch { $loggingSource = $null }
-        $hasParameters = $null -ne $parametersSource
-        $hasLogging = $null -ne $loggingSource
+        # IMPORTANT: distinguish between "missing member" vs "member present but null".
+        $hasParametersMember = $false
+        $hasLoggingMember = $false
+        try { $hasParametersMember = Test-PSmmLoggingConfigMember -Object $Config -Name 'Parameters' } catch { $hasParametersMember = $false }
+        try { $hasLoggingMember = Test-PSmmLoggingConfigMember -Object $Config -Name 'Logging' } catch { $hasLoggingMember = $false }
 
-        if (-not $hasParameters -or -not $hasLogging) {
+        if (-not $hasParametersMember -or -not $hasLoggingMember) {
             $available = @(
                 $Config |
                     Get-Member -MemberType NoteProperty, Property, ScriptProperty, AliasProperty -ErrorAction SilentlyContinue |
                     Select-Object -ExpandProperty Name
             )
             $availableText = if ($available) { ($available -join ', ') } else { '<none>' }
-            $msg = "Invalid configuration object: missing 'Parameters' or 'Logging' members. Available members: $availableText"
+            $msg = "Invalid configuration object: missing required members. Expected: Parameters, Logging. Available members: $availableText"
             $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
             if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
             throw $ex
         }
 
+        $parametersSource = $null
+        $loggingSource = $null
+        try { $parametersSource = Get-PSmmLoggingConfigMemberValue -Object $Config -Name 'Parameters' } catch { $parametersSource = $null }
+        try { $loggingSource = Get-PSmmLoggingConfigMemberValue -Object $Config -Name 'Logging' } catch { $loggingSource = $null }
+
         if ($null -eq $parametersSource) {
-            $msg = "Invalid configuration object: 'Parameters' is null"
-            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
-            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
-            throw $ex
+            # Parameters can be null if a caller passes an incomplete hashtable/PSCustomObject.
+            # Logging can still be initialized safely using defaults.
+            Write-Verbose "Initialize-Logging: Config.Parameters is null; using fallback runtime parameters defaults."
+            $parametersSource = @{
+                Debug = $false
+                Verbose = $false
+                Dev = $false
+                Update = $false
+                NonInteractive = $false
+            }
         }
 
         $null = if ($parametersSource -is [System.Collections.IDictionary]) {
@@ -144,10 +150,50 @@ function Initialize-Logging {
         $script:Context = @{ Context = $null }
 
         if ($null -eq $loggingSource) {
-            $msg = "Logging configuration is null. Run.App.Logging was not properly initialized."
-            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
-            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
-            throw $ex
+            # Logging bag can be null if the caller passed an incomplete config object.
+            # Derive safe defaults so bootstrapping can proceed.
+            Write-Verbose "Initialize-Logging: Config.Logging is null; deriving default logging configuration."
+
+            $pathsCandidate = $null
+            try { $pathsCandidate = Get-PSmmLoggingConfigMemberValue -Object $Config -Name 'Paths' } catch { $pathsCandidate = $null }
+
+            $logDirCandidate = $null
+            if ($null -ne $pathsCandidate) {
+                try { $logDirCandidate = Get-PSmmLoggingConfigMemberValue -Object $pathsCandidate -Name 'Log' -Default $null } catch { $logDirCandidate = $null }
+            }
+
+            $timestamp = Get-Date -Format 'yyyyMMdd'
+            $logFileName = "$timestamp-PSmm-$env:USERNAME@$env:COMPUTERNAME.log"
+
+            $derivedLogPath = $null
+            try {
+                if (-not [string]::IsNullOrWhiteSpace([string]$logDirCandidate) -and $PathProvider) {
+                    $derivedLogPath = $PathProvider.CombinePath(@([string]$logDirCandidate, $logFileName))
+                }
+                elseif (-not [string]::IsNullOrWhiteSpace([string]$logDirCandidate)) {
+                    $derivedLogPath = Join-Path -Path ([string]$logDirCandidate) -ChildPath $logFileName
+                }
+            }
+            catch {
+                $derivedLogPath = $null
+            }
+
+            if ([string]::IsNullOrWhiteSpace([string]$derivedLogPath)) {
+                # Last-resort: place log next to the repo (better than failing before any logging works)
+                $derivedLogPath = Join-Path -Path (Get-Location) -ChildPath $logFileName
+            }
+
+            $loggingSource = @{
+                Path = [string]$derivedLogPath
+                DefaultLevel = 'INFO'
+                Format = '[%{timestamp}] [%{level}] %{message}'
+                PrintBody = $true
+                Append = $true
+                Encoding = 'utf8'
+                PrintException = $true
+                ShortLevel = $false
+                OnlyColorizeLevel = $false
+            }
         }
 
         $loggingSettings = $null
@@ -236,18 +282,26 @@ function Initialize-Logging {
             $postAssignCount = $postAssignKeys.Count
             Write-Verbose "script:Logging Keys count (post-assign): $postAssignCount"
 
-        # Guard: ensure Keys is enumerable and Logging is a standard Hashtable
+        # Normalize to a standard Hashtable so downstream code can safely use $script:Logging.Key dot-access
+        # (generic dictionaries can be IDictionary but do not reliably support PS property access).
+        if ($null -ne $script:Logging -and $script:Logging -is [System.Collections.IDictionary] -and $script:Logging -isnot [hashtable]) {
+            $fixed = @{}
+            foreach ($kv in $script:Logging.GetEnumerator()) {
+                $fixed[[string]$kv.Key] = $kv.Value
+            }
+            $script:Logging = $fixed
+            Write-Verbose "DEBUG: Normalized script:Logging to Hashtable. Keys: $($script:Logging.Keys -join ', ')"
+        }
+
+        # Guard: ensure Keys is enumerable and Logging is still sane
         try {
             $null = foreach ($k in $script:Logging.Keys) { $k }  # force enumeration
         }
         catch {
-            Write-Verbose "DEBUG: Logging.Keys enumeration failed: $_. Converting to standard Hashtable."
-            $fixed = @{}
-            foreach ($kv in $loggingSettings.GetEnumerator()) {
-                $fixed[$kv.Key] = $kv.Value
-            }
-            $script:Logging = $fixed
-            Write-Verbose "DEBUG: Replaced script:Logging with standard Hashtable. Keys: $($script:Logging.Keys -join ', ')"
+            $msg = "Logging configuration keys could not be enumerated after initialization: $_"
+            $ex = Get-PSmmLoggingExceptionInstance -TypeName 'ConfigurationException' -ArgumentList @($msg)
+            if ($null -eq $ex) { $ex = [System.InvalidOperationException]::new($msg) }
+            throw $ex
         }
 
         if ($null -eq $script:Logging) {
@@ -334,6 +388,23 @@ function Initialize-Logging {
         if (-not $hasFormat -or [string]::IsNullOrWhiteSpace($script:Logging.Format)) {
             Write-Warning "Logging configuration is missing 'Format', using default format"
             $script:Logging.Format = '[%{timestamp}] [%{level}] %{message}'
+        }
+
+        # Defaults for properties used by logging targets (avoid StrictMode issues if caller config is minimal)
+        if (-not $script:Logging.ContainsKey('PrintBody') -or $null -eq $script:Logging['PrintBody']) {
+            $script:Logging['PrintBody'] = $true
+        }
+        if (-not $script:Logging.ContainsKey('Append') -or $null -eq $script:Logging['Append']) {
+            $script:Logging['Append'] = $true
+        }
+        if (-not $script:Logging.ContainsKey('Encoding') -or [string]::IsNullOrWhiteSpace([string]$script:Logging['Encoding'])) {
+            $script:Logging['Encoding'] = 'utf8'
+        }
+        if (-not $script:Logging.ContainsKey('PrintException') -or $null -eq $script:Logging['PrintException']) {
+            $script:Logging['PrintException'] = $true
+        }
+        if (-not $script:Logging.ContainsKey('ShortLevel') -or $null -eq $script:Logging['ShortLevel']) {
+            $script:Logging['ShortLevel'] = $false
         }
 
         if (-not $SkipPsLogsInit) {

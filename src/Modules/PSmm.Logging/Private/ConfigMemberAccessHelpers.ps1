@@ -64,7 +64,7 @@ function Test-PSmmLoggingTryGetMemberValue {
     $cmaType = Get-PSmmLoggingType -TypeName 'ConfigMemberAccess'
     if ($cmaType) {
         try {
-            return [bool]$cmaType::TryGetMemberValue($Object, $Name, [ref]$Value.Value)
+            return [bool]$cmaType::TryGetMemberValue($Object, $Name, $Value)
         }
         catch {
             Write-Verbose "Test-PSmmLoggingTryGetMemberValue: ConfigMemberAccess.TryGetMemberValue failed: $($_.Exception.Message)"
