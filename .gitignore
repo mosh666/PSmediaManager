@@ -13,7 +13,7 @@ tmp-logs/
 !src/**/Plugins/
 
 # Build artifacts
-build/
+build/*.txt
 output/
 publish/
 
