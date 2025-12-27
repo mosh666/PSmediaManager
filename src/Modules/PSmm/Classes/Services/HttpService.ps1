@@ -54,7 +54,7 @@ class HttpService : IHttpService {
 
         try {
             # Route through internal wrapper to simplify testing/mocking
-            return Invoke-HttpRestMethod -Uri $uri -Method 'GET' -Headers $headers
+            return PSmm\Invoke-HttpRestMethod -Uri $uri -Method 'GET' -Headers $headers
         }
         catch {
             throw [WebException]::new("Failed to invoke request to $uri : $_", $_.Exception)
@@ -77,7 +77,7 @@ class HttpService : IHttpService {
         $effectiveTimeout = if ($timeoutSec -lt 0) { 0 } else { $timeoutSec }
 
         try {
-            return Invoke-HttpWebRequestRaw -Uri $uri -Method $effectiveMethod -Headers $headers -TimeoutSec $effectiveTimeout
+            return PSmm\Invoke-HttpWebRequestRaw -Uri $uri -Method $effectiveMethod -Headers $headers -TimeoutSec $effectiveTimeout
         }
         catch {
             throw [WebException]::new("Failed to invoke web request $effectiveMethod on $uri : $_", $_.Exception)
@@ -111,7 +111,7 @@ class HttpService : IHttpService {
 
         try {
             # Route through internal wrapper to simplify testing/mocking
-            Invoke-HttpWebRequest -Uri $uri -OutFile $outFile
+            PSmm\Invoke-HttpWebRequest -Uri $uri -OutFile $outFile
         }
         catch {
             throw [WebException]::new("Failed to download file from $uri : $_", $_.Exception)
@@ -131,7 +131,7 @@ class HttpService : IHttpService {
 
         try {
             # Route through internal wrapper to simplify testing/mocking
-            return Invoke-HttpRestMethod -Uri $uri -Method $effectiveMethod -Headers $headers -Body $body
+            return PSmm\Invoke-HttpRestMethod -Uri $uri -Method $effectiveMethod -Headers $headers -Body $body
         }
         catch {
             throw [WebException]::new("Failed to invoke REST method $method on $uri : $_", $_.Exception)

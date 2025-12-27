@@ -167,6 +167,10 @@ Export-ModuleMember -Function @(
     'Invoke-PSmmFatal',
     'Import-PSmmModuleOrFatal',
     'Invoke-PSmm',
+    # Internal HTTP wrappers (kept as exported so script-based classes can resolve them reliably)
+    'Invoke-HttpRestMethod',
+    'Invoke-HttpWebRequest',
+    'Invoke-HttpWebRequestRaw',
     'New-CustomFileName',
     'New-DirectoriesFromHashtable',
     'Confirm-Storage',

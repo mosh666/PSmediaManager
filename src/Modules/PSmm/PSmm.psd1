@@ -31,6 +31,10 @@
         'Invoke-PSmmFatal'
         'Import-PSmmModuleOrFatal'
         'Invoke-PSmm'
+        # Internal HTTP wrappers exported so script-based classes and external scripts can resolve them reliably
+        'Invoke-HttpRestMethod'
+        'Invoke-HttpWebRequest'
+        'Invoke-HttpWebRequestRaw'
         'New-CustomFileName'
         'New-DirectoriesFromHashtable'
         'Confirm-Storage'
