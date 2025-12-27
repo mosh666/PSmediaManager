@@ -170,6 +170,27 @@ function Invoke-PSmm {
 
             $nonInteractive = [bool](Get-PSmmConfigNestedValue -Object $Config -Path @('Parameters','NonInteractive') -Default $false)
 
+            $isTemporaryEnv = ($env:PSMM_TEMP_ENV -eq '1')
+            if ($isTemporaryEnv -and $nonInteractive) {
+                # Create a minimal placeholder vault database file so headless runs can proceed
+                # without interactive KeePassXC setup. Secrets remain optional and will resolve to $null.
+                try {
+                    if (-not ($fileSystemService.TestPath($vaultPath))) {
+                        $fileSystemService.NewItem($vaultPath, 'Directory')
+                    }
+                    if (-not ($fileSystemService.TestPath($dbPath))) {
+                        $fileSystemService.SetContent($dbPath, '')
+                        Write-PSmmLog -Level NOTICE -Context 'TemporaryEnv' -Message "Seeded temporary vault database placeholder: $dbPath" -Console -File
+                    }
+                    else {
+                        Write-Verbose "TemporaryEnv: vault database already present: $dbPath"
+                    }
+                }
+                catch {
+                    Write-Warning "TemporaryEnv: failed to seed vault placeholder ($dbPath): $_"
+                }
+            }
+
             if (-not ($fileSystemService.TestPath($dbPath))) {
                 Write-PSmmLog -Level NOTICE -Context 'First-Run Setup' -Message 'KeePass vault not found - starting first-run setup' -Console -File
 
@@ -199,20 +220,28 @@ function Invoke-PSmm {
 
             #region ----- Load Secrets (Skip if setup is pending)
             if (-not $setupPending) {
-                Write-Verbose 'Ensuring KeePassXC CLI is available before loading secrets...'
-                $null = Get-KeePassCli -Config $Config -Http $httpService -Crypto $cryptoService `
-                    -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
+                if ($isTemporaryEnv -and $nonInteractive) {
+                    # TemporaryEnvironment is intended for headless validation.
+                    # Loading secrets can invoke keepassxc-cli and prompt for the master password,
+                    # which is non-deterministic and breaks CI.
+                    Write-Verbose 'TemporaryEnv: skipping secret loading in headless temp runs'
+                }
+                else {
+                    Write-Verbose 'Ensuring KeePassXC CLI is available before loading secrets...'
+                    $null = Get-KeePassCli -Config $Config -Http $httpService -Crypto $cryptoService `
+                        -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
 
-                Write-Verbose 'Loading secrets from KeePassXC vault...'
-                # Load secrets after logging is initialized so warnings can be properly logged
-                if ($null -eq $Config.Secrets) {
-                    throw 'Configuration is missing Secrets; unable to load secrets.'
-                }
-                try {
-                    $Config.Secrets.LoadSecrets()
-                }
-                catch {
-                    throw "Failed to load secrets from Config.Secrets: $_"
+                    Write-Verbose 'Loading secrets from KeePassXC vault...'
+                    # Load secrets after logging is initialized so warnings can be properly logged
+                    if ($null -eq $Config.Secrets) {
+                        throw 'Configuration is missing Secrets; unable to load secrets.'
+                    }
+                    try {
+                        $Config.Secrets.LoadSecrets()
+                    }
+                    catch {
+                        throw "Failed to load secrets from Config.Secrets: $_"
+                    }
                 }
             }
             else {
@@ -228,9 +257,17 @@ function Invoke-PSmm {
             #endregion ----- Verify PowerShell Requirements
 
             #region ----- Verify Required Plugins
-            Write-PSmmLog -Level NOTICE -Context 'Confirm-Plugins' -Message 'Checking required plugins' -Console -File
-            Confirm-Plugins -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
-            Write-Verbose "Required plugins verified"
+            if ($isTemporaryEnv -and $nonInteractive) {
+                # Plugin confirmation can download/install (network + elevation) which is not desired
+                # in headless temporary environment runs.
+                Write-PSmmLog -Level NOTICE -Context 'Confirm-Plugins' -Message 'TemporaryEnv: skipping plugin confirmation/installation' -Console -File
+                Write-Verbose 'TemporaryEnv: skipped Confirm-Plugins'
+            }
+            else {
+                Write-PSmmLog -Level NOTICE -Context 'Confirm-Plugins' -Message 'Checking required plugins' -Console -File
+                Confirm-Plugins -Config $Config -Http $httpService -Crypto $cryptoService -FileSystem $fileSystemService -Environment $environmentService -PathProvider $pathProviderService -Process $processService
+                Write-Verbose "Required plugins verified"
+            }
             #endregion ----- Verify Required Plugins
 
             #region ----- Complete Pending Setup
@@ -272,12 +309,18 @@ function Invoke-PSmm {
             #endregion ----- Complete Pending Setup
 
             #region ----- Security Validation
-            Write-PSmmLog -Level NOTICE -Context 'Security Check' -Message 'Validating secrets security' -Console -File
-            $securityCheckPassed = Test-SecretsSecurity -Config $Config -FileSystem $fileSystemService
-            if (-not $securityCheckPassed) {
-                Write-Warning 'Security validation identified issues - please review'
+            if ($isTemporaryEnv -and $nonInteractive) {
+                Write-PSmmLog -Level NOTICE -Context 'Security Check' -Message 'TemporaryEnv: skipping secrets security validation' -Console -File
+                Write-Verbose 'TemporaryEnv: skipped Test-SecretsSecurity'
             }
-            Write-Verbose "Security validation completed"
+            else {
+                Write-PSmmLog -Level NOTICE -Context 'Security Check' -Message 'Validating secrets security' -Console -File
+                $securityCheckPassed = Test-SecretsSecurity -Config $Config -FileSystem $fileSystemService
+                if (-not $securityCheckPassed) {
+                    Write-Warning 'Security validation identified issues - please review'
+                }
+                Write-Verbose "Security validation completed"
+            }
             #endregion ----- Security Validation
 
             #region ----- Get Application Version
@@ -406,8 +449,31 @@ function Get-ApplicationVersion {
     )
 
     try {
+        $inTestMode = $false
+        try {
+            $tm = [System.Environment]::GetEnvironmentVariable('MEDIA_MANAGER_TEST_MODE', [System.EnvironmentVariableTarget]::Process)
+            if ([string]::IsNullOrWhiteSpace($tm)) { $tm = [string]$env:MEDIA_MANAGER_TEST_MODE }
+            if ([string]::IsNullOrWhiteSpace($tm)) {
+                $te = [System.Environment]::GetEnvironmentVariable('PSMM_TEMP_ENV', [System.EnvironmentVariableTarget]::Process)
+                if ([string]::IsNullOrWhiteSpace($te)) { $te = [string]$env:PSMM_TEMP_ENV }
+                $tm = $te
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($tm)) {
+                $inTestMode = ($tm -eq '1' -or $tm -eq 'true' -or $tm -eq 'True' -or $tm -eq 'TRUE')
+            }
+        }
+        catch {
+            $inTestMode = $false
+        }
+
         if (-not (Test-Path -Path $GitPath)) {
-            Write-Warning "Git directory not found: $GitPath"
+            if ($inTestMode) {
+                Write-Verbose "Git directory not found (test mode): $GitPath"
+            }
+            else {
+                Write-Warning "Git directory not found: $GitPath"
+            }
             return 'Unknown-Version'
         }
 

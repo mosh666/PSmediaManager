@@ -130,7 +130,9 @@ class AppPaths : IPathProvider {
         $isTestMode = $false
 
         # Check explicit environment variable
-        if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
+        $processTestMode = [Environment]::GetEnvironmentVariable('MEDIA_MANAGER_TEST_MODE', [EnvironmentVariableTarget]::Process)
+        if ([string]::IsNullOrWhiteSpace($processTestMode)) { $processTestMode = [string]$env:MEDIA_MANAGER_TEST_MODE }
+        if ($processTestMode -eq '1') {
             $isTestMode = $true
         }
 
@@ -169,10 +171,18 @@ class AppPaths : IPathProvider {
             if ([string]::IsNullOrWhiteSpace($tempPath)) {
                 $tempPath = [Path]::GetTempPath()
             }
-            # If resolvedRuntimeRoot looks like a TestDrive path, use it directly; otherwise use temp
-            if ($resolvedRuntimeRoot -match 'TestDrive') {
+
+            $processTestRoot = [Environment]::GetEnvironmentVariable('MEDIA_MANAGER_TEST_ROOT', [EnvironmentVariableTarget]::Process)
+            if ([string]::IsNullOrWhiteSpace($processTestRoot)) { $processTestRoot = [string]$env:MEDIA_MANAGER_TEST_ROOT }
+
+            if (-not [string]::IsNullOrWhiteSpace($processTestRoot)) {
+                $runtimeStorageRoot = [Path]::GetFullPath($processTestRoot)
+            }
+            # If resolvedRuntimeRoot looks like a TestDrive path, use it directly; otherwise use default TEMP tests folder
+            elseif ($resolvedRuntimeRoot -match 'TestDrive') {
                 $runtimeStorageRoot = $resolvedRuntimeRoot
-            } else {
+            }
+            else {
                 $runtimeStorageRoot = [Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
             }
         } else {
@@ -201,7 +211,7 @@ class AppPaths : IPathProvider {
         # Validate that .git exists in repository root when available
         $gitPath = [Path]::Combine($this.RepositoryRoot, '.git')
         $repoExists = Test-Path -Path $this.RepositoryRoot -PathType Container
-        if ($repoExists -and -not (Test-Path -Path $gitPath)) {
+        if (-not $isTestMode -and $repoExists -and -not (Test-Path -Path $gitPath)) {
             Write-Warning "Git directory not found at expected location: $gitPath"
             Write-Warning "Git-based features may not work correctly."
         }

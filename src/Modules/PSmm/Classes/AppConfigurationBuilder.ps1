@@ -92,8 +92,16 @@ class AppConfigurationBuilder {
             $isTestMode = $false
             $testModeReason = ""
 
-            # Signal 1: Check explicit environment variable (most reliable)
-            if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
+            # Signal 1: Explicit environment override (strong signal)
+            $processTestRoot = [System.Environment]::GetEnvironmentVariable('MEDIA_MANAGER_TEST_ROOT', [System.EnvironmentVariableTarget]::Process)
+            if ([string]::IsNullOrWhiteSpace($processTestRoot)) { $processTestRoot = [string]$env:MEDIA_MANAGER_TEST_ROOT }
+            if (-not $isTestMode -and -not [string]::IsNullOrWhiteSpace([string]$processTestRoot)) {
+                $testModeReason = 'MEDIA_MANAGER_TEST_ROOT is set'
+                $isTestMode = $true
+            }
+            $processTestMode = [System.Environment]::GetEnvironmentVariable('MEDIA_MANAGER_TEST_MODE', [System.EnvironmentVariableTarget]::Process)
+            if ([string]::IsNullOrWhiteSpace($processTestMode)) { $processTestMode = [string]$env:MEDIA_MANAGER_TEST_MODE }
+            if ($processTestMode -eq '1') {
                 $testModeReason = "MEDIA_MANAGER_TEST_MODE=1"
                 $isTestMode = $true
             }
@@ -141,7 +149,14 @@ class AppConfigurationBuilder {
                 if ([string]::IsNullOrWhiteSpace($tempPath)) {
                     $tempPath = [System.IO.Path]::GetTempPath()
                 }
-                $testRoot = [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
+                $overrideRoot = $processTestRoot
+                $testRoot = if (-not [string]::IsNullOrWhiteSpace($overrideRoot)) {
+                    Write-Verbose "[AppConfigurationBuilder] Using MEDIA_MANAGER_TEST_ROOT override: $overrideRoot"
+                    $overrideRoot
+                }
+                else {
+                    [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
+                }
                 Write-Verbose "[AppConfigurationBuilder] Using test runtime root: $testRoot"
                 $testRoot
             } else {
@@ -175,8 +190,16 @@ class AppConfigurationBuilder {
             $isTestMode = $false
             $testModeReason = ""
 
-            # Signal 1: Check explicit environment variable (most reliable)
-            if ($env:MEDIA_MANAGER_TEST_MODE -eq '1') {
+            # Signal 1: Explicit environment override (strong signal)
+            $processTestRoot = [System.Environment]::GetEnvironmentVariable('MEDIA_MANAGER_TEST_ROOT', [System.EnvironmentVariableTarget]::Process)
+            if ([string]::IsNullOrWhiteSpace($processTestRoot)) { $processTestRoot = [string]$env:MEDIA_MANAGER_TEST_ROOT }
+            if (-not $isTestMode -and -not [string]::IsNullOrWhiteSpace([string]$processTestRoot)) {
+                $testModeReason = 'MEDIA_MANAGER_TEST_ROOT is set'
+                $isTestMode = $true
+            }
+            $processTestMode = [System.Environment]::GetEnvironmentVariable('MEDIA_MANAGER_TEST_MODE', [System.EnvironmentVariableTarget]::Process)
+            if ([string]::IsNullOrWhiteSpace($processTestMode)) { $processTestMode = [string]$env:MEDIA_MANAGER_TEST_MODE }
+            if ($processTestMode -eq '1') {
                 $testModeReason = "MEDIA_MANAGER_TEST_MODE=1"
                 $isTestMode = $true
             }
@@ -219,7 +242,14 @@ class AppConfigurationBuilder {
                 if ([string]::IsNullOrWhiteSpace($tempPath)) {
                     $tempPath = [System.IO.Path]::GetTempPath()
                 }
-                $testRoot = [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
+                $overrideRoot = $processTestRoot
+                $testRoot = if (-not [string]::IsNullOrWhiteSpace($overrideRoot)) {
+                    Write-Verbose "[AppConfigurationBuilder] Using MEDIA_MANAGER_TEST_ROOT override: $overrideRoot"
+                    $overrideRoot
+                }
+                else {
+                    [System.IO.Path]::Combine($tempPath, 'PSmediaManager', 'Tests')
+                }
                 Write-Verbose "[AppConfigurationBuilder] Overriding test path to TEMP: $testRoot"
                 $paths = [AppPaths]::new($resolvedPath, $testRoot)
             } else {

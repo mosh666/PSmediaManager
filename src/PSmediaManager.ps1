@@ -75,11 +75,36 @@ param(
     [switch]$Update,
 
     [Parameter(HelpMessage = 'Run without launching interactive UI (bootstrap only)')]
-    [switch]$NonInteractive
+    [switch]$NonInteractive,
+
+    [Parameter(HelpMessage = 'Use an isolated TEMP runtime root and a preseeded temporary vault/config for headless validation')]
+    [switch]$TemporaryEnvironment
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ($TemporaryEnvironment.IsPresent) {
+    $tempBase = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), 'PSmediaManager', 'TempRuns')
+    $runId = (Get-Date -Format 'yyyyMMdd-HHmmss') + "-$PID"
+    $tempRoot = Join-Path -Path $tempBase -ChildPath $runId
+
+    # Force test-mode runtime paths (avoids writing to drive root).
+    $env:MEDIA_MANAGER_TEST_MODE = '1'
+    $env:MEDIA_MANAGER_TEST_ROOT = $tempRoot
+    [System.Environment]::SetEnvironmentVariable('MEDIA_MANAGER_TEST_MODE', '1', [System.EnvironmentVariableTarget]::Process)
+    [System.Environment]::SetEnvironmentVariable('MEDIA_MANAGER_TEST_ROOT', $tempRoot, [System.EnvironmentVariableTarget]::Process)
+
+    # Mark this as an ephemeral bootstrap so PSmm can skip interactive vault setup and avoid auto-installs.
+    $env:PSMM_TEMP_ENV = '1'
+    [System.Environment]::SetEnvironmentVariable('PSMM_TEMP_ENV', '1', [System.EnvironmentVariableTarget]::Process)
+
+    # Best-effort explicit vault override for components that resolve via env vars.
+    $env:PSMM_VAULT_PATH = [System.IO.Path]::Combine($tempRoot, 'PSmm.Vault')
+    [System.Environment]::SetEnvironmentVariable('PSMM_VAULT_PATH', $env:PSMM_VAULT_PATH, [System.EnvironmentVariableTarget]::Process)
+
+    Write-Verbose "TemporaryEnvironment enabled. RuntimeRoot=$tempRoot"
+}
 
 function Write-ServiceHealthLog {
     param(
