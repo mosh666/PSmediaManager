@@ -144,8 +144,13 @@ function Invoke-WslCommand {
     if ($result.StdOut) {
         Write-Output $result.StdOut
     }
+    if ($result.StdErr) {
+        Write-Output $result.StdErr
+    }
     if ($result.ExitCode -ne 0) {
-        throw "WSL command failed with exit code $($result.ExitCode)"
+        $trimmed = ($result.StdErr ?? '').Trim()
+        $suffix = if ($trimmed) { ": $trimmed" } else { '' }
+        throw "WSL command failed with exit code $($result.ExitCode)$suffix"
     }
 }
 
