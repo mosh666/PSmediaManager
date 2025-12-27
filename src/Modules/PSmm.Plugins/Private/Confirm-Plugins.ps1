@@ -79,37 +79,108 @@ function Invoke-PluginFunction {
         [hashtable]$Parameters
     )
 
+    function Get-PluginFunctionParameterOrder {
+        [CmdletBinding()]
+        [OutputType([string[]])]
+        param(
+            [Parameter(Mandatory)]
+            [ValidateNotNull()]
+            [System.Management.Automation.CommandInfo]$Command
+        )
+
+        $paramNames = @()
+
+        # Prefer parsing the function definition to preserve declared parameter order.
+        # (Using ScriptBlock.Ast has proven unreliable in some module import contexts.)
+        try {
+            $definition = $Command.Definition
+            if (-not [string]::IsNullOrWhiteSpace($definition)) {
+                $tokens = $null
+                $parseErrors = $null
+                $ast = [System.Management.Automation.Language.Parser]::ParseInput(
+                    $definition,
+                    [ref]$tokens,
+                    [ref]$parseErrors
+                )
+
+                if ($ast -is [System.Management.Automation.Language.ScriptBlockAst]) {
+                    if ($ast.ParamBlock -and $ast.ParamBlock.Parameters) {
+                        foreach ($p in $ast.ParamBlock.Parameters) {
+                            $paramNames += $p.Name.VariablePath.UserPath
+                        }
+                    }
+                }
+            }
+        }
+        catch {
+            # Ignore and fall back to metadata.
+        }
+
+        # Fallback: use parameter metadata (Position) if definition parsing didn't yield an order.
+        if ($paramNames.Count -eq 0 -and $Command.Parameters -and $Command.Parameters.Count -gt 0) {
+            $paramNames = @(
+                $Command.Parameters.GetEnumerator() |
+                    Sort-Object @{ Expression = { if ($_.Value.Position -ge 0) { $_.Value.Position } else { [int]::MaxValue } } },
+                        @{ Expression = { $_.Key } } |
+                    ForEach-Object { $_.Key }
+            )
+        }
+
+        return $paramNames
+    }
+
     $cmd = $ExecutionContext.SessionState.InvokeCommand.GetCommand(
         $Name,
         [System.Management.Automation.CommandTypes]::Function
     )
 
     if ($null -eq $cmd) {
-        throw [PluginRequirementException]::new("Plugin helper function not found: $Name", $Name)
+        Invoke-PSmmThrowException -TypeName 'PluginRequirementException' -ArgumentList @(
+            "Plugin helper function not found: $Name",
+            $Name
+        ) -FallbackMessage "Plugin helper function not found: $Name"
     }
 
-    $ps = [System.Management.Automation.PowerShell]::Create()
-    $ps.Runspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace
-
-    $null = $ps.AddCommand($Name)
-
-    if ($null -ne $Parameters) {
-        foreach ($kv in $Parameters.GetEnumerator()) {
-            $null = $ps.AddParameter([string]$kv.Key, $kv.Value)
-        }
+    # IMPORTANT: Do not create a nested PowerShell pipeline in the default runspace.
+    # That frequently triggers: "The pipeline was not run because a pipeline is already running"
+    # Instead, invoke the ScriptBlock directly with positional args built from its ParamBlock AST.
+    $scriptBlock = $cmd.ScriptBlock
+    if ($null -eq $scriptBlock) {
+        Invoke-PSmmThrowException -TypeName 'PluginRequirementException' -ArgumentList @(
+            "Plugin helper function has no ScriptBlock: $Name",
+            $Name
+        ) -FallbackMessage "Plugin helper function has no ScriptBlock: $Name"
     }
 
-    # Force break-fast for advanced functions
-    $null = $ps.AddParameter('ErrorAction', 'Stop')
+    if ($null -eq $Parameters -or $Parameters.Count -eq 0) {
+        $result = $scriptBlock.Invoke()
+    }
+    else {
+        $paramNames = Get-PluginFunctionParameterOrder -Command $cmd
 
-    $result = $ps.Invoke()
-
-    if ($ps.HadErrors -and $ps.Streams.Error.Count -gt 0) {
-        $e = $ps.Streams.Error[0]
-        if ($null -ne $e.Exception) {
-            throw $e.Exception
+        $lastIndex = -1
+        for ($i = 0; $i -lt $paramNames.Count; $i++) {
+            if ($Parameters.ContainsKey($paramNames[$i])) {
+                $lastIndex = $i
+            }
         }
-        throw "Plugin helper invocation failed: $($e | Out-String)"
+
+        if ($lastIndex -lt 0) {
+            $result = $scriptBlock.Invoke()
+        }
+        else {
+            $args = [System.Collections.Generic.List[object]]::new()
+            for ($i = 0; $i -le $lastIndex; $i++) {
+                $paramName = $paramNames[$i]
+                if ($Parameters.ContainsKey($paramName)) {
+                    $args.Add($Parameters[$paramName])
+                }
+                else {
+                    $args.Add($null)
+                }
+            }
+            $result = $scriptBlock.Invoke($args.ToArray())
+        }
     }
 
     if ($null -eq $result -or $result.Count -eq 0) { return $null }
@@ -316,7 +387,10 @@ function Resolve-PluginCommandPath {
         return $resolvedPath
     }
 
-    throw [PluginRequirementException]::new("Command '$CommandName' not found in PATH or under $($Paths.Root)", $CommandName)
+    Invoke-PSmmThrowException -TypeName 'PluginRequirementException' -ArgumentList @(
+        "Command '$CommandName' not found in PATH or under $($Paths.Root)",
+        $CommandName
+    ) -FallbackMessage "Command '$CommandName' not found in PATH or under $($Paths.Root)"
 }
 
 <#
@@ -636,14 +710,38 @@ function Resolve-PluginsConfig {
     }
 
     $pluginsConfigType = 'PluginsConfig' -as [type]
-    if (-not $pluginsConfigType) {
-        Invoke-PSmmThrowException -TypeName 'ConfigurationException' -ArgumentList @(
-            'Unable to resolve PluginsConfig type (PSmm module not loaded)',
-            'Plugins'
-        ) -FallbackMessage 'Unable to resolve PluginsConfig type (PSmm module not loaded)'
+    $pluginsBag = $null
+    if ($pluginsConfigType) {
+        $pluginsBag = $pluginsConfigType::FromObject($pluginsSource)
     }
+    else {
+        # In some module/runspace contexts PowerShell script class types may not resolve reliably across module boundaries.
+        # Fallback to the raw config object/hashtable structure so plugin resolution can continue.
+        Write-Verbose 'Resolve-PluginsConfig: PluginsConfig type not available; using raw Plugins config object'
+        $pluginsBag = $pluginsSource
 
-    $pluginsBag = $pluginsConfigType::FromObject($pluginsSource)
+        if ($pluginsBag -is [System.Collections.IDictionary]) {
+            $hasResolvedKey = $false
+            try { $hasResolvedKey = $pluginsBag.ContainsKey('Resolved') } catch { $hasResolvedKey = $false }
+            if (-not $hasResolvedKey) {
+                try { $hasResolvedKey = $pluginsBag.Contains('Resolved') } catch { $hasResolvedKey = $false }
+            }
+            if (-not $hasResolvedKey) {
+                $pluginsBag['Resolved'] = $null
+            }
+        }
+        else {
+            try {
+                if (-not ($pluginsBag.PSObject.Properties.Name -contains 'Resolved')) {
+                    Add-Member -InputObject $pluginsBag -MemberType NoteProperty -Name 'Resolved' -Value $null -Force
+                }
+            }
+            catch {
+                # If we can't add a member, resolution can still proceed; callers treat missing Resolved as $null.
+                Write-Verbose "Resolve-PluginsConfig: unable to ensure 'Resolved' member exists: $($_.Exception.Message)"
+            }
+        }
+    }
     Set-PSmmPluginsConfigMemberValue -Object $Config -Name 'Plugins' -Value $pluginsBag
 
     function _UnwrapPluginsManifest {
@@ -1459,7 +1557,10 @@ function Get-LatestDownloadUrl {
         }
 
         if (-not $hasConfig) {
-            throw [PluginRequirementException]::new("Plugin missing required 'Config' member", "Plugin")
+            Invoke-PSmmThrowException -TypeName 'PluginRequirementException' -ArgumentList @(
+                "Plugin missing required 'Config' member",
+                'Plugin'
+            ) -FallbackMessage "Plugin missing required 'Config' member"
         }
 
         $pluginConfig = $Plugin['Config']
@@ -1799,7 +1900,11 @@ function Invoke-Installer {
                     $sevenZipCmd = Resolve-PluginCommandPath -Paths $Paths -CommandName '7z' -DefaultCommand '7z' -FileSystem $FileSystem -Process $Process
                 }
                 catch {
-                    throw [PluginRequirementException]::new("7z is required to extract .7z archives: $($_)", "7z", $_.Exception)
+                    Invoke-PSmmThrowException -TypeName 'PluginRequirementException' -ArgumentList @(
+                        "7z is required to extract .7z archives: $($_)",
+                        '7z',
+                        $_.Exception
+                    ) -FallbackMessage "7z is required to extract .7z archives: $($_)"
                 }
 
                 # First, test archive integrity for clearer diagnostics (let PowerShell handle quoting)
@@ -1835,7 +1940,10 @@ function Invoke-Installer {
                 }
             }
             default {
-                throw [PluginRequirementException]::new("Unsupported installer type: $extension", "Installer")
+                Invoke-PSmmThrowException -TypeName 'PluginRequirementException' -ArgumentList @(
+                    "Unsupported installer type: $extension",
+                    'Installer'
+                ) -FallbackMessage "Unsupported installer type: $extension"
             }
         }
 
